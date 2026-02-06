@@ -5,12 +5,14 @@ import torch
 from transformers.data.data_collator import DataCollatorMixin
 from transformers.utils import PaddingStrategy
 import os
+import json
+import time
 from safetensors.torch import save_file
 
 
 import argparse
 
-from datasets import load_dataset
+from datasets import load_dataset, DatasetDict
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 
@@ -284,6 +286,212 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         return output
 
 
+def _get_global_rank() -> int:
+    rank = os.environ.get("RANK")
+    if rank is not None:
+        try:
+            return int(rank)
+        except ValueError:
+            pass
+    local_rank = os.environ.get("LOCAL_RANK")
+    if local_rank is not None:
+        try:
+            return int(local_rank)
+        except ValueError:
+            pass
+    return 0
+
+
+def _prompt_choice(prompt: str, options: list[str], default: str) -> str:
+    print(prompt)
+    for idx, option in enumerate(options, 1):
+        marker = " (default)" if option == default else ""
+        print(f"  [{idx}] {option}{marker}")
+
+    while True:
+        try:
+            user_input = input("Select by number or name (Enter for default): ").strip()
+        except EOFError:
+            print(f"[!] No interactive stdin detected. Using default: {default}")
+            return default
+
+        if user_input == "":
+            return default
+        if user_input.isdigit():
+            index = int(user_input) - 1
+            if 0 <= index < len(options):
+                return options[index]
+        if user_input in options:
+            return user_input
+        print("[!] Invalid selection. Please try again.")
+
+
+def _resolve_local_dataset_file(dataset_name: str) -> Optional[str]:
+    candidates = [dataset_name]
+    if not os.path.isabs(dataset_name):
+        candidates.append(os.path.join("data", dataset_name))
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _is_conversation_turn(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    role = item.get("role", None)
+    content = item.get("content", None)
+    if not isinstance(role, str):
+        return False
+    if not isinstance(content, str):
+        return False
+    return True
+
+
+def _sanity_check_conversation_split(dataset_split, column_name: str, sample_size: int = 32) -> None:
+    max_samples = min(len(dataset_split), sample_size)
+    checked = 0
+    valid = 0
+    first_bad = None
+
+    for idx in range(max_samples):
+        row = dataset_split[idx]
+        value = row.get(column_name, None)
+        if value is None:
+            continue
+        checked += 1
+        is_valid = isinstance(value, list) and len(value) > 0 and all(_is_conversation_turn(x) for x in value)
+        if is_valid:
+            valid += 1
+        elif first_bad is None:
+            first_bad = {
+                "index": idx,
+                "type": type(value).__name__,
+                "preview": str(value)[:200],
+            }
+
+    if checked == 0:
+        raise ValueError(
+            f"Column '{column_name}' has no non-null rows in the sampled subset; cannot validate conversation format."
+        )
+
+    ratio = valid / checked
+    print(
+        f"[!] Conversation sanity check for '{column_name}': "
+        f"{valid}/{checked} sampled rows match list[dict(role, content)]."
+    )
+    if ratio < 0.5:
+        detail = f" First bad sample: {first_bad}" if first_bad is not None else ""
+        raise ValueError(
+            f"Column '{column_name}' does not look like conversation data (need list of role/content dicts).{detail}"
+        )
+
+
+def _load_and_prepare_dataset(script_args, training_args):
+    load_start = time.time()
+    dataset_name = script_args.dataset_name
+    dataset_config = getattr(script_args, "dataset_config", None)
+    if dataset_config is None:
+        dataset_config = getattr(script_args, "dataset_config_name", None)
+    local_data_file = _resolve_local_dataset_file(dataset_name)
+
+    if local_data_file is not None:
+        print(f"[!] Loading local JSON dataset: {local_data_file}")
+        dataset = load_dataset("json", data_files=local_data_file)
+    else:
+        print(f"[!] Loading Hugging Face dataset: {dataset_name}")
+        try:
+            if dataset_config is not None:
+                print(f"[!] Using HF dataset config: {dataset_config}")
+                dataset = load_dataset(dataset_name, dataset_config)
+            else:
+                dataset = load_dataset(dataset_name)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load HF dataset '{dataset_name}'. "
+                "If it requires a config, pass --dataset_config or --dataset_config_name."
+            ) from e
+
+    if not isinstance(dataset, DatasetDict):
+        dataset = DatasetDict({"train": dataset})
+
+    split_names = list(dataset.keys())
+    if len(split_names) == 0:
+        raise ValueError("Loaded dataset has no splits.")
+
+    default_split = script_args.dataset_train_split if script_args.dataset_train_split in split_names else split_names[0]
+    selection_cache = os.path.join(training_args.output_dir, ".dataset_selection.json")
+    rank = _get_global_rank()
+    is_main = rank == 0
+
+    os.makedirs(training_args.output_dir, exist_ok=True)
+    if is_main and os.path.exists(selection_cache):
+        os.remove(selection_cache)
+
+    if is_main:
+        if len(split_names) == 1:
+            selected_split = split_names[0]
+            print(f"[!] Only one split found. Using split: {selected_split}")
+        else:
+            selected_split = _prompt_choice("Choose dataset split for training:", split_names, default_split)
+
+        split_dataset = dataset[selected_split]
+        column_names = list(split_dataset.column_names)
+        if len(column_names) == 0:
+            raise ValueError(f"Split '{selected_split}' has no columns.")
+
+        if "messages" in column_names:
+            selected_text_field = "messages"
+            print("[!] Found 'messages' column. Using it for conversational training.")
+        elif "conversations" in column_names:
+            selected_text_field = "conversations"
+            print("[!] Found 'conversations' column. Using it for conversational training.")
+        else:
+            default_text_field = (
+                script_args.dataset_text_field
+                if script_args.dataset_text_field in column_names
+                else column_names[0]
+            )
+            selected_text_field = _prompt_choice(
+                f"Choose text column from split '{selected_split}':",
+                column_names,
+                default_text_field,
+            )
+
+        if selected_text_field in {"messages", "conversations"}:
+            _sanity_check_conversation_split(split_dataset, selected_text_field)
+
+        selection = {
+            "split": selected_split,
+            "text_field": selected_text_field,
+        }
+        with open(selection_cache, "w", encoding="utf-8") as f:
+            json.dump(selection, f)
+    else:
+        timeout_s = 300
+        start = time.time()
+        while True:
+            if os.path.exists(selection_cache):
+                mtime = os.path.getmtime(selection_cache)
+                if mtime >= load_start - 1.0:
+                    break
+            if time.time() - start > timeout_s:
+                raise TimeoutError(
+                    f"Timed out waiting for dataset selection file '{selection_cache}'."
+                )
+            time.sleep(0.5)
+        with open(selection_cache, "r", encoding="utf-8") as f:
+            selection = json.load(f)
+
+    script_args.dataset_train_split = selection["split"]
+    script_args.dataset_text_field = selection["text_field"]
+    print(
+        f"[!] Final dataset selection: split='{script_args.dataset_train_split}', "
+        f"text_field='{script_args.dataset_text_field}'"
+    )
+    return dataset
+
+
 def main(script_args, training_args, model_args):
     ################
     # Model init kwargs & Tokenizer
@@ -378,12 +586,7 @@ def main(script_args, training_args, model_args):
         if hasattr(model, "config"):
             model.config.pad_token_id = tokenizer.pad_token_id
 
-
-    try:
-        dataset = load_dataset("json", data_files=f"data/{script_args.dataset_name}")
-    except Exception as e:
-        print(f"[!] Error loading dataset: {e}")
-        raise ValueError(f"Dataset {script_args.dataset_name} not found")
+    dataset = _load_and_prepare_dataset(script_args, training_args)
 
     # FOR DEBUGGING
     # dataset['train'] = dataset['train'].select(range(50))
@@ -404,11 +607,20 @@ def main(script_args, training_args, model_args):
         )
     else:
         print(f"[!] Normal SFT Training")
+        eval_dataset = None
+        if training_args.eval_strategy != "no":
+            if script_args.dataset_test_split in dataset:
+                eval_dataset = dataset[script_args.dataset_test_split]
+            else:
+                print(
+                    f"[!] Requested eval split '{script_args.dataset_test_split}' not found. "
+                    f"Available splits: {list(dataset.keys())}. Skipping eval dataset."
+                )
         trainer = SFTTrainer(
             model=model,
             args=training_args,
             train_dataset=dataset[script_args.dataset_train_split],
-            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            eval_dataset=eval_dataset,
             peft_config=get_peft_config(model_args),
         )
 

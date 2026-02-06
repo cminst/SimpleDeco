@@ -35,16 +35,20 @@ image = image.run_commands(
     "git config --global user.name \"Qingyun Li (from Modal)\"",
     f"echo \"https://qingy1337:{os.environ.get('GITHUB_PAT', '')}@github.com\" >> ~/.git-credentials",
     "git config --global credential.helper store",
-    "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' --torch-backend=cu128 --no-build-isolation --system"
+    "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' --torch-backend=cu128 --no-build-isolation --system",
+    "uv pip install accelerate trl==0.22.0 deepspeed orjson --system --torch-backend=cu128",
 )
 
 # ---------
 
 app = modal.App(image=image, name="GPU Tasks")
 
-@app.function(gpu="A100-40GB:4", timeout=86400)
+@app.function(gpu="H100:1", timeout=86400)
 def runwithgpu():
     token = 'modal'
+
+    subprocess.run(["git", "clone", "https://github.com/cminst/SimpleDeco.git"], check=True)
+
     with modal.forward(8888) as tunnel:
         url = tunnel.url + "/?token=" + token
         print('-'*50 + '\n' + f"{url}\n"+'-'*50)
