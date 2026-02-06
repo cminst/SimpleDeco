@@ -1,0 +1,5 @@
+accelerate
+trl
+deepspeed
+orjson
+transformers>=4.55.0

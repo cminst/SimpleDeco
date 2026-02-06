@@ -1,0 +1,9 @@
+/autodeco_megatron/nemo/
+/autodeco_megatron/megatron/
+__pycache__/
+.idea/
+.vscode/
+.ckpt/*
+.data/*
+.generation_log/
+.swanlog/

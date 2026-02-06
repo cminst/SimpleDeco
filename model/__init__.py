@@ -1,0 +1,1 @@
+from .templlm_auto import AutoDecoModelForCausalLM, AutoDecoModelForCausalLMConfig
