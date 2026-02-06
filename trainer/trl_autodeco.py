@@ -146,16 +146,32 @@ class AutoDecoLLMTrainer(SFTTrainer):
                     map_kwargs["desc"] = f"Tokenizing {dataset_name} dataset"
 
                 def tokenize(example, processing_class, dataset_text_field, assistant_only_loss):
-                    if "prompt" in example:  # prompt-completion case
+                    def _looks_like_chat_messages(value):
+                        return (
+                            isinstance(value, list)
+                            and len(value) > 0
+                            and all(
+                                isinstance(turn, dict)
+                                and isinstance(turn.get("role"), str)
+                                and isinstance(turn.get("content"), str)
+                                for turn in value
+                            )
+                        )
+
+                    prompt_value = example.get("prompt")
+                    completion_value = example.get("completion")
+                    has_prompt_completion = prompt_value is not None and completion_value is not None
+
+                    if has_prompt_completion:  # prompt-completion case
                         output = {}
-                        if is_conversational(example):
+                        if _looks_like_chat_messages(prompt_value) and _looks_like_chat_messages(completion_value):
                             prompt_ids = processing_class.apply_chat_template(
-                                example["prompt"],
+                                prompt_value,
                                 tools=example.get("tools"),
                                 **example.get("chat_template_kwargs", {}),
                             )
                             prompt_completion_processed = processing_class.apply_chat_template(
-                                example["prompt"] + example["completion"],
+                                prompt_value + completion_value,
                                 return_dict=True,
                                 return_assistant_tokens_mask=assistant_only_loss,
                                 tools=example.get("tools"),
@@ -171,8 +187,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
                             # response_ids = processing_class.apply_chat_template(response, tokenize=True, add_generation_prompt=False)[3:-1]
                             # prompt_completion_ids = prompt_ids + response_ids
                             
-                            prompt_ids = processing_class(text=example["prompt"])["input_ids"][1:]
-                            prompt_completion_ids = processing_class(text=example["prompt"] + example["completion"])[
+                            prompt_text = prompt_value if isinstance(prompt_value, str) else str(prompt_value)
+                            completion_text = completion_value if isinstance(completion_value, str) else str(completion_value)
+                            prompt_ids = processing_class(text=prompt_text)["input_ids"][1:]
+                            prompt_completion_ids = processing_class(text=prompt_text + completion_text)[
                                 "input_ids"
                             ][1:]
                 
@@ -190,9 +208,15 @@ class AutoDecoLLMTrainer(SFTTrainer):
                         output["input_ids"] = prompt_completion_ids
                         output["completion_mask"] = completion_mask
                     else:  # language modeling case
-                        if is_conversational(example):
+                        conversation = None
+                        for conversation_key in (dataset_text_field, "messages", "conversations"):
+                            if conversation_key in example and _looks_like_chat_messages(example[conversation_key]):
+                                conversation = example[conversation_key]
+                                break
+
+                        if conversation is not None:
                             processed = processing_class.apply_chat_template(
-                                example["messages"],
+                                conversation,
                                 return_dict=True,
                                 return_assistant_tokens_mask=assistant_only_loss,
                                 tools=example.get("tools"),
@@ -205,10 +229,21 @@ class AutoDecoLLMTrainer(SFTTrainer):
                                     "generate assistant masks — it may be missing the `{% generation %}` keyword. Please "
                                     "check the template and ensure it's correctly configured to support assistant "
                                     "masking."
-                                )
+                            )
                             output = {k: processed[k] for k in ("input_ids", "assistant_masks") if k in processed}
                         else:
-                            output = {"input_ids": processing_class(text=example[dataset_text_field])["input_ids"]}
+                            text_value = example.get(dataset_text_field)
+                            if text_value is None:
+                                raise KeyError(
+                                    f"Missing dataset_text_field '{dataset_text_field}' for a non-conversational example. "
+                                    f"Available keys: {list(example.keys())}"
+                                )
+                            if not isinstance(text_value, str):
+                                raise ValueError(
+                                    f"dataset_text_field '{dataset_text_field}' must be string for non-conversational "
+                                    f"examples, got {type(text_value).__name__}."
+                                )
+                            output = {"input_ids": processing_class(text=text_value)["input_ids"]}
                     return output
 
                 dataset = dataset.map(

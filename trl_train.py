@@ -597,7 +597,12 @@ def main(script_args, training_args, model_args):
         model=model,
         args=training_args,
         train_dataset=dataset[script_args.dataset_train_split],
-        data_collator=DataCollatorForLanguageModeling(pad_token_id=tokenizer.pad_token_id),
+        data_collator=DataCollatorForLanguageModeling(
+            pad_token_id=tokenizer.pad_token_id,
+            completion_only_loss=training_args.completion_only_loss,
+            padding_free=training_args.padding_free,
+            pad_to_multiple_of=training_args.pad_to_multiple_of,
+        ),
         peft_config=get_peft_config(model_args),
         temp_objective=script_args.temp_objective,
         min_p_ratio=script_args.min_p_ratio,
