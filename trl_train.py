@@ -41,6 +41,11 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     """Script arguments for AutoDecoLLM training."""
     train_temp: bool = False
     train_top_p: bool = False
+    temp_objective: str = "legacy_ce"
+    min_p_ratio: float = 0.1
+    temp_hinge_weight: float = 1.0
+    temp_reg_weight: float = 0.0
+    easy_token_drop_prob: float = 0.6
 
 def pad(
     tensors: list[torch.Tensor],
@@ -301,11 +306,38 @@ def main(script_args, training_args, model_args):
         except Exception:
             pass
 
+    valid_temp_objectives = {"legacy_ce", "analytic_min_p_hinge"}
+    if script_args.temp_objective not in valid_temp_objectives:
+        raise ValueError(
+            f"temp_objective must be one of {sorted(valid_temp_objectives)}, got {script_args.temp_objective}"
+        )
+    if not (0.0 < script_args.min_p_ratio < 1.0):
+        raise ValueError(f"min_p_ratio must be in (0, 1), got {script_args.min_p_ratio}")
+    if not (0.0 <= script_args.easy_token_drop_prob <= 1.0):
+        raise ValueError(
+            f"easy_token_drop_prob must be in [0, 1], got {script_args.easy_token_drop_prob}"
+        )
+
     model = AutoDecoModelForCausalLM.from_pretrained(model_args.model_name_or_path)
+
+    # Sync model-internal training flags with CLI selection.
+    model.train_temp = script_args.train_temp
+    model.train_top_p = script_args.train_top_p
+    if hasattr(model, "config"):
+        model.config.enable_temperature_head = script_args.train_temp
+        model.config.enable_top_p_head = script_args.train_top_p
 
     # Configure which heads to train based on script arguments
     if script_args.train_temp or script_args.train_top_p:
         print(f"[!] Training configuration: train_temp={script_args.train_temp}, train_top_p={script_args.train_top_p}")
+        if script_args.train_temp:
+            print(
+                f"[!] Temperature objective: {script_args.temp_objective} "
+                f"(min_p_ratio={script_args.min_p_ratio}, "
+                f"temp_hinge_weight={script_args.temp_hinge_weight}, "
+                f"temp_reg_weight={script_args.temp_reg_weight}, "
+                f"easy_token_drop_prob={script_args.easy_token_drop_prob})"
+            )
     else:
         print(f"[!] Training the LLM model itself. No AutoDeco training.")
     for name, param in model.named_parameters():
@@ -364,6 +396,11 @@ def main(script_args, training_args, model_args):
         train_dataset=dataset[script_args.dataset_train_split],
         data_collator=DataCollatorForLanguageModeling(pad_token_id=tokenizer.pad_token_id),
         peft_config=get_peft_config(model_args),
+        temp_objective=script_args.temp_objective,
+        min_p_ratio=script_args.min_p_ratio,
+        temp_hinge_weight=script_args.temp_hinge_weight,
+        temp_reg_weight=script_args.temp_reg_weight,
+        easy_token_drop_prob=script_args.easy_token_drop_prob,
         )
     else:
         print(f"[!] Normal SFT Training")

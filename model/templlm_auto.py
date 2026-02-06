@@ -254,29 +254,70 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             return self.llm.get_decoder()
         return self.llm.model if hasattr(self.llm, 'model') else self.llm
     
-    def _compute_temp_loss(self, unscaled_logits, temp_logits, labels):
-        """Compute temperature loss"""
+    def _compute_temp_loss(
+        self,
+        unscaled_logits,
+        temp_logits,
+        labels,
+        objective: str = "legacy_ce",
+        min_p_ratio: float = 0.1,
+        temp_hinge_weight: float = 1.0,
+        temp_reg_weight: float = 0.0,
+        easy_token_drop_prob: float = 0.6,
+    ):
+        """Compute temperature loss."""
         unscaled_shift = unscaled_logits[:, :-1, :]
         temp_shift = temp_logits[:, :-1, :].clamp_min(1e-2)
         shift_labels = labels[:, 1:]
         valid_mask = shift_labels != -100
-        
-        # Base-model confidence of GT token
+
+        if objective == "analytic_min_p_hinge":
+            labels_valid = shift_labels[valid_mask]
+            if labels_valid.numel() == 0:
+                return torch.tensor(0.0, device=unscaled_logits.device)
+
+            logits_valid = unscaled_shift[valid_mask]
+            temp_valid = temp_shift[valid_mask].squeeze(-1)
+
+            gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+            max_logits = logits_valid.max(dim=-1).values
+            delta = torch.relu(max_logits - gt_logits)
+
+            min_p_tensor = torch.as_tensor(
+                min_p_ratio,
+                device=unscaled_logits.device,
+                dtype=unscaled_logits.dtype,
+            ).clamp(1e-6, 1.0 - 1e-6)
+            denom = -torch.log(min_p_tensor)
+            temp_lower_bound = delta / denom
+
+            token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_valid)
+            if temp_reg_weight != 0.0:
+                token_loss = token_loss + temp_reg_weight * temp_valid
+            return token_loss.mean()
+
+        if objective != "legacy_ce":
+            raise ValueError(f"Unknown temp objective: {objective}")
+
+        drop_prob = float(easy_token_drop_prob)
+        drop_prob = max(0.0, min(1.0, drop_prob))
+
         with torch.no_grad():
             base_probs = torch.softmax(unscaled_shift, dim=-1)
             pred_ids = base_probs.argmax(dim=-1)
-            correct_positions = (pred_ids == shift_labels.clamp_min(0))
-            
-            # Randomly drop 60% of positions where model argmax == GT
-            rand_vals = torch.rand(shift_labels.shape, device=shift_labels.device)
-            drop_mask = (rand_vals < 0.6) & valid_mask & correct_positions
-            masked_valid_mask = valid_mask & (~drop_mask)
-        
+            correct_positions = pred_ids == shift_labels.clamp_min(0)
+            if drop_prob > 0.0:
+                rand_vals = torch.rand(shift_labels.shape, device=shift_labels.device)
+                drop_mask = (rand_vals < drop_prob) & valid_mask & correct_positions
+                masked_valid_mask = valid_mask & (~drop_mask)
+            else:
+                masked_valid_mask = valid_mask
+
         scaled_shift = unscaled_shift / temp_shift
         scaled_valid = scaled_shift[masked_valid_mask]
         unscaled_valid = unscaled_shift[masked_valid_mask]
         labels_valid = shift_labels[masked_valid_mask]
-        
+
         if labels_valid.numel() > 0:
             token_ce = F.cross_entropy(
                 scaled_valid.view(-1, scaled_valid.size(-1)),
@@ -288,7 +329,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 1, labels_valid.unsqueeze(-1)
             ).squeeze(-1).detach()
             return token_ce.mean()
-        
+
         return torch.tensor(0.0, device=unscaled_logits.device)
     
     def _compute_top_p_loss(self, unscaled_logits, temp_logits, top_p_logits, labels, method='soft'):
@@ -349,6 +390,12 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         top_p_loss_method: str = 'soft',  # 'soft' or 'mse'
+        temp_objective: str = "legacy_ce",
+        min_p_ratio: float = 0.1,
+        temp_hinge_weight: float = 1.0,
+        temp_reg_weight: float = 0.0,
+        easy_token_drop_prob: float = 0.6,
+        temp_loss_weight: float = 1.0,
         **kwargs,
     ) -> AutoDecoOutputWithPast:
         """
@@ -410,8 +457,17 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 losses = []
                 
                 if self.train_temp:
-                    temp_loss = self._compute_temp_loss(unscaled_logits, temp_logits, labels)
-                    losses.append(temp_loss)
+                    temp_loss = self._compute_temp_loss(
+                        unscaled_logits,
+                        temp_logits,
+                        labels,
+                        objective=temp_objective,
+                        min_p_ratio=min_p_ratio,
+                        temp_hinge_weight=temp_hinge_weight,
+                        temp_reg_weight=temp_reg_weight,
+                        easy_token_drop_prob=easy_token_drop_prob,
+                    )
+                    losses.append(temp_loss * temp_loss_weight)
                 
                 if self.train_top_p:
                     top_p_loss = self._compute_top_p_loss(

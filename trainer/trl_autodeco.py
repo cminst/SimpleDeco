@@ -36,11 +36,23 @@ class AutoDecoLLMTrainer(SFTTrainer):
             *args,
             pad_token_id: int = None,
             temp_loss_weight: float = 1.0,
+            temp_objective: str = "legacy_ce",
+            min_p_ratio: float = 0.1,
+            temp_hinge_weight: float = 1.0,
+            temp_reg_weight: float = 0.0,
+            easy_token_drop_prob: float = 0.6,
+            top_p_loss_method: str = "soft",
             **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.pad_token_id = pad_token_id
         self.temp_loss_weight = temp_loss_weight
+        self.temp_objective = temp_objective
+        self.min_p_ratio = min_p_ratio
+        self.temp_hinge_weight = temp_hinge_weight
+        self.temp_reg_weight = temp_reg_weight
+        self.easy_token_drop_prob = easy_token_drop_prob
+        self.top_p_loss_method = top_p_loss_method
 
 
     def _prepare_dataset(
@@ -254,10 +266,15 @@ class AutoDecoLLMTrainer(SFTTrainer):
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         inputs['temp_loss_weight'] = self.temp_loss_weight
+        inputs["temp_objective"] = self.temp_objective
+        inputs["min_p_ratio"] = self.min_p_ratio
+        inputs["temp_hinge_weight"] = self.temp_hinge_weight
+        inputs["temp_reg_weight"] = self.temp_reg_weight
+        inputs["easy_token_drop_prob"] = self.easy_token_drop_prob
+        inputs["top_p_loss_method"] = self.top_p_loss_method
         outputs = model(**inputs)
         temp_loss = outputs.temp_loss.item() if outputs.temp_loss is not None else 0
         lm_loss = outputs.lm_loss.item() if outputs.lm_loss is not None else 0
         top_p_loss = outputs.top_p_loss.item() if outputs.top_p_loss is not None else 0
         self.log({"loss": outputs.loss.item(), "temp_loss": temp_loss, "lm_loss": lm_loss, "top_p_loss": top_p_loss})
         return outputs['loss']
-
