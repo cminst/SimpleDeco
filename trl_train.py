@@ -48,6 +48,10 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     temp_hinge_weight: float = 1.0
     temp_reg_weight: float = 0.0
     easy_token_drop_prob: float = 0.6
+    goldilocks_filter: bool = False
+    goldilocks_easy_frac: float = 0.1
+    goldilocks_topk_frac: float = 0.9
+    goldilocks_topk: int = 10
 
 def pad(
     tensors: list[torch.Tensor],
@@ -568,6 +572,20 @@ def main(script_args, training_args, model_args):
         raise ValueError(
             f"easy_token_drop_prob must be in [0, 1], got {script_args.easy_token_drop_prob}"
         )
+    if not (0.0 <= script_args.goldilocks_easy_frac <= 1.0):
+        raise ValueError(
+            f"goldilocks_easy_frac must be in [0, 1], got {script_args.goldilocks_easy_frac}"
+        )
+    if not (0.0 <= script_args.goldilocks_topk_frac <= 1.0):
+        raise ValueError(
+            f"goldilocks_topk_frac must be in [0, 1], got {script_args.goldilocks_topk_frac}"
+        )
+    if (script_args.goldilocks_easy_frac + script_args.goldilocks_topk_frac) <= 0.0:
+        raise ValueError(
+            "goldilocks_easy_frac + goldilocks_topk_frac must be > 0."
+        )
+    if script_args.goldilocks_topk < 1:
+        raise ValueError(f"goldilocks_topk must be >= 1, got {script_args.goldilocks_topk}")
 
     model = AutoDecoModelForCausalLM.from_pretrained(model_args.model_name_or_path)
 
@@ -587,7 +605,11 @@ def main(script_args, training_args, model_args):
                 f"(min_p_ratio={script_args.min_p_ratio}, "
                 f"temp_hinge_weight={script_args.temp_hinge_weight}, "
                 f"temp_reg_weight={script_args.temp_reg_weight}, "
-                f"easy_token_drop_prob={script_args.easy_token_drop_prob})"
+                f"easy_token_drop_prob={script_args.easy_token_drop_prob}, "
+                f"goldilocks_filter={script_args.goldilocks_filter}, "
+                f"goldilocks_easy_frac={script_args.goldilocks_easy_frac}, "
+                f"goldilocks_topk_frac={script_args.goldilocks_topk_frac}, "
+                f"goldilocks_topk={script_args.goldilocks_topk})"
             )
     else:
         print(f"[!] Training the LLM model itself. No AutoDeco training.")
@@ -652,6 +674,10 @@ def main(script_args, training_args, model_args):
         temp_hinge_weight=script_args.temp_hinge_weight,
         temp_reg_weight=script_args.temp_reg_weight,
         easy_token_drop_prob=script_args.easy_token_drop_prob,
+        goldilocks_filter=script_args.goldilocks_filter,
+        goldilocks_easy_frac=script_args.goldilocks_easy_frac,
+        goldilocks_topk_frac=script_args.goldilocks_topk_frac,
+        goldilocks_topk=script_args.goldilocks_topk,
         )
     else:
         print(f"[!] Normal SFT Training")

@@ -41,6 +41,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
             temp_hinge_weight: float = 1.0,
             temp_reg_weight: float = 0.0,
             easy_token_drop_prob: float = 0.6,
+            goldilocks_filter: bool = False,
+            goldilocks_easy_frac: float = 0.1,
+            goldilocks_topk_frac: float = 0.9,
+            goldilocks_topk: int = 10,
             top_p_loss_method: str = "soft",
             **kwargs
     ):
@@ -52,6 +56,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
         self.temp_hinge_weight = temp_hinge_weight
         self.temp_reg_weight = temp_reg_weight
         self.easy_token_drop_prob = easy_token_drop_prob
+        self.goldilocks_filter = goldilocks_filter
+        self.goldilocks_easy_frac = goldilocks_easy_frac
+        self.goldilocks_topk_frac = goldilocks_topk_frac
+        self.goldilocks_topk = goldilocks_topk
         self.top_p_loss_method = top_p_loss_method
 
 
@@ -306,6 +314,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
         inputs["temp_hinge_weight"] = self.temp_hinge_weight
         inputs["temp_reg_weight"] = self.temp_reg_weight
         inputs["easy_token_drop_prob"] = self.easy_token_drop_prob
+        inputs["goldilocks_filter"] = self.goldilocks_filter
+        inputs["goldilocks_easy_frac"] = self.goldilocks_easy_frac
+        inputs["goldilocks_topk_frac"] = self.goldilocks_topk_frac
+        inputs["goldilocks_topk"] = self.goldilocks_topk
         inputs["top_p_loss_method"] = self.top_p_loss_method
         outputs = model(**inputs)
         temp_loss = outputs.temp_loss.item() if outputs.temp_loss is not None else 0

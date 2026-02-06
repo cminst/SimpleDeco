@@ -23,6 +23,10 @@ accelerate launch trl_train.py \
   --min_p_ratio 0.1 \
   --temp_hinge_weight 1.0 \
   --temp_reg_weight 0.1 \
+  --goldilocks_filter true \
+  --goldilocks_easy_frac 0.1 \
+  --goldilocks_topk_frac 0.9 \
+  --goldilocks_topk 10 \
   --max_steps 50 \
   --logging_steps 1 \
   --per_device_train_batch_size 4 \
@@ -46,3 +50,12 @@ accelerate launch trl_train.py \
   - each turn has `role` and `content` string fields
 
 If the sanity check finds too many malformed rows, training stops with an error.
+
+## 4) Goldilocks filtering (analytic Min-P objective)
+
+- `--goldilocks_filter true` enables token-level filtering for `analytic_min_p_hinge`.
+- Token mix target is controlled by:
+  - `--goldilocks_easy_frac` (default `0.1`): fraction of tokens where GT is top-1.
+  - `--goldilocks_topk_frac` (default `0.9`): fraction of tokens where GT is in top-k.
+  - `--goldilocks_topk` (default `10`): the `k` for top-k membership.
+- If a batch does not have enough tokens in one bucket, the remainder is filled from available top-k tokens, then any remaining valid tokens.
