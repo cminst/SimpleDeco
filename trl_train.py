@@ -387,6 +387,40 @@ def _sanity_check_conversation_split(dataset_split, column_name: str, sample_siz
         )
 
 
+def _normalize_chat_split_for_trl(dataset_split, selected_text_field: str):
+    """
+    Normalize conversational datasets to avoid TRL conversational-detection ambiguity.
+
+    Some datasets expose both `prompt` and `messages`. Older TRL checks can pick `prompt`
+    first and incorrectly conclude the dataset is non-conversational. We canonicalize the
+    selected conversational column to `messages` and drop conflicting prompt-completion keys.
+    """
+    if selected_text_field not in {"messages", "conversations"}:
+        return dataset_split, selected_text_field
+
+    normalized_field = selected_text_field
+    if selected_text_field == "conversations":
+        if "messages" in dataset_split.column_names:
+            # Prefer existing canonical column if already present.
+            normalized_field = "messages"
+        else:
+            dataset_split = dataset_split.rename_column("conversations", "messages")
+            normalized_field = "messages"
+
+    conflicting_cols = [
+        col for col in ("prompt", "completion", "chosen", "rejected")
+        if col in dataset_split.column_names
+    ]
+    if conflicting_cols:
+        print(
+            "[!] Dropping conflicting conversational keys for TRL compatibility: "
+            + ", ".join(conflicting_cols)
+        )
+        dataset_split = dataset_split.remove_columns(conflicting_cols)
+
+    return dataset_split, normalized_field
+
+
 def _load_and_prepare_dataset(script_args, training_args):
     load_start = time.time()
     dataset_name = script_args.dataset_name
@@ -483,8 +517,17 @@ def _load_and_prepare_dataset(script_args, training_args):
         with open(selection_cache, "r", encoding="utf-8") as f:
             selection = json.load(f)
 
-    script_args.dataset_train_split = selection["split"]
-    script_args.dataset_text_field = selection["text_field"]
+    selected_split = selection["split"]
+    selected_text_field = selection["text_field"]
+
+    split_dataset = dataset[selected_split]
+    split_dataset, selected_text_field = _normalize_chat_split_for_trl(
+        split_dataset, selected_text_field
+    )
+    dataset[selected_split] = split_dataset
+
+    script_args.dataset_train_split = selected_split
+    script_args.dataset_text_field = selected_text_field
     print(
         f"[!] Final dataset selection: split='{script_args.dataset_train_split}', "
         f"text_field='{script_args.dataset_text_field}'"
