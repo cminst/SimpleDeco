@@ -79,6 +79,15 @@ class AutoDecoLLMTrainer(SFTTrainer):
         if self.temp_diag_enabled and self.is_world_process_zero():
             os.makedirs(self._temp_diag_output_dir, exist_ok=True)
 
+    def _is_main_process_safe(self) -> bool:
+        args = getattr(self, "args", None)
+        if args is not None:
+            return args.process_index == 0
+        try:
+            return PartialState().is_main_process
+        except Exception:
+            return True
+
     def _render_row_with_bold_assistant_tokens(
         self,
         input_ids: list[int],
@@ -122,7 +131,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
             dataset = dataset.filter(_has_assistant_tokens, **filter_kwargs)
             total_after = len(dataset)
             removed = total_before - total_after
-            if self.is_world_process_zero():
+            if self._is_main_process_safe():
                 print(
                     f"[!] assistant_only_loss filter: removed {removed} / {total_before} "
                     f"examples without assistant tokens; kept {total_after}."
@@ -143,7 +152,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
             return dataset
 
         dataset = dataset.filter(_has_assistant_tokens)
-        if self.is_world_process_zero():
+        if self._is_main_process_safe():
             print(
                 "[!] assistant_only_loss filter applied to IterableDataset; exact removed/total counts are unavailable."
             )
