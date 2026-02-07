@@ -79,6 +79,75 @@ class AutoDecoLLMTrainer(SFTTrainer):
         if self.temp_diag_enabled and self.is_world_process_zero():
             os.makedirs(self._temp_diag_output_dir, exist_ok=True)
 
+    def _render_row_with_bold_assistant_tokens(
+        self,
+        input_ids: list[int],
+        assistant_masks: list[int],
+        processing_class: Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin],
+    ) -> str:
+        pieces: list[str] = []
+        for token_id, mask_value in zip(input_ids, assistant_masks):
+            token_text = processing_class.decode([int(token_id)], skip_special_tokens=False)
+            if int(mask_value) == 1:
+                pieces.append(f"**{token_text}**")
+            else:
+                pieces.append(token_text)
+        return "".join(pieces)
+
+    def _filter_no_assistant_token_rows(
+        self,
+        dataset: Union[Dataset, IterableDataset],
+        processing_class: Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin],
+        args: SFTConfig,
+        dataset_name: str,
+    ) -> Union[Dataset, IterableDataset]:
+        if not args.assistant_only_loss:
+            return dataset
+        if "assistant_masks" not in dataset.column_names:
+            raise ValueError(
+                "assistant_only_loss=True but dataset has no 'assistant_masks' column after preprocessing."
+            )
+
+        def _has_assistant_tokens(example: dict[str, Any]) -> bool:
+            mask_values = example.get("assistant_masks")
+            if not isinstance(mask_values, list):
+                return False
+            return any(int(x) == 1 for x in mask_values)
+
+        filter_kwargs: dict[str, Any] = {}
+        if isinstance(dataset, Dataset):
+            total_before = len(dataset)
+            filter_kwargs["num_proc"] = args.dataset_num_proc
+            filter_kwargs["desc"] = f"Filtering {dataset_name} rows without assistant tokens"
+            dataset = dataset.filter(_has_assistant_tokens, **filter_kwargs)
+            total_after = len(dataset)
+            removed = total_before - total_after
+            if self.is_world_process_zero():
+                print(
+                    f"[!] assistant_only_loss filter: removed {removed} / {total_before} "
+                    f"examples without assistant tokens; kept {total_after}."
+                )
+                if total_after > 0:
+                    sample = dataset[0]
+                    rendered = self._render_row_with_bold_assistant_tokens(
+                        input_ids=sample["input_ids"],
+                        assistant_masks=sample["assistant_masks"],
+                        processing_class=processing_class,
+                    )
+                    print("[!] Example row with assistant tokens in bold:")
+                    print(rendered)
+            if total_after == 0:
+                raise ValueError(
+                    "assistant_only_loss=True but every example has zero assistant tokens after preprocessing."
+                )
+            return dataset
+
+        dataset = dataset.filter(_has_assistant_tokens)
+        if self.is_world_process_zero():
+            print(
+                "[!] assistant_only_loss filter applied to IterableDataset; exact removed/total counts are unavailable."
+            )
+        return dataset
 
     def _prepare_dataset(
         self,
@@ -304,19 +373,6 @@ class AutoDecoLLMTrainer(SFTTrainer):
                             "assistant_only_loss=True but tokenization did not produce an 'assistant_masks' column. "
                             "This dataset/template path is not compatible with assistant-only loss."
                         )
-                    if isinstance(dataset, Dataset):
-                        probe_count = min(len(dataset), 32)
-                        has_positive_mask = False
-                        for i in range(probe_count):
-                            mask_values = dataset[i].get("assistant_masks")
-                            if isinstance(mask_values, list) and any(int(x) == 1 for x in mask_values):
-                                has_positive_mask = True
-                                break
-                        if not has_positive_mask:
-                            raise ValueError(
-                                "assistant_only_loss=True but probed assistant masks contain no assistant tokens. "
-                                "Check tokenizer chat template generation blocks."
-                            )
 
             # Pack or truncate
             if packing:
@@ -344,6 +400,13 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 dataset = dataset.select_columns(
                     {"input_ids", "seq_lengths", "completion_mask", "assistant_masks"}.intersection(dataset.column_names)
                 )
+
+            dataset = self._filter_no_assistant_token_rows(
+                dataset=dataset,
+                processing_class=processing_class,
+                args=args,
+                dataset_name=dataset_name,
+            )
 
         return dataset
     def _set_signature_columns_if_needed(self):
