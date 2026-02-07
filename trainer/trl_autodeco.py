@@ -153,7 +153,11 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 if isinstance(dataset, Dataset):  # `IterableDataset.map` does not support `desc`
                     map_kwargs["desc"] = f"Tokenizing {dataset_name} dataset"
 
+                warned_missing_assistant_mask = False
+
                 def tokenize(example, processing_class, dataset_text_field, assistant_only_loss):
+                    nonlocal warned_missing_assistant_mask
+
                     def _looks_like_chat_messages(value):
                         return (
                             isinstance(value, list)
@@ -176,6 +180,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
                             prompt_ids = processing_class.apply_chat_template(
                                 prompt_value,
                                 tools=example.get("tools"),
+                                tokenize=True,
                                 **example.get("chat_template_kwargs", {}),
                             )
                             prompt_completion_processed = processing_class.apply_chat_template(
@@ -183,11 +188,25 @@ class AutoDecoLLMTrainer(SFTTrainer):
                                 return_dict=True,
                                 return_assistant_tokens_mask=assistant_only_loss,
                                 tools=example.get("tools"),
+                                tokenize=True,
                                 **example.get("chat_template_kwargs", {}),
                             )
                             prompt_completion_ids = prompt_completion_processed["input_ids"]
-                            if "assistant_masks" in prompt_completion_processed:
-                                output["assistant_masks"] = prompt_completion_processed["assistant_masks"]
+                            if assistant_only_loss:
+                                assistant_masks = prompt_completion_processed.get("assistant_masks")
+                                if (
+                                    assistant_masks is None
+                                    or len(assistant_masks) != len(prompt_completion_ids)
+                                    or 1 not in assistant_masks
+                                ):
+                                    if not warned_missing_assistant_mask:
+                                        warnings.warn(
+                                            "assistant_only_loss=True but assistant masks are unavailable or invalid "
+                                            "for some examples. Falling back to all-token mask for those examples."
+                                        )
+                                        warned_missing_assistant_mask = True
+                                    assistant_masks = [1] * len(prompt_completion_ids)
+                                output["assistant_masks"] = assistant_masks
                         else:
                             # prompt = [{"role": "user", "content": example["prompt"]}]
                             # response = [{"role": "assistant", "content": example["completion"]}]
@@ -228,17 +247,25 @@ class AutoDecoLLMTrainer(SFTTrainer):
                                 return_dict=True,
                                 return_assistant_tokens_mask=assistant_only_loss,
                                 tools=example.get("tools"),
+                                tokenize=True,
                                 **example.get("chat_template_kwargs", {}),
                             )
-                            if "assistant_masks" in processed and 1 not in processed["assistant_masks"]:
-                                raise RuntimeError(
-                                    "You're using `assistant_only_loss=True`, but at least one example has no "
-                                    "assistant tokens. This usually means the tokenizer's chat template doesn't "
-                                    "generate assistant masks — it may be missing the `{% generation %}` keyword. Please "
-                                    "check the template and ensure it's correctly configured to support assistant "
-                                    "masking."
-                            )
-                            output = {k: processed[k] for k in ("input_ids", "assistant_masks") if k in processed}
+                            output = {"input_ids": processed["input_ids"]}
+                            if assistant_only_loss:
+                                assistant_masks = processed.get("assistant_masks")
+                                if (
+                                    assistant_masks is None
+                                    or len(assistant_masks) != len(processed["input_ids"])
+                                    or 1 not in assistant_masks
+                                ):
+                                    if not warned_missing_assistant_mask:
+                                        warnings.warn(
+                                            "assistant_only_loss=True but assistant masks are unavailable or invalid "
+                                            "for some examples. Falling back to all-token mask for those examples."
+                                        )
+                                        warned_missing_assistant_mask = True
+                                    assistant_masks = [1] * len(processed["input_ids"])
+                                output["assistant_masks"] = assistant_masks
                         else:
                             text_value = example.get(dataset_text_field)
                             if text_value is None:

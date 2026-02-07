@@ -391,6 +391,79 @@ def _sanity_check_conversation_split(dataset_split, column_name: str, sample_siz
         )
 
 
+def _chat_template_has_generation_blocks(chat_template: Any) -> bool:
+    if isinstance(chat_template, dict):
+        template_text = "\n".join(v for v in chat_template.values() if isinstance(v, str))
+    elif isinstance(chat_template, str):
+        template_text = chat_template
+    else:
+        return False
+    return (
+        "{% generation %}" in template_text
+        or "{%- generation %}" in template_text
+    ) and (
+        "{% endgeneration %}" in template_text
+        or "{%- endgeneration %}" in template_text
+    )
+
+
+def _probe_assistant_mask_support(
+    tokenizer,
+    dataset_split,
+    text_field: str,
+    sample_size: int = 16,
+) -> tuple[bool, str]:
+    if text_field not in {"messages", "conversations"}:
+        return False, f"text field '{text_field}' is not conversational."
+
+    max_samples = min(len(dataset_split), sample_size)
+    checked = 0
+    with_mask = 0
+    with_positive_mask = 0
+    first_error = None
+
+    for idx in range(max_samples):
+        row = dataset_split[idx]
+        convo = row.get(text_field, None)
+        if not (isinstance(convo, list) and len(convo) > 0):
+            continue
+        if not all(_is_conversation_turn(x) for x in convo):
+            continue
+        checked += 1
+        try:
+            processed = tokenizer.apply_chat_template(
+                convo,
+                return_dict=True,
+                return_assistant_tokens_mask=True,
+                tokenize=True,
+            )
+        except Exception as e:
+            if first_error is None:
+                first_error = f"{type(e).__name__}: {e}"
+            continue
+
+        assistant_masks = processed.get("assistant_masks")
+        if assistant_masks is None:
+            continue
+        with_mask += 1
+        if any(int(x) == 1 for x in assistant_masks):
+            with_positive_mask += 1
+
+    if checked == 0:
+        return False, "no conversational rows were probe-able."
+    if with_positive_mask > 0:
+        return True, (
+            f"assistant masks available on {with_positive_mask}/{checked} probed rows "
+            f"(mask key present on {with_mask}/{checked})."
+        )
+
+    detail = f" first error: {first_error}" if first_error is not None else ""
+    return False, (
+        f"assistant masks unavailable on {checked}/{checked} probed rows "
+        f"(mask key present on {with_mask}/{checked}, positive masks on {with_positive_mask}/{checked}).{detail}"
+    )
+
+
 def _normalize_chat_split_for_trl(dataset_split, selected_text_field: str):
     """
     Normalize conversational datasets to avoid TRL conversational-detection ambiguity.
@@ -638,6 +711,7 @@ def main(script_args, training_args, model_args):
     )
     # Set default chat template if needed
     if tokenizer.chat_template is None:
+        print("[!] Tokenizer has no chat_template. Applying fallback ChatML template.")
         model, tokenizer = setup_chat_format(model, tokenizer, format="chatml")
 
     # Ensure PAD token exists (some decoder-only models like LLaMA don't define one)
@@ -652,6 +726,30 @@ def main(script_args, training_args, model_args):
             model.config.pad_token_id = tokenizer.pad_token_id
 
     dataset = _load_and_prepare_dataset(script_args, training_args)
+
+    if training_args.assistant_only_loss:
+        has_generation_blocks = _chat_template_has_generation_blocks(tokenizer.chat_template)
+        if not has_generation_blocks:
+            print(
+                "[!] assistant_only_loss=True but tokenizer chat template does not visibly include "
+                "{% generation %}/{% endgeneration %} blocks."
+            )
+
+        train_split = dataset[script_args.dataset_train_split]
+        assistant_mask_supported, assistant_mask_reason = _probe_assistant_mask_support(
+            tokenizer=tokenizer,
+            dataset_split=train_split,
+            text_field=script_args.dataset_text_field,
+        )
+        if assistant_mask_supported:
+            print(f"[!] Assistant-mask preflight passed: {assistant_mask_reason}")
+        else:
+            print(f"[!] Assistant-mask preflight failed: {assistant_mask_reason}")
+            print(
+                "[!] Disabling assistant_only_loss for this run to avoid tokenization failure. "
+                "Training will proceed without assistant masking."
+            )
+            training_args.assistant_only_loss = False
 
     # FOR DEBUGGING
     # dataset['train'] = dataset['train'].select(range(50))
