@@ -3,6 +3,9 @@ from transformers.trainer import _is_peft_model
 import torch.nn.functional as F
 # import ipdb
 import inspect
+import json
+import math
+import os
 from typing import Any, Callable, Optional, TypeVar, Union
 from datasets import Dataset, IterableDataset
 from transformers import (
@@ -46,6 +49,11 @@ class AutoDecoLLMTrainer(SFTTrainer):
             goldilocks_topk_frac: float = 0.9,
             goldilocks_topk: int = 10,
             top_p_loss_method: str = "soft",
+            temp_diag_enabled: bool = False,
+            temp_diag_steps: int = 100,
+            temp_diag_examples: int = 3,
+            temp_diag_topk: int = 5,
+            temp_diag_dir: str = "temp_diagnostics",
             **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -61,6 +69,15 @@ class AutoDecoLLMTrainer(SFTTrainer):
         self.goldilocks_topk_frac = goldilocks_topk_frac
         self.goldilocks_topk = goldilocks_topk
         self.top_p_loss_method = top_p_loss_method
+        self.temp_diag_enabled = temp_diag_enabled
+        self.temp_diag_steps = max(1, int(temp_diag_steps))
+        self.temp_diag_examples = max(1, int(temp_diag_examples))
+        self.temp_diag_topk = max(1, int(temp_diag_topk))
+        self.temp_diag_dir = temp_diag_dir
+        self._last_temp_diag_step = None
+        self._temp_diag_output_dir = os.path.join(self.args.output_dir, self.temp_diag_dir)
+        if self.temp_diag_enabled and self.is_world_process_zero():
+            os.makedirs(self._temp_diag_output_dir, exist_ok=True)
 
 
     def _prepare_dataset(
@@ -334,6 +351,178 @@ class AutoDecoLLMTrainer(SFTTrainer):
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += list(set(["label", "label_ids", "temp_labels", "top_p_labels", "top_k_labels", "completion_mask"] + self.label_names))
 
+    def _decode_token(self, token_id: int) -> str:
+        processing_class = getattr(self, "processing_class", None)
+        if processing_class is None:
+            return ""
+        try:
+            return processing_class.decode([token_id], skip_special_tokens=False)
+        except Exception:
+            return ""
+
+    def _decode_ids(self, token_ids: list[int]) -> str:
+        processing_class = getattr(self, "processing_class", None)
+        if processing_class is None:
+            return ""
+        try:
+            return processing_class.decode(token_ids, skip_special_tokens=False)
+        except Exception:
+            return ""
+
+    def _top_token_probs(self, probs: torch.Tensor, k: int) -> list[dict[str, Any]]:
+        top_k = min(k, int(probs.size(-1)))
+        values, ids = torch.topk(probs, k=top_k, dim=-1)
+        result = []
+        for prob, token_id in zip(values.tolist(), ids.tolist()):
+            token_id = int(token_id)
+            result.append({
+                "token_id": token_id,
+                "token": self._decode_token(token_id),
+                "prob": float(prob),
+            })
+        return result
+
+    def _build_temp_diag_payload(self, outputs, inputs) -> Optional[dict[str, Any]]:
+        labels = inputs.get("labels")
+        input_ids = inputs.get("input_ids")
+        if labels is None or input_ids is None:
+            return None
+        if outputs.logits is None or outputs.temp_logits is None:
+            return None
+
+        with torch.no_grad():
+            logits = outputs.logits.detach()
+            temp_logits = outputs.temp_logits.detach()
+            labels = labels.detach()
+            input_ids = input_ids.detach()
+
+            if logits.ndim != 3 or temp_logits.ndim != 3 or labels.ndim != 2:
+                return None
+            if logits.size(1) < 2 or labels.size(1) < 2:
+                return None
+
+            shift_logits = logits[:, :-1, :]
+            shift_temps = temp_logits[:, :-1, :].clamp_min(1e-2).squeeze(-1)
+            shift_labels = labels[:, 1:]
+            valid_mask = shift_labels != -100
+
+            min_p = float(min(max(self.min_p_ratio, 1e-6), 1.0 - 1e-6))
+            denom = -math.log(min_p)
+            examples = []
+
+            for batch_idx in range(int(shift_labels.size(0))):
+                valid_positions = torch.nonzero(valid_mask[batch_idx], as_tuple=False).squeeze(-1)
+                if valid_positions.numel() == 0:
+                    continue
+
+                logits_valid = shift_logits[batch_idx, valid_positions]
+                labels_valid = shift_labels[batch_idx, valid_positions]
+                temp_valid = shift_temps[batch_idx, valid_positions]
+
+                gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+                max_logits = logits_valid.max(dim=-1).values
+                required_temp = torch.relu(max_logits - gt_logits) / denom
+                hinge_gap = required_temp - temp_valid
+
+                focus_local_idx = int(torch.argmax(hinge_gap).item())
+                token_pos = int(valid_positions[focus_local_idx].item())
+
+                next_token_id = int(shift_labels[batch_idx, token_pos].item())
+                logit_vec = shift_logits[batch_idx, token_pos]
+                pred_temp = float(shift_temps[batch_idx, token_pos].item())
+                req_temp = float(required_temp[focus_local_idx].item())
+                gap = float(hinge_gap[focus_local_idx].item())
+
+                probs_unscaled = torch.softmax(logit_vec, dim=-1)
+                probs_scaled = torch.softmax(logit_vec / max(pred_temp, 1e-2), dim=-1)
+                gt_prob_unscaled = float(probs_unscaled[next_token_id].item())
+                gt_prob_scaled = float(probs_scaled[next_token_id].item())
+                max_prob_scaled = float(probs_scaled.max().item())
+                threshold = float(min_p * max_prob_scaled)
+                min_p_ok = gt_prob_scaled >= threshold
+
+                gt_rank = int((logit_vec > logit_vec[next_token_id]).sum().item()) + 1
+                pred_token_id = int(torch.argmax(probs_scaled).item())
+
+                context_end = token_pos + 1
+                context_start = max(0, context_end - 64)
+                context_ids = input_ids[batch_idx, context_start:context_end].tolist()
+                context_ids = [int(x) for x in context_ids]
+
+                examples.append({
+                    "batch_index": int(batch_idx),
+                    "token_position": int(token_pos),
+                    "target_token_position": int(token_pos + 1),
+                    "context_token_ids": context_ids,
+                    "context_text": self._decode_ids(context_ids),
+                    "ground_truth": {
+                        "token_id": next_token_id,
+                        "token": self._decode_token(next_token_id),
+                        "rank_unscaled": gt_rank,
+                        "prob_unscaled": gt_prob_unscaled,
+                        "prob_at_pred_temp": gt_prob_scaled,
+                    },
+                    "prediction": {
+                        "top_token_id_at_pred_temp": pred_token_id,
+                        "top_token_at_pred_temp": self._decode_token(pred_token_id),
+                        "predicted_temperature": pred_temp,
+                    },
+                    "min_p_alignment": {
+                        "min_p_ratio": min_p,
+                        "required_temperature": req_temp,
+                        "hinge_gap_required_minus_pred": gap,
+                        "max_prob_at_pred_temp": max_prob_scaled,
+                        "threshold_prob_min_p_times_max": threshold,
+                        "condition_satisfied": bool(min_p_ok),
+                    },
+                    "top_tokens_unscaled": self._top_token_probs(probs_unscaled, self.temp_diag_topk),
+                    "top_tokens_at_pred_temp": self._top_token_probs(probs_scaled, self.temp_diag_topk),
+                })
+
+                if len(examples) >= self.temp_diag_examples:
+                    break
+
+            if not examples:
+                return None
+
+            payload = {
+                "global_step": int(self.state.global_step),
+                "temp_objective": self.temp_objective,
+                "goldilocks_filter": bool(self.goldilocks_filter),
+                "goldilocks_easy_frac": float(self.goldilocks_easy_frac),
+                "goldilocks_topk_frac": float(self.goldilocks_topk_frac),
+                "goldilocks_topk": int(self.goldilocks_topk),
+                "temp_hinge_weight": float(self.temp_hinge_weight),
+                "temp_reg_weight": float(self.temp_reg_weight),
+                "examples": examples,
+            }
+            return payload
+
+    def _maybe_write_temp_diag(self, outputs, inputs) -> None:
+        if not self.temp_diag_enabled:
+            return
+        if not self.is_world_process_zero():
+            return
+        if outputs.temp_logits is None:
+            return
+
+        step = int(self.state.global_step)
+        if self._last_temp_diag_step == step:
+            return
+        if step % self.temp_diag_steps != 0:
+            return
+
+        payload = self._build_temp_diag_payload(outputs, inputs)
+        self._last_temp_diag_step = step
+        if payload is None:
+            return
+
+        os.makedirs(self._temp_diag_output_dir, exist_ok=True)
+        out_path = os.path.join(self._temp_diag_output_dir, f"step_{step:07d}.json")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        print(f"[!] Wrote temp diagnostics: {out_path} ({len(payload['examples'])} examples)")
+
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         inputs['temp_loss_weight'] = self.temp_loss_weight
         inputs["temp_objective"] = self.temp_objective
@@ -347,8 +536,11 @@ class AutoDecoLLMTrainer(SFTTrainer):
         inputs["goldilocks_topk"] = self.goldilocks_topk
         inputs["top_p_loss_method"] = self.top_p_loss_method
         outputs = model(**inputs)
+        self._maybe_write_temp_diag(outputs, inputs)
         temp_loss = outputs.temp_loss.item() if outputs.temp_loss is not None else 0
         lm_loss = outputs.lm_loss.item() if outputs.lm_loss is not None else 0
         top_p_loss = outputs.top_p_loss.item() if outputs.top_p_loss is not None else 0
         self.log({"loss": outputs.loss.item(), "temp_loss": temp_loss, "lm_loss": lm_loss, "top_p_loss": top_p_loss})
-        return outputs['loss']
+        if return_outputs:
+            return outputs["loss"], outputs
+        return outputs["loss"]

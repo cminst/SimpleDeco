@@ -52,6 +52,11 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     goldilocks_easy_frac: float = 0.1
     goldilocks_topk_frac: float = 0.9
     goldilocks_topk: int = 10
+    temp_diag_enabled: bool = False
+    temp_diag_steps: int = 100
+    temp_diag_examples: int = 3
+    temp_diag_topk: int = 5
+    temp_diag_dir: str = "temp_diagnostics"
 
 def pad(
     tensors: list[torch.Tensor],
@@ -659,6 +664,12 @@ def main(script_args, training_args, model_args):
         )
     if script_args.goldilocks_topk < 1:
         raise ValueError(f"goldilocks_topk must be >= 1, got {script_args.goldilocks_topk}")
+    if script_args.temp_diag_steps < 1:
+        raise ValueError(f"temp_diag_steps must be >= 1, got {script_args.temp_diag_steps}")
+    if script_args.temp_diag_examples < 1:
+        raise ValueError(f"temp_diag_examples must be >= 1, got {script_args.temp_diag_examples}")
+    if script_args.temp_diag_topk < 1:
+        raise ValueError(f"temp_diag_topk must be >= 1, got {script_args.temp_diag_topk}")
 
     model = AutoDecoModelForCausalLM.from_pretrained(model_args.model_name_or_path)
 
@@ -684,6 +695,11 @@ def main(script_args, training_args, model_args):
                 f"goldilocks_topk_frac={script_args.goldilocks_topk_frac}, "
                 f"goldilocks_topk={script_args.goldilocks_topk})"
             )
+            if script_args.temp_diag_enabled:
+                print(
+                    f"[!] Temp diagnostics enabled: every {script_args.temp_diag_steps} steps, "
+                    f"{script_args.temp_diag_examples} examples/file, top-{script_args.temp_diag_topk} token probs."
+                )
     else:
         print(f"[!] Training the LLM model itself. No AutoDeco training.")
     for name, param in model.named_parameters():
@@ -777,6 +793,11 @@ def main(script_args, training_args, model_args):
         goldilocks_easy_frac=script_args.goldilocks_easy_frac,
         goldilocks_topk_frac=script_args.goldilocks_topk_frac,
         goldilocks_topk=script_args.goldilocks_topk,
+        temp_diag_enabled=script_args.temp_diag_enabled,
+        temp_diag_steps=script_args.temp_diag_steps,
+        temp_diag_examples=script_args.temp_diag_examples,
+        temp_diag_topk=script_args.temp_diag_topk,
+        temp_diag_dir=script_args.temp_diag_dir,
         )
     else:
         print(f"[!] Normal SFT Training")

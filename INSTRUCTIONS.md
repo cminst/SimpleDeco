@@ -58,4 +58,71 @@ If the sanity check finds too many malformed rows, training stops with an error.
   - `--goldilocks_easy_frac` (default `0.1`): fraction of tokens where GT is top-1.
   - `--goldilocks_topk_frac` (default `0.9`): fraction of tokens where GT is in top-k.
   - `--goldilocks_topk` (default `10`): the `k` for top-k membership.
-- If a batch does not have enough tokens in one bucket, the remainder is filled from available top-k tokens, then any remaining valid tokens.
+- Filtering is strict to Goldilocks candidates only:
+  - `easy`: GT rank = 1
+  - `top-k non-easy`: GT rank in `[2, k]`
+- Tokens outside top-k are not included by this filter.
+
+## 5) Temperature diagnostics JSON dumps (during training)
+
+Use these flags to periodically write debug JSON files with per-token temperature alignment details:
+
+- `--temp_diag_enabled true`
+- `--temp_diag_steps 100` (write every N global steps)
+- `--temp_diag_examples 3` (max examples per file)
+- `--temp_diag_topk 5` (top-k probabilities to include)
+- `--temp_diag_dir temp_diagnostics` (subdir under `--output_dir`)
+
+Example:
+
+```bash
+accelerate launch trl_train.py \
+  ... \
+  --temp_diag_enabled true \
+  --temp_diag_steps 50 \
+  --temp_diag_examples 3 \
+  --temp_diag_topk 5
+```
+
+Output files:
+
+- `<output_dir>/temp_diagnostics/step_0000050.json`
+- `<output_dir>/temp_diagnostics/step_0000100.json`
+- etc.
+
+Each file includes up to 3 examples with:
+
+- Context (`context_text`, `context_token_ids`)
+- Ground-truth next token info (`token_id`, rank, probability)
+- Predicted temperature (`prediction.predicted_temperature`)
+- Required temperature from analytic Min-P bound (`min_p_alignment.required_temperature`)
+- Hinge gap (`required - predicted`)
+- Min-P condition check at predicted temperature
+- Top token probabilities:
+  - Unscaled logits
+  - Logits scaled by predicted temperature
+
+## 6) Pretty-print diagnostics helper
+
+Use this helper to read JSON diagnostics and print a compact summary:
+
+```bash
+python script/pretty_print_temp_diag.py \
+  --path ./debug_analytic_hinge/temp_diagnostics
+```
+
+Useful options:
+
+- `--num-files 3` prints the latest 3 files from a directory.
+- `--all` prints all `step_*.json` files in order.
+- `--topk 10` shows more top-token entries.
+- `--max-context-chars 600` prints longer context snippets.
+
+Example:
+
+```bash
+python script/pretty_print_temp_diag.py \
+  --path ./debug_analytic_hinge/temp_diagnostics \
+  --num-files 2 \
+  --topk 8
+```
