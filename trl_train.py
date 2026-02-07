@@ -760,12 +760,11 @@ def main(script_args, training_args, model_args):
         if assistant_mask_supported:
             print(f"[!] Assistant-mask preflight passed: {assistant_mask_reason}")
         else:
-            print(f"[!] Assistant-mask preflight failed: {assistant_mask_reason}")
-            print(
-                "[!] Disabling assistant_only_loss for this run to avoid tokenization failure. "
-                "Training will proceed without assistant masking."
+            raise ValueError(
+                "assistant_only_loss=True but assistant-mask preflight failed. "
+                f"Reason: {assistant_mask_reason}. "
+                "Aborting instead of auto-disabling assistant_only_loss."
             )
-            training_args.assistant_only_loss = False
 
     # FOR DEBUGGING
     # dataset['train'] = dataset['train'].select(range(50))

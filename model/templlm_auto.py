@@ -108,6 +108,8 @@ class AutoDecoOutputWithPast(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     temp_logits: Optional[torch.FloatTensor] = None
     top_p_logits: Optional[torch.FloatTensor] = None
+    temp_training_valid_mask: Optional[torch.BoolTensor] = None
+    temp_training_selected_mask: Optional[torch.BoolTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -353,8 +355,17 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         goldilocks_easy_frac: float = 0.1,
         goldilocks_topk_frac: float = 0.9,
         goldilocks_topk: int = 10,
+        return_selection: bool = False,
     ):
         """Compute temperature loss."""
+        def _pack_result(loss_value: torch.Tensor, valid: torch.Tensor, selected: torch.Tensor):
+            if return_selection:
+                return loss_value, {
+                    "valid_mask": valid.detach(),
+                    "selected_valid_mask": selected.detach(),
+                }
+            return loss_value
+
         unscaled_shift = unscaled_logits[:, :-1, :]
         temp_shift = temp_logits[:, :-1, :].clamp_min(1e-2)
         shift_labels = labels[:, 1:]
@@ -363,10 +374,12 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         if objective == "analytic_min_p_hinge":
             labels_valid = shift_labels[valid_mask]
             if labels_valid.numel() == 0:
-                return torch.tensor(0.0, device=unscaled_logits.device)
+                empty_selected = torch.zeros(0, dtype=torch.bool, device=unscaled_logits.device)
+                return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, empty_selected)
 
             logits_valid = unscaled_shift[valid_mask]
             temp_valid = temp_shift[valid_mask].squeeze(-1)
+            selected_mask = torch.ones(labels_valid.shape, dtype=torch.bool, device=labels_valid.device)
             if goldilocks_filter:
                 selected_mask = self._build_goldilocks_mask(
                     logits_valid=logits_valid,
@@ -379,7 +392,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 logits_valid = logits_valid[selected_mask]
                 temp_valid = temp_valid[selected_mask]
                 if labels_valid.numel() == 0:
-                    return torch.tensor(0.0, device=unscaled_logits.device)
+                    return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
 
             gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
             max_logits = logits_valid.max(dim=-1).values
@@ -396,7 +409,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_valid)
             if temp_reg_weight != 0.0:
                 token_loss = token_loss + temp_reg_weight * temp_valid
-            return token_loss.mean()
+            return _pack_result(token_loss.mean(), valid_mask, selected_mask)
 
         if objective != "legacy_ce":
             raise ValueError(f"Unknown temp objective: {objective}")
@@ -419,6 +432,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         scaled_valid = scaled_shift[masked_valid_mask]
         unscaled_valid = unscaled_shift[masked_valid_mask]
         labels_valid = shift_labels[masked_valid_mask]
+        selected_valid_mask = masked_valid_mask[valid_mask]
 
         if labels_valid.numel() > 0:
             token_ce = F.cross_entropy(
@@ -430,9 +444,9 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             token_ce = token_ce * torch.softmax(unscaled_valid, dim=-1).gather(
                 1, labels_valid.unsqueeze(-1)
             ).squeeze(-1).detach()
-            return token_ce.mean()
+            return _pack_result(token_ce.mean(), valid_mask, selected_valid_mask)
 
-        return torch.tensor(0.0, device=unscaled_logits.device)
+        return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_valid_mask)
     
     def _compute_top_p_loss(self, unscaled_logits, temp_logits, top_p_logits, labels, method='soft'):
         """
@@ -556,14 +570,16 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         
         # Compute losses
         loss, lm_loss, temp_loss, top_p_loss = None, None, None, None
-        
+        temp_training_valid_mask = None
+        temp_training_selected_mask = None
+
         if labels is not None:
             if self.train_temp or self.train_top_p:
                 # Mode 1: Training AutoDeco heads
                 losses = []
-                
+
                 if self.train_temp:
-                    temp_loss = self._compute_temp_loss(
+                    temp_out = self._compute_temp_loss(
                         unscaled_logits,
                         temp_logits,
                         labels,
@@ -576,7 +592,14 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                         goldilocks_easy_frac=goldilocks_easy_frac,
                         goldilocks_topk_frac=goldilocks_topk_frac,
                         goldilocks_topk=goldilocks_topk,
+                        return_selection=True,
                     )
+                    if isinstance(temp_out, tuple):
+                        temp_loss, temp_selection = temp_out
+                        temp_training_valid_mask = temp_selection.get("valid_mask")
+                        temp_training_selected_mask = temp_selection.get("selected_valid_mask")
+                    else:
+                        temp_loss = temp_out
                     losses.append(temp_loss * temp_loss_weight)
                 
                 if self.train_top_p:
@@ -619,6 +642,8 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             logits=unscaled_logits,
             temp_logits=temp_logits,
             top_p_logits=top_p_logits,
+            temp_training_valid_mask=temp_training_valid_mask,
+            temp_training_selected_mask=temp_training_selected_mask,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions if hasattr(outputs, 'attentions') else None,

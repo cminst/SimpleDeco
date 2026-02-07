@@ -170,11 +170,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 if isinstance(dataset, Dataset):  # `IterableDataset.map` does not support `desc`
                     map_kwargs["desc"] = f"Tokenizing {dataset_name} dataset"
 
-                warned_missing_assistant_mask = False
-
                 def tokenize(example, processing_class, dataset_text_field, assistant_only_loss):
-                    nonlocal warned_missing_assistant_mask
-
                     def _looks_like_chat_messages(value):
                         return (
                             isinstance(value, list)
@@ -216,13 +212,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
                                     or len(assistant_masks) != len(prompt_completion_ids)
                                     or 1 not in assistant_masks
                                 ):
-                                    if not warned_missing_assistant_mask:
-                                        warnings.warn(
-                                            "assistant_only_loss=True but assistant masks are unavailable or invalid "
-                                            "for some examples. Falling back to all-token mask for those examples."
-                                        )
-                                        warned_missing_assistant_mask = True
-                                    assistant_masks = [1] * len(prompt_completion_ids)
+                                    raise ValueError(
+                                        "assistant_only_loss=True but assistant masks are unavailable or invalid "
+                                        "for a prompt-completion example (chat-template path)."
+                                    )
                                 output["assistant_masks"] = assistant_masks
                         else:
                             # prompt = [{"role": "user", "content": example["prompt"]}]
@@ -275,13 +268,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
                                     or len(assistant_masks) != len(processed["input_ids"])
                                     or 1 not in assistant_masks
                                 ):
-                                    if not warned_missing_assistant_mask:
-                                        warnings.warn(
-                                            "assistant_only_loss=True but assistant masks are unavailable or invalid "
-                                            "for some examples. Falling back to all-token mask for those examples."
-                                        )
-                                        warned_missing_assistant_mask = True
-                                    assistant_masks = [1] * len(processed["input_ids"])
+                                    raise ValueError(
+                                        "assistant_only_loss=True but assistant masks are unavailable or invalid "
+                                        "for a conversational example."
+                                    )
                                 output["assistant_masks"] = assistant_masks
                         else:
                             text_value = example.get(dataset_text_field)
@@ -382,6 +372,88 @@ class AutoDecoLLMTrainer(SFTTrainer):
             })
         return result
 
+    @staticmethod
+    def _sample_indices(mask: torch.Tensor, target_count: int) -> torch.Tensor:
+        if target_count <= 0:
+            return torch.empty(0, dtype=torch.long, device=mask.device)
+        indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
+        if indices.numel() <= target_count:
+            return indices
+        perm = torch.randperm(indices.numel(), device=mask.device)
+        return indices[perm[:target_count]]
+
+    def _build_goldilocks_mask(
+        self,
+        logits_valid: torch.Tensor,
+        labels_valid: torch.Tensor,
+        easy_frac: float,
+        topk_frac: float,
+        topk: int,
+    ) -> torch.Tensor:
+        token_count = labels_valid.numel()
+        if token_count == 0:
+            return torch.zeros(0, dtype=torch.bool, device=labels_valid.device)
+
+        k = max(1, min(int(topk), logits_valid.size(-1)))
+        gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+        gt_rank = (logits_valid > gt_logits.unsqueeze(-1)).sum(dim=-1) + 1
+
+        easy_mask = gt_rank == 1
+        topk_non_easy_mask = (gt_rank <= k) & (~easy_mask)
+
+        easy_count = int(easy_mask.sum().item())
+        topk_count = int(topk_non_easy_mask.sum().item())
+        available_total = easy_count + topk_count
+        if available_total == 0:
+            return torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
+
+        easy_raw = max(0.0, float(easy_frac))
+        topk_raw = max(0.0, float(topk_frac))
+        weight_sum = easy_raw + topk_raw
+        if weight_sum <= 0.0:
+            selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
+            selected[easy_mask | topk_non_easy_mask] = True
+            return selected
+
+        easy_weight = easy_raw / weight_sum
+        topk_weight = topk_raw / weight_sum
+
+        if easy_count > 0 and topk_count > 0 and easy_weight > 0.0 and topk_weight > 0.0:
+            max_total_from_easy = easy_count / easy_weight
+            max_total_from_topk = topk_count / topk_weight
+            target_total = int(min(max_total_from_easy, max_total_from_topk))
+            target_total = max(1, min(available_total, target_total))
+            target_easy = int(round(target_total * easy_weight))
+            target_easy = max(0, min(easy_count, target_easy))
+            target_topk = target_total - target_easy
+            target_topk = max(0, min(topk_count, target_topk))
+
+            remainder = target_total - (target_easy + target_topk)
+            if remainder > 0:
+                easy_spare = easy_count - target_easy
+                take_easy = min(remainder, easy_spare)
+                target_easy += take_easy
+                remainder -= take_easy
+            if remainder > 0:
+                topk_spare = topk_count - target_topk
+                take_topk = min(remainder, topk_spare)
+                target_topk += take_topk
+        elif topk_count > 0:
+            target_easy = 0
+            target_topk = topk_count
+        else:
+            target_easy = easy_count
+            target_topk = 0
+
+        selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
+        if target_easy > 0:
+            easy_idx = self._sample_indices(easy_mask, target_easy)
+            selected[easy_idx] = True
+        if target_topk > 0:
+            topk_idx = self._sample_indices(topk_non_easy_mask, target_topk)
+            selected[topk_idx] = True
+        return selected
+
     def _build_temp_diag_payload(self, outputs, inputs) -> Optional[dict[str, Any]]:
         labels = inputs.get("labels")
         input_ids = inputs.get("input_ids")
@@ -404,34 +476,70 @@ class AutoDecoLLMTrainer(SFTTrainer):
             shift_logits = logits[:, :-1, :]
             shift_temps = temp_logits[:, :-1, :].clamp_min(1e-2).squeeze(-1)
             shift_labels = labels[:, 1:]
-            valid_mask = shift_labels != -100
+
+            model_valid_mask = getattr(outputs, "temp_training_valid_mask", None)
+            if (
+                isinstance(model_valid_mask, torch.Tensor)
+                and model_valid_mask.ndim == 2
+                and tuple(model_valid_mask.shape) == tuple(shift_labels.shape)
+            ):
+                valid_mask = model_valid_mask.detach().to(dtype=torch.bool, device=shift_labels.device)
+            else:
+                valid_mask = shift_labels != -100
+
+            valid_indices = torch.nonzero(valid_mask, as_tuple=False)
+            if valid_indices.numel() == 0:
+                return None
 
             min_p = float(min(max(self.min_p_ratio, 1e-6), 1.0 - 1e-6))
             denom = -math.log(min_p)
+            logits_valid = shift_logits[valid_mask]
+            labels_valid = shift_labels[valid_mask]
+            temp_valid = shift_temps[valid_mask]
+
+            selected_mask = None
+            model_selected_mask = getattr(outputs, "temp_training_selected_mask", None)
+            if isinstance(model_selected_mask, torch.Tensor) and model_selected_mask.ndim == 1:
+                candidate_selected = model_selected_mask.detach().to(
+                    dtype=torch.bool,
+                    device=labels_valid.device,
+                )
+                if candidate_selected.numel() == labels_valid.numel():
+                    selected_mask = candidate_selected
+
+            if selected_mask is None:
+                selected_mask = torch.ones_like(labels_valid, dtype=torch.bool)
+                if self.temp_objective == "analytic_min_p_hinge" and self.goldilocks_filter:
+                    selected_mask = self._build_goldilocks_mask(
+                        logits_valid=logits_valid,
+                        labels_valid=labels_valid,
+                        easy_frac=self.goldilocks_easy_frac,
+                        topk_frac=self.goldilocks_topk_frac,
+                        topk=self.goldilocks_topk,
+                    )
+
+            selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
+            if selected_indices.numel() == 0:
+                return None
+
+            sample_count = min(self.temp_diag_examples, int(selected_indices.numel()))
+            perm = torch.randperm(selected_indices.numel(), device=selected_indices.device)
+            sampled_indices = selected_indices[perm[:sample_count]].sort().values
+
+            gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+            max_logits = logits_valid.max(dim=-1).values
+            required_temp = torch.relu(max_logits - gt_logits) / denom
+            hinge_gap = required_temp - temp_valid
             examples = []
 
-            for batch_idx in range(int(shift_labels.size(0))):
-                valid_positions = torch.nonzero(valid_mask[batch_idx], as_tuple=False).squeeze(-1)
-                if valid_positions.numel() == 0:
-                    continue
-
-                logits_valid = shift_logits[batch_idx, valid_positions]
-                labels_valid = shift_labels[batch_idx, valid_positions]
-                temp_valid = shift_temps[batch_idx, valid_positions]
-
-                gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
-                max_logits = logits_valid.max(dim=-1).values
-                required_temp = torch.relu(max_logits - gt_logits) / denom
-                hinge_gap = required_temp - temp_valid
-
-                focus_local_idx = int(torch.argmax(hinge_gap).item())
-                token_pos = int(valid_positions[focus_local_idx].item())
-
-                next_token_id = int(shift_labels[batch_idx, token_pos].item())
-                logit_vec = shift_logits[batch_idx, token_pos]
-                pred_temp = float(shift_temps[batch_idx, token_pos].item())
-                req_temp = float(required_temp[focus_local_idx].item())
-                gap = float(hinge_gap[focus_local_idx].item())
+            for flat_idx in sampled_indices.tolist():
+                batch_idx = int(valid_indices[flat_idx, 0].item())
+                token_pos = int(valid_indices[flat_idx, 1].item())
+                next_token_id = int(labels_valid[flat_idx].item())
+                logit_vec = logits_valid[flat_idx]
+                pred_temp = float(temp_valid[flat_idx].item())
+                req_temp = float(required_temp[flat_idx].item())
+                gap = float(hinge_gap[flat_idx].item())
 
                 probs_unscaled = torch.softmax(logit_vec, dim=-1)
                 probs_scaled = torch.softmax(logit_vec / max(pred_temp, 1e-2), dim=-1)
@@ -479,9 +587,6 @@ class AutoDecoLLMTrainer(SFTTrainer):
                     "top_tokens_at_pred_temp": self._top_token_probs(probs_scaled, self.temp_diag_topk),
                 })
 
-                if len(examples) >= self.temp_diag_examples:
-                    break
-
             if not examples:
                 return None
 
@@ -494,6 +599,8 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 "goldilocks_topk": int(self.goldilocks_topk),
                 "temp_hinge_weight": float(self.temp_hinge_weight),
                 "temp_reg_weight": float(self.temp_reg_weight),
+                "valid_token_count": int(valid_indices.size(0)),
+                "selected_token_count_for_temp_loss": int(selected_indices.numel()),
                 "examples": examples,
             }
             return payload
