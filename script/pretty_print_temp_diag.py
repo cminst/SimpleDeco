@@ -121,6 +121,7 @@ def print_diag(path: Path, payload: dict[str, Any], topk: int, max_context_chars
         pred = ex.get("prediction", {})
         align = ex.get("min_p_alignment", {})
         context = _truncate(str(ex.get("context_text", "")), max_context_chars)
+        gt_token = str(gt.get("token", "")).replace("\n", "\\n")
         print("-" * 100)
         print(
             f"Example {i} | batch_index={ex.get('batch_index')} "
@@ -129,7 +130,7 @@ def print_diag(path: Path, payload: dict[str, Any], topk: int, max_context_chars
         print(f"Context: {context}")
         print(
             "Ground truth: "
-            f"id={gt.get('token_id')} token={str(gt.get('token', '')).replace(chr(10), '\\n')!r} "
+            f"id={gt.get('token_id')} token={gt_token!r} "
             f"rank_unscaled={gt.get('rank_unscaled')} "
             f"p_unscaled={gt.get('prob_unscaled')} p_at_pred_temp={gt.get('prob_at_pred_temp')}"
         )
