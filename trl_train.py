@@ -195,6 +195,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     pad_token_id: int
     completion_only_loss: bool = True
+    require_assistant_masks: bool = False
     padding_free: bool = False
     return_position_ids: bool = True
     pad_to_multiple_of: Optional[int] = None
@@ -231,8 +232,30 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 top_k = [torch.tensor(example["top_k_labels"]) for example in examples]
         if self.completion_only_loss and "completion_mask" in examples[0]:
             completion_mask = [torch.tensor(example["completion_mask"]) for example in examples]
-        if "assistant_masks" in examples[0]:
+        has_any_assistant_masks = any("assistant_masks" in example for example in examples)
+        if self.require_assistant_masks and not has_any_assistant_masks:
+            raise ValueError(
+                "assistant_only_loss=True but no assistant_masks were found in the current batch. "
+                "This usually means assistant masks were dropped upstream."
+            )
+
+        if has_any_assistant_masks:
+            if not all("assistant_masks" in example for example in examples):
+                raise ValueError(
+                    "Inconsistent assistant mask availability inside a batch. "
+                    "assistant_only_loss requires assistant_masks for every example."
+                )
             assistant_masks = [torch.tensor(example["assistant_masks"]) for example in examples]
+            for idx, (mask_tensor, ids_tensor) in enumerate(zip(assistant_masks, input_ids)):
+                if mask_tensor.numel() != ids_tensor.numel():
+                    raise ValueError(
+                        f"assistant_masks length mismatch for batch example {idx}: "
+                        f"{mask_tensor.numel()} vs input_ids {ids_tensor.numel()}."
+                    )
+                if self.require_assistant_masks and int(mask_tensor.sum().item()) <= 0:
+                    raise ValueError(
+                        f"assistant_masks for batch example {idx} contains no assistant tokens."
+                    )
 
         # Pad
         output = {}
@@ -246,7 +269,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             if self.completion_only_loss and "completion_mask" in examples[0]:
                 completion_mask = torch.cat(completion_mask, dim=0).unsqueeze(0)
                 output["labels"][completion_mask == 0] = -100
-            if "assistant_masks" in examples[0]:
+            if has_any_assistant_masks:
                 assistant_masks = torch.cat(assistant_masks, dim=0).unsqueeze(0)
                 output["labels"][assistant_masks == 0] = -100
         else:
@@ -287,7 +310,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 )
                 output["labels"][completion_mask == 0] = -100  # mask everything that is not in the completion
 
-            if "assistant_masks" in examples[0]:
+            if has_any_assistant_masks:
                 assistant_masks = pad(
                     assistant_masks, padding_value=0, padding_side="right", pad_to_multiple_of=self.pad_to_multiple_of
                 )
@@ -779,6 +802,7 @@ def main(script_args, training_args, model_args):
         data_collator=DataCollatorForLanguageModeling(
             pad_token_id=tokenizer.pad_token_id,
             completion_only_loss=training_args.completion_only_loss,
+            require_assistant_masks=training_args.assistant_only_loss,
             padding_free=training_args.padding_free,
             pad_to_multiple_of=training_args.pad_to_multiple_of,
         ),

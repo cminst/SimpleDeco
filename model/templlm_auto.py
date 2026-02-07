@@ -372,30 +372,32 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         valid_mask = shift_labels != -100
 
         if objective == "analytic_min_p_hinge":
-            labels_valid = shift_labels[valid_mask]
-            if labels_valid.numel() == 0:
+            labels_valid_all = shift_labels[valid_mask]
+            if labels_valid_all.numel() == 0:
                 empty_selected = torch.zeros(0, dtype=torch.bool, device=unscaled_logits.device)
                 return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, empty_selected)
 
-            logits_valid = unscaled_shift[valid_mask]
-            temp_valid = temp_shift[valid_mask].squeeze(-1)
-            selected_mask = torch.ones(labels_valid.shape, dtype=torch.bool, device=labels_valid.device)
+            logits_valid_all = unscaled_shift[valid_mask]
+            temp_valid_all = temp_shift[valid_mask].squeeze(-1)
+            selected_mask = torch.ones(labels_valid_all.shape, dtype=torch.bool, device=labels_valid_all.device)
             if goldilocks_filter:
                 selected_mask = self._build_goldilocks_mask(
-                    logits_valid=logits_valid,
-                    labels_valid=labels_valid,
+                    logits_valid=logits_valid_all,
+                    labels_valid=labels_valid_all,
                     easy_frac=goldilocks_easy_frac,
                     topk_frac=goldilocks_topk_frac,
                     topk=goldilocks_topk,
                 )
-                labels_valid = labels_valid[selected_mask]
-                logits_valid = logits_valid[selected_mask]
-                temp_valid = temp_valid[selected_mask]
-                if labels_valid.numel() == 0:
+                if not selected_mask.any():
                     return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
 
-            gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
-            max_logits = logits_valid.max(dim=-1).values
+            selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
+            logits_selected = logits_valid_all[selected_indices]
+            labels_selected = labels_valid_all[selected_indices]
+            temp_selected = temp_valid_all[selected_indices]
+
+            gt_logits = logits_selected.gather(1, labels_selected.unsqueeze(-1)).squeeze(-1)
+            max_logits = logits_selected.max(dim=-1).values
             delta = torch.relu(max_logits - gt_logits)
 
             min_p_tensor = torch.as_tensor(
@@ -406,9 +408,22 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             denom = -torch.log(min_p_tensor)
             temp_lower_bound = delta / denom
 
-            token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_valid)
+            # Temp head outputs in [0, 2], so drop analytically infeasible targets.
+            feasible_mask = temp_lower_bound <= 2.0
+            if not feasible_mask.all():
+                feasible_indices = selected_indices[feasible_mask]
+                selected_mask = torch.zeros_like(selected_mask)
+                selected_mask[feasible_indices] = True
+
+            if not selected_mask.any():
+                return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
+
+            temp_lower_bound = temp_lower_bound[feasible_mask]
+            temp_selected = temp_selected[feasible_mask]
+
+            token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_selected)
             if temp_reg_weight != 0.0:
-                token_loss = token_loss + temp_reg_weight * temp_valid
+                token_loss = token_loss + temp_reg_weight * temp_selected
             return _pack_result(token_loss.mean(), valid_mask, selected_mask)
 
         if objective != "legacy_ce":

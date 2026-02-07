@@ -298,6 +298,26 @@ class AutoDecoLLMTrainer(SFTTrainer):
                     **map_kwargs,
                 )
 
+                if args.assistant_only_loss:
+                    if "assistant_masks" not in dataset.column_names:
+                        raise ValueError(
+                            "assistant_only_loss=True but tokenization did not produce an 'assistant_masks' column. "
+                            "This dataset/template path is not compatible with assistant-only loss."
+                        )
+                    if isinstance(dataset, Dataset):
+                        probe_count = min(len(dataset), 32)
+                        has_positive_mask = False
+                        for i in range(probe_count):
+                            mask_values = dataset[i].get("assistant_masks")
+                            if isinstance(mask_values, list) and any(int(x) == 1 for x in mask_values):
+                                has_positive_mask = True
+                                break
+                        if not has_positive_mask:
+                            raise ValueError(
+                                "assistant_only_loss=True but probed assistant masks contain no assistant tokens. "
+                                "Check tokenizer chat template generation blocks."
+                            )
+
             # Pack or truncate
             if packing:
                 if args.max_length is None:
@@ -322,7 +342,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
             # For Liger kernel, ensure only the essential columns
             if args.use_liger_kernel:
                 dataset = dataset.select_columns(
-                    {"input_ids", "seq_lengths", "completion_mask"}.intersection(dataset.column_names)
+                    {"input_ids", "seq_lengths", "completion_mask", "assistant_masks"}.intersection(dataset.column_names)
                 )
 
         return dataset
@@ -339,7 +359,20 @@ class AutoDecoLLMTrainer(SFTTrainer):
             signature = inspect.signature(model_to_inspect.forward)
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
-            self._signature_columns += list(set(["label", "label_ids", "temp_labels", "top_p_labels", "top_k_labels", "completion_mask"] + self.label_names))
+            self._signature_columns += list(
+                set(
+                    [
+                        "label",
+                        "label_ids",
+                        "temp_labels",
+                        "top_p_labels",
+                        "top_k_labels",
+                        "completion_mask",
+                        "assistant_masks",
+                    ]
+                    + self.label_names
+                )
+            )
 
     def _decode_token(self, token_id: int) -> str:
         processing_class = getattr(self, "processing_class", None)
