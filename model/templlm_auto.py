@@ -276,49 +276,67 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         if token_count == 0:
             return torch.zeros(0, dtype=torch.bool, device=labels_valid.device)
 
-        weights = max(0.0, float(easy_frac)) + max(0.0, float(topk_frac))
-        if weights <= 0.0:
-            return torch.ones(token_count, dtype=torch.bool, device=labels_valid.device)
-
-        easy_weight = max(0.0, float(easy_frac)) / weights
-        target_easy = int(round(token_count * easy_weight))
-        target_easy = max(0, min(token_count, target_easy))
-        target_topk = token_count - target_easy
-
-        pred_ids = logits_valid.argmax(dim=-1)
-        easy_mask = pred_ids == labels_valid
-
         k = max(1, min(int(topk), logits_valid.size(-1)))
-        if k == 1:
-            topk_mask = easy_mask
+        gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+        gt_rank = (logits_valid > gt_logits.unsqueeze(-1)).sum(dim=-1) + 1
+
+        easy_mask = gt_rank == 1
+        topk_non_easy_mask = (gt_rank <= k) & (~easy_mask)
+
+        easy_count = int(easy_mask.sum().item())
+        topk_count = int(topk_non_easy_mask.sum().item())
+        available_total = easy_count + topk_count
+        if available_total == 0:
+            # No Goldilocks tokens in this batch (all tokens are outside top-k).
+            return torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
+
+        easy_raw = max(0.0, float(easy_frac))
+        topk_raw = max(0.0, float(topk_frac))
+        weight_sum = easy_raw + topk_raw
+        if weight_sum <= 0.0:
+            # If weights are disabled, keep all Goldilocks-eligible tokens.
+            selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
+            selected[easy_mask | topk_non_easy_mask] = True
+            return selected
+
+        easy_weight = easy_raw / weight_sum
+        topk_weight = topk_raw / weight_sum
+
+        if easy_count > 0 and topk_count > 0 and easy_weight > 0.0 and topk_weight > 0.0:
+            max_total_from_easy = easy_count / easy_weight
+            max_total_from_topk = topk_count / topk_weight
+            target_total = int(min(max_total_from_easy, max_total_from_topk))
+            target_total = max(1, min(available_total, target_total))
+            target_easy = int(round(target_total * easy_weight))
+            target_easy = max(0, min(easy_count, target_easy))
+            target_topk = target_total - target_easy
+            target_topk = max(0, min(topk_count, target_topk))
+
+            # Fill any rounding remainder from available Goldilocks buckets only.
+            remainder = target_total - (target_easy + target_topk)
+            if remainder > 0:
+                easy_spare = easy_count - target_easy
+                take_easy = min(remainder, easy_spare)
+                target_easy += take_easy
+                remainder -= take_easy
+            if remainder > 0:
+                topk_spare = topk_count - target_topk
+                take_topk = min(remainder, topk_spare)
+                target_topk += take_topk
+        elif topk_count > 0:
+            target_easy = 0
+            target_topk = topk_count
         else:
-            topk_ids = torch.topk(logits_valid, k=k, dim=-1).indices
-            topk_mask = (topk_ids == labels_valid.unsqueeze(-1)).any(dim=-1)
+            target_easy = easy_count
+            target_topk = 0
 
-        topk_non_easy_mask = topk_mask & (~easy_mask)
         selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-
-        easy_idx = self._sample_indices(easy_mask, target_easy)
-        selected[easy_idx] = True
-
-        easy_deficit = target_easy - easy_idx.numel()
-        target_topk += easy_deficit
-
-        topk_idx = self._sample_indices(topk_non_easy_mask, target_topk)
-        selected[topk_idx] = True
-
-        remaining = token_count - selected.sum().item()
-        if remaining > 0:
-            topk_remaining_mask = topk_mask & (~selected)
-            topk_fill_idx = self._sample_indices(topk_remaining_mask, remaining)
-            selected[topk_fill_idx] = True
-            remaining = token_count - selected.sum().item()
-
-        if remaining > 0:
-            any_remaining_mask = ~selected
-            fill_idx = self._sample_indices(any_remaining_mask, remaining)
-            selected[fill_idx] = True
-
+        if target_easy > 0:
+            easy_idx = self._sample_indices(easy_mask, target_easy)
+            selected[easy_idx] = True
+        if target_topk > 0:
+            topk_idx = self._sample_indices(topk_non_easy_mask, target_topk)
+            selected[topk_idx] = True
         return selected
     
     def _compute_temp_loss(
