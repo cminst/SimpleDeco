@@ -759,6 +759,7 @@ def main(script_args, training_args, model_args):
         trainer = AutoDecoLLMTrainer(
         model=model,
         args=training_args,
+        processing_class=tokenizer,
         train_dataset=dataset[script_args.dataset_train_split],
         data_collator=DataCollatorForLanguageModeling(
             pad_token_id=tokenizer.pad_token_id,
@@ -791,6 +792,7 @@ def main(script_args, training_args, model_args):
         trainer = SFTTrainer(
             model=model,
             args=training_args,
+            processing_class=tokenizer,
             train_dataset=dataset[script_args.dataset_train_split],
             eval_dataset=eval_dataset,
             peft_config=get_peft_config(model_args),
