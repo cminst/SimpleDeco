@@ -33,6 +33,15 @@ from trl.data_utils import (
     truncate_dataset,
 )
 
+try:
+    from rich import print as rich_print
+    from rich.markup import escape as rich_escape
+    _RICH_AVAILABLE = True
+except Exception:
+    rich_print = None
+    rich_escape = None
+    _RICH_AVAILABLE = False
+
 class AutoDecoLLMTrainer(SFTTrainer):
     def __init__(
             self,
@@ -88,6 +97,12 @@ class AutoDecoLLMTrainer(SFTTrainer):
         except Exception:
             return True
 
+    def _console_print(self, message: str) -> None:
+        if _RICH_AVAILABLE and rich_print is not None:
+            rich_print(message)
+            return
+        print(message)
+
     def _render_row_with_bold_assistant_tokens(
         self,
         input_ids: list[int],
@@ -97,8 +112,13 @@ class AutoDecoLLMTrainer(SFTTrainer):
         pieces: list[str] = []
         for token_id, mask_value in zip(input_ids, assistant_masks):
             token_text = processing_class.decode([int(token_id)], skip_special_tokens=False)
+            if _RICH_AVAILABLE and rich_escape is not None:
+                token_text = rich_escape(token_text)
             if int(mask_value) == 1:
-                pieces.append(f"**{token_text}**")
+                if _RICH_AVAILABLE:
+                    pieces.append(f"[bold]{token_text}[/bold]")
+                else:
+                    pieces.append(token_text)
             else:
                 pieces.append(token_text)
         return "".join(pieces)
@@ -132,7 +152,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
             total_after = len(dataset)
             removed = total_before - total_after
             if self._is_main_process_safe():
-                print(
+                self._console_print(
                     f"[!] assistant_only_loss filter: removed {removed} / {total_before} "
                     f"examples without assistant tokens; kept {total_after}."
                 )
@@ -143,8 +163,8 @@ class AutoDecoLLMTrainer(SFTTrainer):
                         assistant_masks=sample["assistant_masks"],
                         processing_class=processing_class,
                     )
-                    print("[!] Example row with assistant tokens in bold:")
-                    print(rendered)
+                    self._console_print("[!] Example row with assistant tokens in bold:")
+                    self._console_print(rendered)
             if total_after == 0:
                 raise ValueError(
                     "assistant_only_loss=True but every example has zero assistant tokens after preprocessing."
@@ -153,7 +173,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
 
         dataset = dataset.filter(_has_assistant_tokens)
         if self._is_main_process_safe():
-            print(
+            self._console_print(
                 "[!] assistant_only_loss filter applied to IterableDataset; exact removed/total counts are unavailable."
             )
         return dataset
