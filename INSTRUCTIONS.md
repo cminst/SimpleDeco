@@ -10,6 +10,8 @@ python script/construct_autodeco.py \
 
 Use the generated wrapper path (`ckpt/autodeco-llama3-8b-instruct`) as `--model_name_or_path` for training.
 
+You might have to adjust the chat template to allow assistant masking (check `qwen3-4b-chat-template-fixed.jinja`)
+
 ## 2) Run analytic Min-P hinge training
 
 ```bash
