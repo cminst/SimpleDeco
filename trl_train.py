@@ -863,5 +863,16 @@ def make_parser(subparsers: argparse._SubParsersAction = None):
 
 if __name__ == "__main__":
     parser = make_parser()
-    script_args, training_args, model_args, _ = parser.parse_args_and_config(return_remaining_strings=True)
+    script_args, training_args, model_args, remaining = parser.parse_args_and_config(return_remaining_strings=True)
+    extra_parser = argparse.ArgumentParser(add_help=False)
+    extra_parser.add_argument("--dataset_num_proc", type=int)
+    extra_parser.add_argument("--dataset-num-proc", dest="dataset_num_proc", type=int)
+    extra_parser.add_argument("--num_proc", type=int)
+    extra_parser.add_argument("--num-proc", dest="num_proc", type=int)
+    extra_args, _ = extra_parser.parse_known_args(remaining)
+    if getattr(training_args, "dataset_num_proc", None) is None:
+        if extra_args.dataset_num_proc is not None:
+            setattr(training_args, "dataset_num_proc", extra_args.dataset_num_proc)
+        elif extra_args.num_proc is not None:
+            setattr(training_args, "dataset_num_proc", extra_args.num_proc)
     main(script_args, training_args, model_args)
