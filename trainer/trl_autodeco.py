@@ -201,6 +201,8 @@ class AutoDecoLLMTrainer(SFTTrainer):
         if isinstance(dataset, Dataset):  # IterableDataset does not support num_proc
             map_kwargs["num_proc"] = args.dataset_num_proc
 
+        self._console_print(f"[!] Preparing dataset with kwargs: {map_kwargs}")
+
         with PartialState().main_process_first():
             # Apply the formatting function if any
             if formatting_func is not None and is_processed:
@@ -385,8 +387,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
                         "dataset_text_field": args.dataset_text_field,
                         "assistant_only_loss": args.assistant_only_loss,
                     },
-                    **map_kwargs,
-                    num_proc=os.cpu_count()
+                    **map_kwargs
                 )
 
                 if args.assistant_only_loss:
