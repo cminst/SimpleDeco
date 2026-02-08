@@ -694,7 +694,10 @@ def main(script_args, training_args, model_args):
     if script_args.temp_diag_topk < 1:
         raise ValueError(f"temp_diag_topk must be >= 1, got {script_args.temp_diag_topk}")
 
-    model = AutoDecoModelForCausalLM.from_pretrained(model_args.model_name_or_path)
+    model = AutoDecoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        **model_kwargs,
+    )
 
     # Sync model-internal training flags with CLI selection.
     model.train_temp = script_args.train_temp

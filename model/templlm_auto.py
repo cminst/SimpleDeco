@@ -5,6 +5,7 @@ Supports temperature and top-p prediction heads on top of any AutoModelForCausal
 """
 from typing import Optional, Tuple, Union, Dict, Any
 import importlib
+import inspect
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -169,10 +170,39 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         logger.info(f"Loading base model from {base_model_path}")
         logger.info(f"Base model type: {config.base_model_type}")
         
+        base_model_kwargs = {}
+        torch_dtype = None
+        if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
+            torch_dtype = config.torch_dtype
+        elif hasattr(config, "dtype") and config.dtype is not None:
+            torch_dtype = config.dtype
+        elif kwargs.get("torch_dtype", None) is not None:
+            torch_dtype = kwargs.get("torch_dtype")
+        elif kwargs.get("dtype", None) is not None:
+            torch_dtype = kwargs.get("dtype")
+        if torch_dtype is not None:
+            base_model_kwargs["torch_dtype"] = torch_dtype
+
+        for key in (
+            "attn_implementation",
+            "device_map",
+            "quantization_config",
+            "revision",
+            "trust_remote_code",
+            "low_cpu_mem_usage",
+        ):
+            if kwargs.get(key, None) is not None:
+                base_model_kwargs[key] = kwargs.get(key)
+
         self.llm = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path=base_model_path,
-            dtype=config.dtype if hasattr(config, 'dtype') else kwargs.get('dtype', None)
+            **base_model_kwargs,
         )
+
+        if kwargs.get("use_cache", None) is not None:
+            self.llm.config.use_cache = kwargs.get("use_cache")
+        if kwargs.get("attn_implementation", None) is not None and hasattr(self.llm.config, "attn_implementation"):
+            self.llm.config.attn_implementation = kwargs.get("attn_implementation")
     
         
         # Initialize AutoDeco heads
@@ -217,7 +247,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             **kwargs
         )
-        autodeco_model: AutoDecoModelForCausalLM = cls(config)
+        autodeco_model: AutoDecoModelForCausalLM = cls(config, **kwargs)
 
         head_state_dict = {}
         for fname in os.listdir(pretrained_model_name_or_path):
@@ -539,28 +569,46 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         Args:
             top_p_loss_method: Method for computing top-p loss ('soft' or 'mse')
         """
+        def _filter_kwargs_for(module, call_kwargs: dict[str, Any]) -> dict[str, Any]:
+            try:
+                signature = inspect.signature(module.forward)
+            except (TypeError, ValueError):
+                return call_kwargs
+            return {key: value for key, value in call_kwargs.items() if key in signature.parameters}
+
         # Prepare kwargs for base model
         base_kwargs = {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'position_ids': position_ids,
-            'past_key_values': past_key_values,
-            'inputs_embeds': inputs_embeds,
-            'use_cache': use_cache,
-            'output_attentions': output_attentions,
-            'output_hidden_states': True,  # Always need hidden states
-            'cache_position': cache_position,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+            "inputs_embeds": inputs_embeds,
+            "use_cache": use_cache,
+            "output_attentions": output_attentions,
+            "output_hidden_states": bool(output_hidden_states),
+            "cache_position": cache_position,
         }
-        
+
         # Add MoE-specific args if applicable
         if output_router_logits is not None:
-            base_kwargs['output_router_logits'] = output_router_logits
-        
-        # Forward through base model
-        outputs = self.llm(**base_kwargs, **kwargs)
-        
-        # Get hidden states
-        hidden_states = outputs.hidden_states[-1]  # Last layer hidden states
+            base_kwargs["output_router_logits"] = output_router_logits
+
+        call_kwargs = dict(base_kwargs)
+        call_kwargs.update(kwargs)
+
+        decoder = self.get_decoder()
+        use_decoder = decoder is not None and decoder is not self.llm and not output_hidden_states
+
+        if use_decoder:
+            decoder_kwargs = _filter_kwargs_for(decoder, call_kwargs)
+            outputs = decoder(**decoder_kwargs)
+            hidden_states = outputs.last_hidden_state
+            hidden_states_to_return = None
+        else:
+            call_kwargs["output_hidden_states"] = True
+            outputs = self.llm(**call_kwargs)
+            hidden_states = outputs.hidden_states[-1]  # Last layer hidden states
+            hidden_states_to_return = outputs.hidden_states if output_hidden_states else None
         
         # Compute logits and predictions
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
@@ -570,11 +618,17 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         # Otherwise, can use no_grad for efficiency
         if self.train_temp or self.train_top_p:
             # Training heads only - no gradient needed for base model logits
-            with torch.no_grad():
-                unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
+            if hasattr(outputs, "logits") and outputs.logits is not None:
+                unscaled_logits = outputs.logits[:, slice_indices, :].detach()
+            else:
+                with torch.no_grad():
+                    unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
         else:
             # Training base model - need gradients
-            unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
+            if hasattr(outputs, "logits") and outputs.logits is not None:
+                unscaled_logits = outputs.logits[:, slice_indices, :]
+            else:
+                unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
         
         temp_logits = self.temp_head(hidden_states[:, slice_indices, :])
         top_p_logits = self.top_p_head(
@@ -659,10 +713,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             top_p_logits=top_p_logits,
             temp_training_valid_mask=temp_training_valid_mask,
             temp_training_selected_mask=temp_training_selected_mask,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions if hasattr(outputs, 'attentions') else None,
-            router_logits=outputs.router_logits if hasattr(outputs, 'router_logits') else None,
+            past_key_values=outputs.past_key_values if hasattr(outputs, "past_key_values") else None,
+            hidden_states=hidden_states_to_return,
+            attentions=outputs.attentions if hasattr(outputs, "attentions") else None,
+            router_logits=outputs.router_logits if hasattr(outputs, "router_logits") else None,
         )
     
     # TODO: generate with dynamic temperature/top-p
