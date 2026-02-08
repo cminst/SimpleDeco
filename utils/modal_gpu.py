@@ -36,7 +36,7 @@ image = image.run_commands(
     f"echo \"https://qingy1337:{os.environ.get('GITHUB_PAT', '')}@github.com\" >> ~/.git-credentials",
     "git config --global credential.helper store",
     "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' --torch-backend=cu128 --no-build-isolation --system",
-    "uv pip install accelerate trl==0.22.0 deepspeed orjson --system --torch-backend=cu128",
+    "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer --system --torch-backend=cu128",
 )
 
 # ---------
