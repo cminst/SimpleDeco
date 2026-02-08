@@ -199,9 +199,9 @@ class AutoDecoLLMTrainer(SFTTrainer):
         # Build the kwargs for the `map` function
         map_kwargs = {}
         if isinstance(dataset, Dataset):  # IterableDataset does not support num_proc
+            if not args.dataset_num_proc:
+                args.dataset_num_proc = os.cpu_count()
             map_kwargs["num_proc"] = args.dataset_num_proc
-
-        self._console_print(f"[!] Preparing dataset with kwargs: {map_kwargs} | Provided args: {args}")
 
         with PartialState().main_process_first():
             # Apply the formatting function if any
