@@ -44,26 +44,26 @@ except Exception:
 
 class AutoDecoLLMTrainer(SFTTrainer):
     def __init__(
-            self,
-            *args,
-            pad_token_id: int = None,
-            temp_loss_weight: float = 1.0,
-            temp_objective: str = "legacy_ce",
-            min_p_ratio: float = 0.1,
-            temp_hinge_weight: float = 1.0,
-            temp_reg_weight: float = 0.0,
-            easy_token_drop_prob: float = 0.6,
-            goldilocks_filter: bool = False,
-            goldilocks_easy_frac: float = 0.1,
-            goldilocks_topk_frac: float = 0.9,
-            goldilocks_topk: int = 10,
-            top_p_loss_method: str = "soft",
-            temp_diag_enabled: bool = False,
-            temp_diag_steps: int = 100,
-            temp_diag_examples: int = 3,
-            temp_diag_topk: int = 5,
-            temp_diag_dir: str = "temp_diagnostics",
-            **kwargs
+        self,
+        *args,
+        pad_token_id: int = None,
+        temp_loss_weight: float = 1.0,
+        temp_objective: str = "legacy_ce",
+        min_p_ratio: float = 0.1,
+        temp_hinge_weight: float = 1.0,
+        temp_reg_weight: float = 0.0,
+        easy_token_drop_prob: float = 0.6,
+        goldilocks_filter: bool = False,
+        goldilocks_easy_frac: float = 0.1,
+        goldilocks_topk_frac: float = 0.9,
+        goldilocks_topk: int = 10,
+        top_p_loss_method: str = "soft",
+        temp_diag_enabled: bool = False,
+        temp_diag_steps: int = 100,
+        temp_diag_examples: int = 3,
+        temp_diag_topk: int = 5,
+        temp_diag_dir: str = "temp_diagnostics",
+        **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.pad_token_id = pad_token_id
@@ -316,21 +316,13 @@ class AutoDecoLLMTrainer(SFTTrainer):
                                     )
                                 output["assistant_masks"] = assistant_masks
                         else:
-                            # prompt = [{"role": "user", "content": example["prompt"]}]
-                            # response = [{"role": "assistant", "content": example["completion"]}]
-                            # prompt_ids = processing_class.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True)
-                            # response_ids = processing_class.apply_chat_template(response, tokenize=True, add_generation_prompt=False)[3:-1]
-                            # prompt_completion_ids = prompt_ids + response_ids
-                            
                             prompt_text = prompt_value if isinstance(prompt_value, str) else str(prompt_value)
                             completion_text = completion_value if isinstance(completion_value, str) else str(completion_value)
                             prompt_ids = processing_class(text=prompt_text)["input_ids"][1:]
                             prompt_completion_ids = processing_class(text=prompt_text + completion_text)[
                                 "input_ids"
                             ][1:]
-                
-                            # prompt_completion_ids = example['token_ids']
-                        # Check if the tokenized prompt starts with the tokenized prompt+completion
+
                         if not prompt_completion_ids[: len(prompt_ids)] == prompt_ids:
                             warnings.warn(
                                 "Mismatch between tokenized prompt and the start of tokenized prompt+completion. "
@@ -394,6 +386,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
                         "assistant_only_loss": args.assistant_only_loss,
                     },
                     **map_kwargs,
+                    num_proc=os.cpu_count()
                 )
 
                 if args.assistant_only_loss:

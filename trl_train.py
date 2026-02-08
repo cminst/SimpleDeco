@@ -749,7 +749,7 @@ def main(script_args, training_args, model_args):
 
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code, use_fast=True, 
+        model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code, use_fast=True,
     )
     # Set default chat template if needed
     if tokenizer.chat_template is None:
@@ -798,32 +798,32 @@ def main(script_args, training_args, model_args):
     if script_args.train_temp or script_args.train_top_p:
         print(f"[!] AutoDecoLLM Training")
         trainer = AutoDecoLLMTrainer(
-        model=model,
-        args=training_args,
-        processing_class=tokenizer,
-        train_dataset=dataset[script_args.dataset_train_split],
-        data_collator=DataCollatorForLanguageModeling(
-            pad_token_id=tokenizer.pad_token_id,
-            completion_only_loss=training_args.completion_only_loss,
-            require_assistant_masks=training_args.assistant_only_loss,
-            padding_free=training_args.padding_free,
-            pad_to_multiple_of=training_args.pad_to_multiple_of,
-        ),
-        peft_config=get_peft_config(model_args),
-        temp_objective=script_args.temp_objective,
-        min_p_ratio=script_args.min_p_ratio,
-        temp_hinge_weight=script_args.temp_hinge_weight,
-        temp_reg_weight=script_args.temp_reg_weight,
-        easy_token_drop_prob=script_args.easy_token_drop_prob,
-        goldilocks_filter=script_args.goldilocks_filter,
-        goldilocks_easy_frac=script_args.goldilocks_easy_frac,
-        goldilocks_topk_frac=script_args.goldilocks_topk_frac,
-        goldilocks_topk=script_args.goldilocks_topk,
-        temp_diag_enabled=script_args.temp_diag_enabled,
-        temp_diag_steps=script_args.temp_diag_steps,
-        temp_diag_examples=script_args.temp_diag_examples,
-        temp_diag_topk=script_args.temp_diag_topk,
-        temp_diag_dir=script_args.temp_diag_dir,
+            model=model,
+            args=training_args,
+            processing_class=tokenizer,
+            train_dataset=dataset[script_args.dataset_train_split],
+            data_collator=DataCollatorForLanguageModeling(
+                pad_token_id=tokenizer.pad_token_id,
+                completion_only_loss=training_args.completion_only_loss,
+                require_assistant_masks=training_args.assistant_only_loss,
+                padding_free=training_args.padding_free,
+                pad_to_multiple_of=training_args.pad_to_multiple_of,
+            ),
+            peft_config=get_peft_config(model_args),
+            temp_objective=script_args.temp_objective,
+            min_p_ratio=script_args.min_p_ratio,
+            temp_hinge_weight=script_args.temp_hinge_weight,
+            temp_reg_weight=script_args.temp_reg_weight,
+            easy_token_drop_prob=script_args.easy_token_drop_prob,
+            goldilocks_filter=script_args.goldilocks_filter,
+            goldilocks_easy_frac=script_args.goldilocks_easy_frac,
+            goldilocks_topk_frac=script_args.goldilocks_topk_frac,
+            goldilocks_topk=script_args.goldilocks_topk,
+            temp_diag_enabled=script_args.temp_diag_enabled,
+            temp_diag_steps=script_args.temp_diag_steps,
+            temp_diag_examples=script_args.temp_diag_examples,
+            temp_diag_topk=script_args.temp_diag_topk,
+            temp_diag_dir=script_args.temp_diag_dir,
         )
     else:
         print(f"[!] Normal SFT Training")
