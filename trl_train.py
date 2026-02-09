@@ -694,7 +694,10 @@ def main(script_args, training_args, model_args):
     if script_args.temp_diag_topk < 1:
         raise ValueError(f"temp_diag_topk must be >= 1, got {script_args.temp_diag_topk}")
 
-    model = AutoDecoModelForCausalLM.from_pretrained(model_args.model_name_or_path)
+    model = AutoDecoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        **model_kwargs,
+    )
 
     # Sync model-internal training flags with CLI selection.
     model.train_temp = script_args.train_temp
@@ -746,7 +749,7 @@ def main(script_args, training_args, model_args):
 
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code, use_fast=True, 
+        model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code, use_fast=True,
     )
     # Set default chat template if needed
     if tokenizer.chat_template is None:
@@ -795,32 +798,32 @@ def main(script_args, training_args, model_args):
     if script_args.train_temp or script_args.train_top_p:
         print(f"[!] AutoDecoLLM Training")
         trainer = AutoDecoLLMTrainer(
-        model=model,
-        args=training_args,
-        processing_class=tokenizer,
-        train_dataset=dataset[script_args.dataset_train_split],
-        data_collator=DataCollatorForLanguageModeling(
-            pad_token_id=tokenizer.pad_token_id,
-            completion_only_loss=training_args.completion_only_loss,
-            require_assistant_masks=training_args.assistant_only_loss,
-            padding_free=training_args.padding_free,
-            pad_to_multiple_of=training_args.pad_to_multiple_of,
-        ),
-        peft_config=get_peft_config(model_args),
-        temp_objective=script_args.temp_objective,
-        min_p_ratio=script_args.min_p_ratio,
-        temp_hinge_weight=script_args.temp_hinge_weight,
-        temp_reg_weight=script_args.temp_reg_weight,
-        easy_token_drop_prob=script_args.easy_token_drop_prob,
-        goldilocks_filter=script_args.goldilocks_filter,
-        goldilocks_easy_frac=script_args.goldilocks_easy_frac,
-        goldilocks_topk_frac=script_args.goldilocks_topk_frac,
-        goldilocks_topk=script_args.goldilocks_topk,
-        temp_diag_enabled=script_args.temp_diag_enabled,
-        temp_diag_steps=script_args.temp_diag_steps,
-        temp_diag_examples=script_args.temp_diag_examples,
-        temp_diag_topk=script_args.temp_diag_topk,
-        temp_diag_dir=script_args.temp_diag_dir,
+            model=model,
+            args=training_args,
+            processing_class=tokenizer,
+            train_dataset=dataset[script_args.dataset_train_split],
+            data_collator=DataCollatorForLanguageModeling(
+                pad_token_id=tokenizer.pad_token_id,
+                completion_only_loss=training_args.completion_only_loss,
+                require_assistant_masks=training_args.assistant_only_loss,
+                padding_free=training_args.padding_free,
+                pad_to_multiple_of=training_args.pad_to_multiple_of,
+            ),
+            peft_config=get_peft_config(model_args),
+            temp_objective=script_args.temp_objective,
+            min_p_ratio=script_args.min_p_ratio,
+            temp_hinge_weight=script_args.temp_hinge_weight,
+            temp_reg_weight=script_args.temp_reg_weight,
+            easy_token_drop_prob=script_args.easy_token_drop_prob,
+            goldilocks_filter=script_args.goldilocks_filter,
+            goldilocks_easy_frac=script_args.goldilocks_easy_frac,
+            goldilocks_topk_frac=script_args.goldilocks_topk_frac,
+            goldilocks_topk=script_args.goldilocks_topk,
+            temp_diag_enabled=script_args.temp_diag_enabled,
+            temp_diag_steps=script_args.temp_diag_steps,
+            temp_diag_examples=script_args.temp_diag_examples,
+            temp_diag_topk=script_args.temp_diag_topk,
+            temp_diag_dir=script_args.temp_diag_dir,
         )
     else:
         print(f"[!] Normal SFT Training")
@@ -860,5 +863,16 @@ def make_parser(subparsers: argparse._SubParsersAction = None):
 
 if __name__ == "__main__":
     parser = make_parser()
-    script_args, training_args, model_args, _ = parser.parse_args_and_config(return_remaining_strings=True)
+    script_args, training_args, model_args, remaining = parser.parse_args_and_config(return_remaining_strings=True)
+    extra_parser = argparse.ArgumentParser(add_help=False)
+    extra_parser.add_argument("--dataset_num_proc", type=int)
+    extra_parser.add_argument("--dataset-num-proc", dest="dataset_num_proc", type=int)
+    extra_parser.add_argument("--num_proc", type=int)
+    extra_parser.add_argument("--num-proc", dest="num_proc", type=int)
+    extra_args, _ = extra_parser.parse_known_args(remaining)
+    if getattr(training_args, "dataset_num_proc", None) is None:
+        if extra_args.dataset_num_proc is not None:
+            setattr(training_args, "dataset_num_proc", extra_args.dataset_num_proc)
+        elif extra_args.num_proc is not None:
+            setattr(training_args, "dataset_num_proc", extra_args.num_proc)
     main(script_args, training_args, model_args)

@@ -15,13 +15,13 @@ accelerate launch trl_train.py \
   --temp_hinge_weight 1.0 \
   --temp_reg_weight 0.2 \
   --goldilocks_filter true \
-  --goldilocks_easy_frac 0.5 \
-  --goldilocks_topk_frac 0.5 \
+  --goldilocks_easy_frac 0.4 \
+  --goldilocks_topk_frac 0.6 \
   --goldilocks_topk 10 \
-  --max_steps 5000 \
+  --max_steps 1000 \
   --logging_steps 25 \
   --per_device_train_batch_size 16 \
-  --learning_rate 2e-4 \
+  --learning_rate 1e-4 \
   --torch_dtype bfloat16 \
   --attn_implementation flash_attention_2 \
   --gradient_checkpointing \
