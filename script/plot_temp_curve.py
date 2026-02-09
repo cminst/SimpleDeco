@@ -216,6 +216,14 @@ def _temp_to_hex(value: float, vmin: float, vmax: float) -> str:
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+def _display_token(token: str) -> str:
+    return (
+        token.replace("\n", "\\n")
+        .replace("\t", "\\t")
+        .replace("\r", "\\r")
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name_or_path", required=True)
@@ -318,6 +326,16 @@ def main() -> None:
             use_cache=False,
         )
 
+    logits = outputs.logits
+    topk_indices = None
+    topk_probs = None
+    if logits is not None:
+        topk_vals, topk_idx = torch.topk(logits, k=5, dim=-1)
+        log_denom = torch.logsumexp(logits, dim=-1)
+        topk_prob = torch.exp(topk_vals - log_denom.unsqueeze(-1))
+        topk_indices = topk_idx.squeeze(0).detach().cpu().tolist()
+        topk_probs = topk_prob.squeeze(0).detach().cpu().tolist()
+
     temps = outputs.temp_logits.squeeze(-1).detach().cpu().tolist()
     if temps and isinstance(temps[0], list):
         temps = temps[0]
@@ -348,11 +366,18 @@ def main() -> None:
         token_text = decoded[spans[idx][0]:spans[idx][1]]
         escaped = html.escape(token_text)
         color = _temp_to_hex(temps[idx], gen_min, gen_max)
-        title = f"temp={temps[idx]:.4f}"
+        tip_lines = [f"temp={temps[idx]:.4f}"]
         if args.smooth_window > 1:
-            title += f", smooth={smoothed_temps[idx]:.4f}"
+            tip_lines.append(f"smooth={smoothed_temps[idx]:.4f}")
+        if topk_indices is not None and topk_probs is not None:
+            tip_lines.append("top5:")
+            for tok_id, prob in zip(topk_indices[idx], topk_probs[idx]):
+                tok = tokenizer.decode([tok_id], skip_special_tokens=False)
+                tok_disp = _display_token(tok)
+                tip_lines.append(f"{tok_disp}  {prob:.4f}")
+        title = "&#10;".join(html.escape(line) for line in tip_lines)
         token_spans_html.append(
-            f"<span class='tok' style='background-color: {color};' title='{title}'>"
+            f"<span class='tok' style='background-color: {color};' data-tip='{title}'>"
             f"{escaped}</span>"
         )
     generation_html = "".join(token_spans_html)
@@ -423,7 +448,17 @@ def main() -> None:
             ".token-box { white-space: pre-wrap; word-break: break-word; "
             "border: 1px solid #DDD; padding: 12px; border-radius: 8px; "
             "background: #FAFAFA; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }\n"
-            ".tok { padding: 0 1px; border-radius: 3px; }\n"
+            ".tok { padding: 0 1px; border-radius: 3px; position: relative; }\n"
+            ".tok:hover::after { "
+            "content: attr(data-tip); "
+            "position: absolute; "
+            "left: 0; top: 1.2em; "
+            "background: #1F2937; color: #F9FAFB; "
+            "padding: 8px 10px; border-radius: 8px; "
+            "font-size: 12px; line-height: 1.3; "
+            "white-space: pre; "
+            "box-shadow: 0 6px 18px rgba(0,0,0,0.25); "
+            "z-index: 5; min-width: 200px; }\n"
             ".legend { font-size: 12px; color: #444; }\n"
             "</style></head>\n"
             "<body>\n"
