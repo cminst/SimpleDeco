@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoDeco Training Flow (Temp Head)</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #161a2b;
+      --panel-2: #1b2036;
+      --accent: #4fd1c5;
+      --accent-2: #f6ad55;
+      --ink: #e8eefc;
+      --muted: #a7b1c7;
+      --line: #2a3150;
+      --shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Plus Jakarta Sans", "Avenir Next", sans-serif;
+      background: radial-gradient(1200px 800px at 10% 10%, #1d2240 0%, var(--bg) 45%) no-repeat,
+                  radial-gradient(1000px 900px at 90% 20%, #212a55 0%, var(--bg) 55%) no-repeat;
+      color: var(--ink);
+    }
+    header {
+      padding: 40px 36px 8px 36px;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 32px;
+      letter-spacing: 0.3px;
+    }
+    .subtitle {
+      color: var(--muted);
+      max-width: 980px;
+      line-height: 1.5;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      padding: 20px 36px 48px 36px;
+    }
+    .card {
+      background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+    .lane {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.02);
+      position: relative;
+      min-height: 100%;
+    }
+    .lane-title {
+      font-size: 14px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .step {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 12px 12px 14px;
+      margin-bottom: 22px;
+      position: relative;
+      line-height: 1.35;
+    }
+    .step .title {
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .step .desc { color: var(--muted); font-size: 13px; }
+    .step::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -18px;
+      width: 2px;
+      height: 18px;
+      background: var(--line);
+      transform: translateX(-50%);
+    }
+    .step::before {
+      content: "v";
+      position: absolute;
+      left: 50%;
+      bottom: -26px;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: var(--line);
+    }
+    .step:last-child::after,
+    .step:last-child::before {
+      display: none;
+    }
+    .bridge {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 12px 14px;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      background: rgba(79, 209, 197, 0.08);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .formula {
+      font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+      background: #0e1326;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 14px;
+      color: #d6e0f5;
+      white-space: pre-wrap;
+    }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: 0.3px;
+      background: rgba(246, 173, 85, 0.15);
+      color: var(--accent-2);
+      margin-left: 6px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .key {
+      font-weight: 600;
+      color: var(--accent);
+    }
+    @media (max-width: 920px) {
+      .grid, .two-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AutoDeco Training Flow (Temp Head Only)</h1>
+    <div class="subtitle">
+      This diagram reflects the current training code path in <code>trl_train.py</code>,
+      <code>trainer/trl_autodeco.py</code>, and <code>model/templlm_auto.py</code> for your run
+      (train_temp=true, train_top_p=false, assistant_only_loss=true, analytic_min_p_hinge).
+    </div>
+  </header>
+
+  <section class="layout">
+    <div class="card two-col">
+      <div>
+        <div class="key">Run highlights</div>
+        <div>Dataset: qingy2024/Dolci-Think-SFT-ctx8k</div>
+        <div>Temp objective: analytic_min_p_hinge</div>
+        <div>min_p_ratio: 0.05</div>
+        <div>temp_hinge_weight: 5.0</div>
+        <div>temp_reg_weight: 1.1</div>
+        <div>goldilocks_filter: true (easy_frac=1.0, topk_frac=1.0, topk=15)</div>
+      </div>
+      <div>
+        <div class="key">Trainer settings</div>
+        <div>assistant_only_loss: true (requires assistant_masks)</div>
+        <div>gradient_checkpointing: true (sets use_cache=false)</div>
+        <div>torch_dtype: bfloat16</div>
+        <div>per_device_train_batch_size: 16</div>
+        <div>num_proc: 16 (dataset map)</div>
+        <div>temp_diag_enabled: true (every 100 steps)</div>
+      </div>
+    </div>
+
+    <div class="card grid">
+      <div class="lane">
+        <div class="lane-title">Data preprocessing path</div>
+        <div class="step">
+          <div class="title">Load dataset</div>
+          <div class="desc">load_dataset(...) -> DatasetDict; select split + text field.</div>
+        </div>
+        <div class="step">
+          <div class="title">Normalize chat columns</div>
+          <div class="desc">Rename conversations->messages; drop prompt/completion/chosen/rejected if conflicting.</div>
+        </div>
+        <div class="step">
+          <div class="title">Assistant mask preflight <span class="tag">assistant_only_loss</span></div>
+          <div class="desc">apply_chat_template(..., return_assistant_tokens_mask=True) on samples; fail if missing.</div>
+        </div>
+        <div class="step">
+          <div class="title">Tokenize</div>
+          <div class="desc">apply_chat_template for conversations or prompt+completion; emits input_ids + assistant_masks.</div>
+        </div>
+        <div class="step">
+          <div class="title">Pack or truncate</div>
+          <div class="desc">Optional pack_dataset or truncate_dataset; keeps assistant_masks/completion_mask if present.</div>
+        </div>
+        <div class="step">
+          <div class="title">Filter rows without assistant tokens</div>
+          <div class="desc">Drops examples where assistant_masks have no 1s.</div>
+        </div>
+        <div class="step">
+          <div class="title">Data collator</div>
+          <div class="desc">Pad input_ids/attention_mask/position_ids/labels; set labels=-100 where assistant_masks==0.</div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-title">Model + loss path</div>
+        <div class="step">
+          <div class="title">Forward base LLM (frozen)</div>
+          <div class="desc">Hidden states -> temp head; base params have requires_grad=false.</div>
+        </div>
+        <div class="step">
+          <div class="title">Compute unscaled logits</div>
+          <div class="desc">Uses base model logits (detached when training heads only).</div>
+        </div>
+        <div class="step">
+          <div class="title">Temp head prediction</div>
+          <div class="desc">temp_logits = TempHead(hidden_states); values clamped >= 1e-2.</div>
+        </div>
+        <div class="step">
+          <div class="title">Analytic min_p hinge loss</div>
+          <div class="desc">Shift labels (next-token); ignore labels == -100; optional Goldilocks sampling.</div>
+        </div>
+        <div class="step">
+          <div class="title">Loss weighting</div>
+          <div class="desc">loss = temp_loss * temp_loss_weight. (top_p_loss disabled in your run.)</div>
+        </div>
+        <div class="step">
+          <div class="title">Optimizer step</div>
+          <div class="desc">Backprop updates temp_head only; base LLM is frozen.</div>
+        </div>
+      </div>
+
+      <div class="bridge">Batch: input_ids + attention_mask + position_ids + labels (+ assistant_masks)</div>
+    </div>
+
+    <div class="card">
+      <div class="key">Loss formula (analytic_min_p_hinge)</div>
+      <div class="formula">
+Given next-token labels y_t (labels[:, 1:]) and unscaled logits l_t (logits[:, :-1, :]):
+
+valid_mask = (y_t != -100)
+logits_valid, labels_valid, temp_valid = l_t[valid_mask], y_t[valid_mask], T_t[valid_mask]
+
+If goldilocks_filter:
+  Select a subset of tokens from (rank==1) and (rank<=topk, not easy) according to easy_frac/topk_frac.
+
+For each selected token:
+  delta = relu(max(logits_valid) - logit_of_true_label)
+  denom = -log(min_p_ratio)
+  temp_lower_bound = delta / denom
+  hinge = relu(temp_lower_bound - temp_valid)
+  token_loss = temp_hinge_weight * hinge + temp_reg_weight * temp_valid
+
+temp_loss = mean(token_loss)
+loss = temp_loss * temp_loss_weight
+      </div>
+    </div>
+  </section>
+</body>
+</html>
