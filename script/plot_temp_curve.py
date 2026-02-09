@@ -5,6 +5,7 @@ Plot predicted temperature vs token position for a single example.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import sys
@@ -181,6 +182,40 @@ def _moving_average(values: List[float], window: int) -> List[float]:
     return smoothed
 
 
+def _temp_to_hex(value: float, vmin: float, vmax: float) -> str:
+    if vmax <= vmin:
+        t = 0.0
+    else:
+        t = (value - vmin) / (vmax - vmin)
+        t = max(0.0, min(1.0, t))
+    # Blue (low) -> Red (high)
+    hue = 210.0 * (1.0 - t)
+    saturation = 0.85
+    lightness = 0.75
+
+    c = (1.0 - abs(2.0 * lightness - 1.0)) * saturation
+    h_prime = hue / 60.0
+    x = c * (1.0 - abs(h_prime % 2.0 - 1.0))
+    r1 = g1 = b1 = 0.0
+    if 0.0 <= h_prime < 1.0:
+        r1, g1, b1 = c, x, 0.0
+    elif 1.0 <= h_prime < 2.0:
+        r1, g1, b1 = x, c, 0.0
+    elif 2.0 <= h_prime < 3.0:
+        r1, g1, b1 = 0.0, c, x
+    elif 3.0 <= h_prime < 4.0:
+        r1, g1, b1 = 0.0, x, c
+    elif 4.0 <= h_prime < 5.0:
+        r1, g1, b1 = x, 0.0, c
+    elif 5.0 <= h_prime <= 6.0:
+        r1, g1, b1 = c, 0.0, x
+    m = lightness - c / 2.0
+    r = int(round((r1 + m) * 255))
+    g = int(round((g1 + m) * 255))
+    b = int(round((b1 + m) * 255))
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name_or_path", required=True)
@@ -301,6 +336,26 @@ def main() -> None:
     code_ranges = _find_ranges(decoded, "```", "```")
     think_mask = _mask_from_ranges(spans, think_ranges)
     code_mask = _mask_from_ranges(spans, code_ranges)
+    gen_start = min(prompt_len, len(token_ids))
+    gen_temps = temps[gen_start:]
+    if gen_temps:
+        gen_min = min(gen_temps)
+        gen_max = max(gen_temps)
+    else:
+        gen_min, gen_max = 0.0, 1.0
+    token_spans_html: List[str] = []
+    for idx in range(gen_start, len(token_ids)):
+        token_text = decoded[spans[idx][0]:spans[idx][1]]
+        escaped = html.escape(token_text)
+        color = _temp_to_hex(temps[idx], gen_min, gen_max)
+        title = f"temp={temps[idx]:.4f}"
+        if args.smooth_window > 1:
+            title += f", smooth={smoothed_temps[idx]:.4f}"
+        token_spans_html.append(
+            f"<span class='tok' style='background-color: {color};' title='{title}'>"
+            f"{escaped}</span>"
+        )
+    generation_html = "".join(token_spans_html)
 
     output_text_path = os.path.join(args.output_dir, "temp_trace.txt")
     with open(output_text_path, "w", encoding="utf-8") as f:
@@ -362,13 +417,25 @@ def main() -> None:
             smoothing_note = f" Smoothed with window={args.smooth_window}."
         f.write(
             "<!doctype html>\n"
-            "<html><head><meta charset='utf-8'><title>Temp Trace</title></head>\n"
-            "<body style='font-family: Arial, sans-serif;'>\n"
+            "<html><head><meta charset='utf-8'><title>Temp Trace</title>\n"
+            "<style>\n"
+            "body { font-family: Arial, sans-serif; }\n"
+            ".token-box { white-space: pre-wrap; word-break: break-word; "
+            "border: 1px solid #DDD; padding: 12px; border-radius: 8px; "
+            "background: #FAFAFA; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }\n"
+            ".tok { padding: 0 1px; border-radius: 3px; }\n"
+            ".legend { font-size: 12px; color: #444; }\n"
+            "</style></head>\n"
+            "<body>\n"
             f"<h2>Temperature Trace ({args.dataset_name}:{split_name} idx={args.row_index})</h2>\n"
             "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks."
             f"{smoothing_note}</p>\n"
             f"<img src='temp_trace.png' style='max-width: 100%; height: auto;' />\n"
             f"<p>Prompt length: {prompt_len} tokens, total length: {len(temps)} tokens.</p>\n"
+            "<h3>Generated Tokens (colored by predicted temperature)</h3>\n"
+            f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
+            f"&nbsp; (hover a token for exact value)</div>\n"
+            f"<div class='token-box'>{generation_html}</div>\n"
             "</body></html>\n"
         )
 
