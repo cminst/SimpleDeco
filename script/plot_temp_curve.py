@@ -165,6 +165,22 @@ def _mask_to_segments(mask: List[bool]) -> List[Tuple[int, int]]:
     return segments
 
 
+def _moving_average(values: List[float], window: int) -> List[float]:
+    if window <= 1:
+        return list(values)
+    smoothed: List[float] = []
+    running_sum = 0.0
+    for idx, value in enumerate(values):
+        running_sum += value
+        if idx >= window:
+            running_sum -= values[idx - window]
+            denom = window
+        else:
+            denom = idx + 1
+        smoothed.append(running_sum / denom)
+    return smoothed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name_or_path", required=True)
@@ -186,6 +202,7 @@ def main() -> None:
     parser.add_argument("--enable_thinking", action="store_true")
     parser.add_argument("--strip_assistant", action="store_true")
     parser.add_argument("--user_suffix", default=None)
+    parser.add_argument("--smooth_window", type=int, default=0)
     parser.add_argument("--output_dir", default="figure")
     args = parser.parse_args()
 
@@ -269,6 +286,7 @@ def main() -> None:
     temps = outputs.temp_logits.squeeze(-1).detach().cpu().tolist()
     if temps and isinstance(temps[0], list):
         temps = temps[0]
+    smoothed_temps = _moving_average(temps, args.smooth_window)
     token_ids = output_ids.tolist()
 
     decoded = ""
@@ -291,17 +309,28 @@ def main() -> None:
     output_json_path = os.path.join(args.output_dir, "temp_trace.jsonl")
     with open(output_json_path, "w", encoding="utf-8") as f:
         for idx, (token_id, temp, (start, end)) in enumerate(zip(token_ids, temps, spans)):
-            f.write(json.dumps({
+            entry = {
                 "index": idx,
                 "token_id": token_id,
                 "token_text": decoded[start:end],
                 "temperature": float(temp),
                 "in_think": bool(think_mask[idx]),
                 "in_code": bool(code_mask[idx]),
-            }, ensure_ascii=False) + "\n")
+            }
+            if args.smooth_window > 1:
+                entry["temperature_smoothed"] = float(smoothed_temps[idx])
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     fig, ax = plt.subplots(figsize=(14, 4))
     ax.plot(range(len(temps)), temps, color="#2E3A59", linewidth=1.5, label="Predicted temperature")
+    if args.smooth_window > 1:
+        ax.plot(
+            range(len(smoothed_temps)),
+            smoothed_temps,
+            color="#E07A5F",
+            linewidth=1.8,
+            label=f"Smoothed (window={args.smooth_window})",
+        )
 
     think_segments = _mask_to_segments(think_mask)
     code_segments = _mask_to_segments(code_mask)
@@ -328,12 +357,16 @@ def main() -> None:
 
     output_html_path = os.path.join(args.output_dir, "temp_trace.html")
     with open(output_html_path, "w", encoding="utf-8") as f:
+        smoothing_note = ""
+        if args.smooth_window > 1:
+            smoothing_note = f" Smoothed with window={args.smooth_window}."
         f.write(
             "<!doctype html>\n"
             "<html><head><meta charset='utf-8'><title>Temp Trace</title></head>\n"
             "<body style='font-family: Arial, sans-serif;'>\n"
             f"<h2>Temperature Trace ({args.dataset_name}:{split_name} idx={args.row_index})</h2>\n"
-            "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks.</p>\n"
+            "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks."
+            f"{smoothing_note}</p>\n"
             f"<img src='temp_trace.png' style='max-width: 100%; height: auto;' />\n"
             f"<p>Prompt length: {prompt_len} tokens, total length: {len(temps)} tokens.</p>\n"
             "</body></html>\n"
