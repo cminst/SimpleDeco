@@ -267,6 +267,8 @@ def main() -> None:
         )
 
     temps = outputs.temp_logits.squeeze(-1).detach().cpu().tolist()
+    if temps and isinstance(temps[0], list):
+        temps = temps[0]
     token_ids = output_ids.tolist()
 
     decoded = ""
