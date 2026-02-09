@@ -223,6 +223,18 @@ def main() -> None:
         trust_remote_code=args.trust_remote_code,
     )
     model.eval()
+    try:
+        base_dtype = next(p for p in model.llm.parameters()).dtype
+    except StopIteration:
+        base_dtype = model.dtype
+    if base_dtype is not None:
+        for head_name in ("temp_head", "top_p_head"):
+            head = getattr(model, head_name, None)
+            if head is None:
+                continue
+            params = list(head.parameters())
+            if params and params[0].dtype != base_dtype:
+                head.to(dtype=base_dtype)
 
     device = None
     if args.device_map is None:
