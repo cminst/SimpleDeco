@@ -342,6 +342,24 @@ def main() -> None:
     smoothed_temps = _moving_average(temps, args.smooth_window)
     token_ids = output_ids.tolist()
 
+    # Align predictions to the token they generate (logits at position i -> token i+1).
+    aligned_temps: List[float | None] = [None] * len(token_ids)
+    aligned_smoothed: List[float | None] = [None] * len(token_ids)
+    aligned_topk_indices: List[List[int] | None] | None = (
+        [None] * len(token_ids) if topk_indices is not None else None
+    )
+    aligned_topk_probs: List[List[float] | None] | None = (
+        [None] * len(token_ids) if topk_probs is not None else None
+    )
+    max_src = min(len(temps), len(token_ids) - 1)
+    for idx in range(1, max_src + 1):
+        aligned_temps[idx] = temps[idx - 1]
+        if smoothed_temps:
+            aligned_smoothed[idx] = smoothed_temps[idx - 1]
+        if aligned_topk_indices is not None and aligned_topk_probs is not None:
+            aligned_topk_indices[idx] = topk_indices[idx - 1]
+            aligned_topk_probs[idx] = topk_probs[idx - 1]
+
     decoded = ""
     spans: List[Tuple[int, int]] = []
     for token_id in token_ids:
@@ -355,7 +373,7 @@ def main() -> None:
     think_mask = _mask_from_ranges(spans, think_ranges)
     code_mask = _mask_from_ranges(spans, code_ranges)
     gen_start = min(prompt_len, len(token_ids))
-    gen_temps = temps[gen_start:]
+    gen_temps = [t for t in aligned_temps[gen_start:] if t is not None]
     if gen_temps:
         gen_min = min(gen_temps)
         gen_max = max(gen_temps)
@@ -365,16 +383,24 @@ def main() -> None:
     for idx in range(gen_start, len(token_ids)):
         token_text = decoded[spans[idx][0]:spans[idx][1]]
         escaped = html.escape(token_text)
-        color = _temp_to_hex(temps[idx], gen_min, gen_max)
-        tip_lines = [f"temp={temps[idx]:.4f}"]
-        if args.smooth_window > 1:
-            tip_lines.append(f"smooth={smoothed_temps[idx]:.4f}")
-        if topk_indices is not None and topk_probs is not None:
-            tip_lines.append("top5:")
-            for tok_id, prob in zip(topk_indices[idx], topk_probs[idx]):
-                tok = tokenizer.decode([tok_id], skip_special_tokens=False)
-                tok_disp = _display_token(tok)
-                tip_lines.append(f"{tok_disp}  {prob:.4f}")
+        temp_value = aligned_temps[idx]
+        if temp_value is None:
+            color = "#E0E0E0"
+            tip_lines = ["temp=n/a (no previous token)"]
+        else:
+            color = _temp_to_hex(temp_value, gen_min, gen_max)
+            tip_lines = [f"temp={temp_value:.4f}"]
+            if args.smooth_window > 1 and aligned_smoothed[idx] is not None:
+                tip_lines.append(f"smooth={aligned_smoothed[idx]:.4f}")
+            if aligned_topk_indices is not None and aligned_topk_probs is not None:
+                topk_ids = aligned_topk_indices[idx]
+                topk_ps = aligned_topk_probs[idx]
+                if topk_ids is not None and topk_ps is not None:
+                    tip_lines.append("top5:")
+                    for tok_id, prob in zip(topk_ids, topk_ps):
+                        tok = tokenizer.decode([tok_id], skip_special_tokens=False)
+                        tok_disp = _display_token(tok)
+                        tip_lines.append(f"{tok_disp}  {prob:.4f}")
         title = "&#10;".join(html.escape(line) for line in tip_lines)
         token_spans_html.append(
             f"<span class='tok' style='background-color: {color};' data-tip='{title}'>"
@@ -388,25 +414,29 @@ def main() -> None:
 
     output_json_path = os.path.join(args.output_dir, "temp_trace.jsonl")
     with open(output_json_path, "w", encoding="utf-8") as f:
-        for idx, (token_id, temp, (start, end)) in enumerate(zip(token_ids, temps, spans)):
+        for idx, (token_id, (start, end)) in enumerate(zip(token_ids, spans)):
             entry = {
                 "index": idx,
                 "token_id": token_id,
                 "token_text": decoded[start:end],
-                "temperature": float(temp),
+                "temperature": aligned_temps[idx],
                 "in_think": bool(think_mask[idx]),
                 "in_code": bool(code_mask[idx]),
             }
             if args.smooth_window > 1:
-                entry["temperature_smoothed"] = float(smoothed_temps[idx])
+                entry["temperature_smoothed"] = aligned_smoothed[idx]
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     fig, ax = plt.subplots(figsize=(14, 4))
-    ax.plot(range(len(temps)), temps, color="#2E3A59", linewidth=1.5, label="Predicted temperature")
+    plot_temps = [t if t is not None else float("nan") for t in aligned_temps]
+    ax.plot(range(len(plot_temps)), plot_temps, color="#2E3A59", linewidth=1.5, label="Predicted temperature")
     if args.smooth_window > 1:
+        plot_smoothed = [
+            t if t is not None else float("nan") for t in aligned_smoothed
+        ]
         ax.plot(
-            range(len(smoothed_temps)),
-            smoothed_temps,
+            range(len(plot_smoothed)),
+            plot_smoothed,
             color="#E07A5F",
             linewidth=1.8,
             label=f"Smoothed (window={args.smooth_window})",
@@ -427,7 +457,7 @@ def main() -> None:
     ax.set_xlabel("Token position")
     ax.set_ylabel("Predicted temperature")
     ax.set_title("Temperature vs Token Position")
-    ax.set_xlim(0, len(temps) - 1)
+    ax.set_xlim(0, len(token_ids) - 1)
     ax.legend(loc="upper right")
     ax.grid(alpha=0.2)
 
@@ -464,9 +494,10 @@ def main() -> None:
             "<body>\n"
             f"<h2>Temperature Trace ({args.dataset_name}:{split_name} idx={args.row_index})</h2>\n"
             "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks."
+            " Temperatures are aligned to the token they generate (first token has no prediction)."
             f"{smoothing_note}</p>\n"
             f"<img src='temp_trace.png' style='max-width: 100%; height: auto;' />\n"
-            f"<p>Prompt length: {prompt_len} tokens, total length: {len(temps)} tokens.</p>\n"
+            f"<p>Prompt length: {prompt_len} tokens, total length: {len(token_ids)} tokens.</p>\n"
             "<h3>Generated Tokens (colored by predicted temperature)</h3>\n"
             f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
             f"&nbsp; (hover a token for exact value)</div>\n"
