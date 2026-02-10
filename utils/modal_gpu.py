@@ -39,11 +39,13 @@ image = image.run_commands(
     "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer --system --torch-backend=cu128",
 )
 
+autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
+
 # ---------
 
-app = modal.App(image=image, name="GPU Tasks")
+app = modal.App(image=image, name="AutoDeco Experiments")
 
-@app.function(gpu="H100:1", timeout=86400)
+@app.function(gpu="H100:1", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
 def runwithgpu():
     token = 'modal'
 
@@ -66,8 +68,6 @@ def runwithgpu():
                 "--LabApp.allow_remote_access=1", # Allow remote connections to JupyterLab.
             ],
             env={**os.environ, "JUPYTER_TOKEN": token, "SHELL": "/bin/bash"}, # Set environment variables, including the authentication token and shell.
-            # stderr=subprocess.PIPE,
-            # stdout=subprocess.PIPE,
             check=True,
         )
         print("HERE")
