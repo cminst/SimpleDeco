@@ -1,8 +1,23 @@
-# coding=utf-8
-"""
-Unified AutoDeco Model for Causal Language Modeling
-Supports temperature and top-p prediction heads on top of any AutoModelForCausalLM
-"""
+# SPDX-License-Identifier: Apache-2.0
+
+# Copyright 2026 CMINST.
+# Copyright 2026 The AutoDeco team.
+#
+# This code is taken directly from AutoDeco's Github with slight
+# modifications for config-related bug fixes.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""AutoDeco implementation PyTorch. Supports temperature and top-p prediction heads on top of any AutoModelForCausalLM"""
 from typing import Optional, Tuple, Union, Dict, Any
 import importlib
 import inspect
@@ -37,7 +52,7 @@ logger = logging.get_logger(__name__)
 # AutoDeco Heads
 class TopPHead(nn.Module):
     """Top-P prediction head with enhanced features"""
-    
+
     def __init__(self, hidden_size, vocab_size=None, use_enhanced_features=True):
         super().__init__()
         self.use_enhanced_features = use_enhanced_features
@@ -80,7 +95,7 @@ class TopPHead(nn.Module):
 
 class TempHead(nn.Module):
     """Temperature prediction head"""
-    
+
     def __init__(self, hidden_size):
         super().__init__()
         self.mlp = nn.Sequential(
@@ -118,9 +133,9 @@ class AutoDecoOutputWithPast(ModelOutput):
 
 
 class AutoDecoModelForCausalLMConfig(PretrainedConfig):
-    
+
     model_type = "autodeco"  # Class attribute - REQUIRED for transformers registration!
-    
+
     def __init__(
         self,
         enable_temperature_head: bool=True,
@@ -143,19 +158,19 @@ class AutoDecoModelForCausalLMConfig(PretrainedConfig):
 
 class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
     """
-    Unified AutoDeco model that wraps any AutoModelForCausalLM with 
+    Unified AutoDeco model that wraps any AutoModelForCausalLM with
     temperature and top-p prediction heads.
-    
+
     This eliminates the need for separate model files for each architecture.
     """
-    
+
     supports_gradient_checkpointing = True
     _no_split_modules = []  # Will be set based on base model
     config_class = AutoDecoModelForCausalLMConfig
     def __init__(self, config: AutoDecoModelForCausalLMConfig, **kwargs):
         """
         Initialize AutoDeco model.
-        
+
         Args:
             config: AutoDecoConfig instance with base model information
         """
@@ -165,11 +180,11 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         base_model_path = config.base_model_name_or_path
         if base_model_path is None:
             raise ValueError("config.base_model_name_or_path must be specified")
-        
+
         # Load the base causal LM model
         logger.info(f"Loading base model from {base_model_path}")
         logger.info(f"Base model type: {config.base_model_type}")
-        
+
         base_model_kwargs = {}
         torch_dtype = None
         if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
@@ -203,23 +218,23 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             self.llm.config.use_cache = kwargs.get("use_cache")
         if kwargs.get("attn_implementation", None) is not None and hasattr(self.llm.config, "attn_implementation"):
             self.llm.config.attn_implementation = kwargs.get("attn_implementation")
-    
-        
+
+
         # Initialize AutoDeco heads
         self.temp_head = TempHead(config.temperature_hidden_size)
         self.top_p_head = TopPHead(
-            config.top_p_hidden_size, 
+            config.top_p_hidden_size,
             use_enhanced_features=config.use_enhanced_features
         )
-        
+
         # Training flags
         self.train_temp = config.enable_temperature_head
         self.train_top_p = config.enable_top_p_head
-        
+
         logger.info(f"AutoDeco model initialized:")
         logger.info(f"  - base_model_type={config.base_model_type}, base_model_name_or_path={config.base_model_name_or_path}")
         logger.info(f"  - train_temp={self.train_temp}, train_top_p={self.train_top_p}")
-        
+
         # Log training mode
         if self.train_temp or self.train_top_p:
             heads = []
@@ -230,7 +245,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             logger.info(f"  - Training mode: AutoDeco heads ({', '.join(heads)})")
         else:
             logger.info(f"  - Training mode: Base LLM (standard language modeling)")
-        
+
         # Set light-weight saving mode
         self._keys_to_ignore_on_save = [k for k in self.state_dict().keys() if k.startswith("llm.")]
 
@@ -264,7 +279,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         else:
             print("no head state dict found...")
         return autodeco_model
-    
+
     def get_input_embeddings(self):
         return self.llm.get_input_embeddings()
 
@@ -370,7 +385,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             topk_idx = self._sample_indices(topk_non_easy_mask, target_topk)
             selected[topk_idx] = True
         return selected
-    
+
     def _compute_temp_loss(
         self,
         unscaled_logits,
@@ -492,11 +507,11 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             return _pack_result(token_ce.mean(), valid_mask, selected_valid_mask)
 
         return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_valid_mask)
-    
+
     def _compute_top_p_loss(self, unscaled_logits, temp_logits, top_p_logits, labels, method='soft'):
         """
         Compute top-p loss
-        
+
         Args:
             method: 'soft' for soft top-p with exponential decay
         """
@@ -504,22 +519,22 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         temp_shift = temp_logits[:, :-1, :]
         top_p_shift = top_p_logits[:, :-1, :]
         shift_labels = labels[:, 1:]
-        
+
         # Soft top-p loss with exponential decay
         steepness = 30.0
         scaled_logits = unscaled_shift / temp_shift.clamp_min(1e-8)
         probs = torch.softmax(scaled_logits, dim=-1)
         sorted_probs, sorted_indices = torch.sort(probs, dim=-1, descending=True)
         cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-        
+
         overage = torch.relu(cumulative_probs - top_p_shift)
         decay_factor = torch.exp(-steepness * overage)
-        
+
         mask = torch.zeros_like(probs).scatter_(-1, sorted_indices, decay_factor)
         masked_probs = probs * mask
         renormalized_probs = masked_probs / (masked_probs.sum(dim=-1, keepdim=True) + 1e-9)
         log_probs = torch.log(renormalized_probs + 1e-9)
-        
+
         valid_mask = shift_labels != -100
         log_probs = log_probs[valid_mask]
         labels_shift = shift_labels[valid_mask]
@@ -533,7 +548,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         token_ce = token_ce * torch.softmax(unscaled_valid, dim=-1).gather(
             1, labels_shift.unsqueeze(-1)
         ).squeeze(-1).detach()
-        
+
         return token_ce.mean()
 
     def forward(
@@ -565,7 +580,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
     ) -> AutoDecoOutputWithPast:
         """
         Forward pass of AutoDeco model.
-        
+
         Args:
             top_p_loss_method: Method for computing top-p loss ('soft' or 'mse')
         """
@@ -609,10 +624,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             outputs = self.llm(**call_kwargs)
             hidden_states = outputs.hidden_states[-1]  # Last layer hidden states
             hidden_states_to_return = outputs.hidden_states if output_hidden_states else None
-        
+
         # Compute logits and predictions
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        
+
         # Compute unscaled logits
         # If training base model (train_temp=False and train_top_p=False), need gradients
         # Otherwise, can use no_grad for efficiency
@@ -629,14 +644,14 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 unscaled_logits = outputs.logits[:, slice_indices, :]
             else:
                 unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
-        
+
         temp_logits = self.temp_head(hidden_states[:, slice_indices, :])
         top_p_logits = self.top_p_head(
             hidden_states[:, slice_indices, :],
             temp_logits.detach(),
             unscaled_logits=unscaled_logits,
         )
-        
+
         # Compute losses
         loss, lm_loss, temp_loss, top_p_loss = None, None, None, None
         temp_training_valid_mask = None
@@ -670,26 +685,26 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                     else:
                         temp_loss = temp_out
                     losses.append(temp_loss * temp_loss_weight)
-                
+
                 if self.train_top_p:
                     top_p_loss = self._compute_top_p_loss(
                         unscaled_logits, temp_logits, top_p_logits, labels,
                         method=top_p_loss_method
                     )
                     losses.append(top_p_loss)
-                
+
                 if losses:
                     loss = sum(losses)
-            
+
             else:
                 # Mode 2: Training base LLM (when both train_temp and train_top_p are False)
                 # Compute standard language modeling loss
                 logger.debug("Computing standard LM loss (training base model)")
-                
+
                 if labels is not None:
                     lm_loss = self.llm.loss_function(unscaled_logits, labels, self.llm.vocab_size, **kwargs)
                     loss = lm_loss
-        
+
         # Handle MoE auxiliary loss
         aux_loss = None
         # if self.is_moe and hasattr(outputs, 'router_logits') and outputs.router_logits is not None:
@@ -701,7 +716,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         #     )
         #     if labels is not None:
         #         loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-        
+
         return AutoDecoOutputWithPast(
             loss=loss,
             temp_loss=temp_loss,
@@ -718,7 +733,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions if hasattr(outputs, "attentions") else None,
             router_logits=outputs.router_logits if hasattr(outputs, "router_logits") else None,
         )
-    
+
     # TODO: generate with dynamic temperature/top-p
     def generate(self, *args, **kwargs):
         """
@@ -727,7 +742,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         For generation with dynamic temperature/top-p, you'll need custom generation logic.
         """
         return self.llm.generate(*args, **kwargs)
-    
+
     def prepare_inputs_for_generation(self, *args, **kwargs):
         """Prepare inputs for generation"""
         return self.llm.prepare_inputs_for_generation(*args, **kwargs)
