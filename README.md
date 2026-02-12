@@ -199,6 +199,11 @@ python script/merge_autodeco.py merge \
 
 ### Batch Evaluation with vLLM
 
+Prepare the AIME24 evaluation file:
+```bash
+python script/build_temp_test.py --dataset aime24 --out data/TempTest/aime24.jsonl
+```
+
 ```bash
 # Single evaluation
 python utils/llm_eval.py \
@@ -301,4 +306,3 @@ If you use AutoDeco in your research, please cite:
 - Built on [Transformers](https://github.com/huggingface/transformers) and [TRL](https://github.com/huggingface/trl)
 - Training framework uses [DeepSpeed](https://github.com/microsoft/DeepSpeed)
 - Inference optimization uses [vLLM](https://github.com/vllm-project/vllm) -->
-
