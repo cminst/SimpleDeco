@@ -1,7 +1,9 @@
-#!/usr/bin/env python3
 """
-Plot predicted temperature vs token position for a single example.
-"""
+You can use this script to visualize the predicted temp vs token position
+for one example.
+
+Requires merged AutoDeco model, not just the small add-on head file!
+""" 
 from __future__ import annotations
 
 import argparse
