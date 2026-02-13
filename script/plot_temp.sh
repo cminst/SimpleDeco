@@ -1,0 +1,15 @@
+python3 script/plot_temp_curve.py \
+  --model_name_or_path ckpt/autodeco-qwen3-4b-thinking \
+  --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
+  --dataset_split train \
+  --dataset_text_field messages \
+  --row_index 10 \
+  --add_generation_prompt \
+  --enable_thinking \
+  --strip_assistant \
+  --max_new_tokens 8192 \
+  --do_sample \
+  --temperature 0.7 \
+  --top_p 0.95 \
+  --output_dir figure/autodeco_temp_trace_10 \
+  --smooth_window 50
