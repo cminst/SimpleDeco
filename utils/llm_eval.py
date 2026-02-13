@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     sampling_params = SamplingParams(temperature=temp, top_p=args.top_p, top_k=args.top_k, max_tokens=args.max_tokens, n=k, seed=seed, repetition_penalty=args.rp)
 
-    llm = LLM(model=args.model_name_or_path, tensor_parallel_size=args.tp_size)
+    llm = LLM(model=args.model_name_or_path, tensor_parallel_size=args.tp_size, max_model_len=args.max_tokens)
 
     tokenizer = llm.get_tokenizer()
 
