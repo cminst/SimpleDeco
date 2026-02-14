@@ -1,12 +1,13 @@
 #!/bin/bash
-# bash script/test_generation_tp4.sh aime24 1.0 0.99 -1 1.0 16 ckpt/simpledeco-qwen3-4b-thinking-merged/ 2>&1 | tee run_aime24_tp4.log
+# bash script/test_generation_tp4.sh aime24 1.0 0.99 -1 1.0 16 maj@k ckpt/simpledeco-qwen3-4b-thinking-merged/ 2>&1 | tee run_aime24_tp4.log
 DATASET=${1:-aime24}
 TEMP=${2:-1.0}
 TOP_P=${3:-1.0}
 TOP_K=${4:--1}
 RP=${5:-1.0}
 K=${6:-16}
-MODEL_NAME_OR_PATH=${7:-path_to_your_model}
+MODE=${7:-maj@k}
+MODEL_NAME_OR_PATH=${8:-path_to_your_model}
 
 echo "Using parameters:"
 echo "  DATASET: $DATASET"
@@ -15,6 +16,7 @@ echo "  TOP_P: $TOP_P"
 echo "  TOP_K: $TOP_K"
 echo "  RP: $RP"
 echo "  K: $K"
+echo "  MODE: $MODE"
 echo "  MODEL: $MODEL_NAME_OR_PATH"
 echo "  TP_SIZE: 1"
 echo ""
@@ -48,6 +50,7 @@ for i in {0..7}; do
     echo "Starting task $((i+1)) with seed $seed on GPU $gpus (TP=1)"
     CUDA_VISIBLE_DEVICES=$gpus python utils/llm_eval.py \
         --k $K \
+        --mode $MODE \
         --temp $TEMP \
         --top_p $TOP_P \
         --top_k $TOP_K \
