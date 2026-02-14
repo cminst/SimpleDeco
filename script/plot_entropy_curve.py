@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -184,6 +185,25 @@ def _moving_average(values: List[float], window: int) -> List[float]:
     return smoothed
 
 
+def _pearsonr(xs: List[float], ys: List[float]) -> float | None:
+    if len(xs) < 2 or len(xs) != len(ys):
+        return None
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    var_x = 0.0
+    var_y = 0.0
+    cov = 0.0
+    for x, y in zip(xs, ys):
+        dx = x - mean_x
+        dy = y - mean_y
+        var_x += dx * dx
+        var_y += dy * dy
+        cov += dx * dy
+    if var_x <= 0.0 or var_y <= 0.0:
+        return None
+    return cov / math.sqrt(var_x * var_y)
+
+
 def _value_to_hex(value: float, vmin: float, vmax: float) -> str:
     if vmax <= vmin:
         t = 0.0
@@ -348,12 +368,19 @@ def main() -> None:
         topk_probs = topk_prob.squeeze(0).detach().cpu().tolist()
     if entropies is None:
         raise RuntimeError("Model did not return logits for entropy computation.")
+    temps = None
+    temp_logits = getattr(outputs, "temp_logits", None)
+    if temp_logits is not None:
+        temps = temp_logits.squeeze(-1).detach().cpu().tolist()
+        if temps and isinstance(temps[0], list):
+            temps = temps[0]
     smoothed_entropies = _moving_average(entropies, args.smooth_window)
     token_ids = output_ids.tolist()
 
     # Align predictions to the token they generate (logits at position i -> token i+1).
     aligned_entropy: List[float | None] = [None] * len(token_ids)
     aligned_smoothed: List[float | None] = [None] * len(token_ids)
+    aligned_temps: List[float | None] | None = [None] * len(token_ids) if temps is not None else None
     aligned_topk_indices: List[List[int] | None] | None = (
         [None] * len(token_ids) if topk_indices is not None else None
     )
@@ -365,6 +392,8 @@ def main() -> None:
         aligned_entropy[idx] = entropies[idx - 1]
         if smoothed_entropies:
             aligned_smoothed[idx] = smoothed_entropies[idx - 1]
+        if aligned_temps is not None and temps is not None and idx - 1 < len(temps):
+            aligned_temps[idx] = temps[idx - 1]
         if aligned_topk_indices is not None and aligned_topk_probs is not None:
             aligned_topk_indices[idx] = topk_indices[idx - 1]
             aligned_topk_probs[idx] = topk_probs[idx - 1]
@@ -416,6 +445,28 @@ def main() -> None:
             f"{escaped}</span>"
         )
     generation_html = "".join(token_spans_html)
+
+    pearson_r = None
+    pearson_n = 0
+    if aligned_temps is not None:
+        xs: List[float] = []
+        ys: List[float] = []
+        for idx in range(gen_start, len(token_ids)):
+            t = aligned_temps[idx]
+            e = aligned_entropy[idx]
+            if t is None or e is None:
+                continue
+            xs.append(t)
+            ys.append(e)
+        pearson_n = len(xs)
+        pearson_r = _pearsonr(xs, ys)
+
+    if aligned_temps is None:
+        print("pearsonr (temp vs entropy, generated tokens): n/a (no temp head)")
+    elif pearson_r is None:
+        print(f"pearsonr (temp vs entropy, generated tokens): n={pearson_n} (insufficient/zero variance)")
+    else:
+        print(f"pearsonr (temp vs entropy, generated tokens): r={pearson_r:.4f}, n={pearson_n}")
 
     output_text_path = os.path.join(args.output_dir, "entropy_trace.txt")
     with open(output_text_path, "w", encoding="utf-8") as f:
@@ -505,6 +556,9 @@ def main() -> None:
             f"{smoothing_note}</p>\n"
             f"<img src='entropy_trace.png' style='max-width: 100%; height: auto;' />\n"
             f"<p>Prompt length: {prompt_len} tokens, total length: {len(token_ids)} tokens.</p>\n"
+            f"<p>Pearson r (temp vs entropy, generated tokens): "
+            f"{'n/a (no temp head)' if aligned_temps is None else ('n/a' if pearson_r is None else f'{pearson_r:.4f}')} "
+            f"{'' if aligned_temps is None else (f'(n={pearson_n})' if pearson_n else '')}</p>\n"
             "<h3>Generated Tokens (colored by base LLM entropy)</h3>\n"
             f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
             f"&nbsp; (hover a token for exact value)</div>\n"
