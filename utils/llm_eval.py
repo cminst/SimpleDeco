@@ -43,6 +43,7 @@ if __name__ == "__main__":
     parser.add_argument('--top_k', type=int, default=-1)
     parser.add_argument('--rp', type=float, default=1.0)
     parser.add_argument('--num_samples', '--k', type=int, default=16)
+    parser.add_argument('--mode', type=str, default='maj@k', choices=['pass@k', 'maj@k'])
     parser.add_argument('--model_name_or_path', type=str, default='/apdcephfs_qy3/share_301812049/shared/model/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--dataset', type=str, default='aime24')
@@ -84,6 +85,12 @@ if __name__ == "__main__":
         os.makedirs(f'generation_log/{args.dataset}')
     outputs = llm.generate(problems, sampling_params)
 
+    def aggregate_score(scores, mode):
+        if mode == 'pass@k':
+            return 1.0 if max(scores) > 0.5 else 0.0
+        # maj@k
+        return 1.0 if (sum(scores) / len(scores)) > 0.5 else 0.0
+
     with open(f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}.json', 'w') as f:
         all_acc = []
         for idx, output_group in enumerate(outputs):
@@ -105,14 +112,16 @@ if __name__ == "__main__":
                 if top_p is not None:
                     top_ps.append(top_p)
                 # logprobs.append(output.logprobs)
-            all_acc.append(round(sum(scores)/len(scores)*100, 2))
+            problem_acc = round(aggregate_score(scores, args.mode) * 100, 2)
+            all_acc.append(problem_acc)
             f.write(json.dumps({
                 'problem': problems[idx],
                 'ground_truth': ground_truths[idx], 
-                'temp_acc': {args.temp: round(sum(scores)/len(scores)*100, 2)}, 
+                'temp_acc': {args.temp: problem_acc}, 
                 'solutions': solutions,
                 'temp': temps,
                 'top_p': top_ps,
+                'mode': args.mode,
                 # 'logprobs': logprobs
             }, ensure_ascii=False)+'\n')
         
@@ -121,5 +130,4 @@ if __name__ == "__main__":
 
         txt_path = os.path.splitext(f.name)[0] + '.txt'
         write_ascii_table(txt_path, args.dataset, avg_acc)
-
 
