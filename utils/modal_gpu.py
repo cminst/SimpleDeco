@@ -36,7 +36,7 @@ image = image.run_commands(
     f"echo \"https://qingy1337:{os.environ.get('GITHUB_PAT', '')}@github.com\" >> ~/.git-credentials",
     "git config --global credential.helper store",
     "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' --torch-backend=cu128 --no-build-isolation --system",
-    "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptool_scm --system --torch-backend=cu128",
+    "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptools_scm --torch-backend=cu128 --system",
 )
 
 autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
@@ -45,7 +45,7 @@ autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
 
 app = modal.App(image=image, name="AutoDeco Experiments")
 
-@app.function(gpu="H100:1", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
+@app.function(gpu="H100:4", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
 def runwithgpu():
     token = 'modal'
 

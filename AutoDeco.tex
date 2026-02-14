@@ -1,0 +1,490 @@
+\title{\centering{The End of Manual Decoding:} \\ \centering{Towards Truly End-to-End Language Models}}
+
+
+\renewcommand\Authfont{\bfseries}
+
+\author[ ]{Zhichao Wang\thanks{Equal Contribution. The work was done when Zhichao Wang was interning at Tencent AI Lab.}~~$^{,1,2}$}
+\author[ ]{Dongyang Ma$^{*, 1}$}
+\author[ ]{Xinting Huang$^{1}$}
+\author[ ]{Deng Cai}
+\author[ ]{Tian Lan$^{1}$}
+\author[ ]{Jiahao Xu$^{1}$}
+\author[ ]{\\Haitao Mi$^{1}$}
+\author[ ]{Xiaoying Tang\thanks{Correspondence to: Xiaoying Tang  ~and Yan Wang.}~~$^{,2}$}
+\author[ ]{\mbox{Yan Wang}$^{*, \dag,1}$}
+
+\affil[1]{Tencent AI Lab}
+\affil[2]{The Chinese University of Hong Kong, Shenzhen}
+\begin{document}
+
+
+\maketitle
+\vspace{-3em}
+\begin{center}
+\texttt{zhichaowang@link.cuhk.edu.cn ~~ dongyangma@tencent.com} \\
+\texttt{tangxiaoying@cuhk.edu.cn ~~ yanwang.branden@gmail.com} \\
+\vspace{1em}
+\begin{tabular}{ccc}
+  \href{https://github.com/Zacks917/AutoDeco}{\faGithub\ Code} &
+  \href{https://huggingface.co/collections/Jadeislaw/autodeco}{\raisebox{-0.15\height}{\includegraphics[height=1.1em]{figure/huggingface_logo.png}}\ Models}\\
+\end{tabular}
+\end{center}
+\begin{abstract}
+The ``end-to-end'' label for LLMs is a misnomer. In practice, they depend on a non-differentiable decoding process that requires laborious, hand-tuning of hyperparameters like temperature and top-p. This paper introduces \textit{AutoDeco}, a novel architecture that enables truly ``end-to-end'' generation by learning to control its own decoding strategy. We augment the standard transformer with lightweight heads that, at each step, dynamically predict context-specific temperature and top-p values alongside the next-token logits. This approach transforms decoding into a parametric, token-level process, allowing the model to self-regulate its sampling strategy within a single forward pass.
+
+Through extensive experiments on eight benchmarks, we demonstrate that \textit{AutoDeco} not only significantly outperforms default decoding strategies but also achieves performance comparable to an oracle-tuned baseline derived from ``hacking the test set''—a practical upper bound for any static method. Crucially, we uncover an emergent capability for instruction-based decoding control: the model learns to interpret natural language commands (e.g., ``generate with low randomness'') and adjusts its predicted temperature and top-p on a token-by-token basis, opening a new paradigm for steerable and interactive LLM decoding.
+
+\end{abstract}
+
+\section{Introduction}
+
+
+LLMs have become the de-facto standard in NLP, yet the quality of their generated text hinges on a surprisingly manual and heuristic process: the selection of decoding hyperparameters. Parameters like temperature, top-p, and top-k must be carefully chosen through a task-dependent process of manual sweeps and post-hoc filtering~\citep{shi2024thorough}. This not only incurs significant computational and human costs but also profoundly impacts the final output's creativity, diversity, and factual correctness, undermining the promise of a truly ``end-to-end'' system.
+
+This reliance on static, hand-tuned parameters creates fundamental bottlenecks. Firstly, the search for an optimal configuration is widely acknowledged as a laborious process because the ideal settings are highly task-dependent; commercial API providers like DeepSeek, for instance, explicitly recommend different temperature settings for distinct application scenarios\footnote{\url{https://api-docs.deepseek.com/quick_start/parameter_settings}}. However, this problem, runs even deeper: a single static configuration is inherently suboptimal because the ideal level of stochasticity varies dramatically within a single generation. For instance, a model might need high creativity to explore initial reasoning paths but high precision to deliver the final answer. This on-the-fly control is, by design, impossible for current LLMs to achieve natively. Consequently, the prevailing static decoding paradigm is a solution as inefficient as it is ineffective, forcing a one-size-fits-all strategy onto a problem that demands dynamic adaptation.
+
+In this paper, we propose \textit{AutoDeco}, a novel architecture that creates a truly ``end-to-end'' language model capable of controlling its own decoding process. As illustrated in Figure~\ref{fig:architecture}, we augment the standard transformer with lightweight, dedicated prediction heads. At each decoding step, these \textit{AutoDeco} heads leverage the model's current hidden state to dynamically predict the optimal sampling parameters for the next token. This seamlessly integrates hyperparameter selection into the model's forward pass, creating a self-regulating inference pipeline that adds nearly-zero latency.
+
+We validate our approach by integrating \textit{AutoDeco} into major model families, including Qwen, Llama, and GPT, requiring only a brief fine-tuning process of 400 steps. Across eight distinct benchmarks, the results are striking: \textit{AutoDeco} not only consistently outperforms standard default decoding settings but also matches or surpasses the performance of meticulously expert-guided tuning (an oracle-tuned baseline derived from ``hacking the test set") hyperparameters. Perhaps most excitingly, we uncovered an emergent capability for instruction-based decoding control. When prompted with a meta-instruction like, ``Please ensure that the diversity of your output is low," the model immediately responded by lowering its average predicted temperature and top-p values by 0.11 and 0.06, respectively. This demonstrates that \textit{AutoDeco} does not merely automate a tedious process; it endows the model with a new, intuitive way to interpret and act on user intent.
+
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figure/arch.png}
+  \caption{An overview of our proposed end-to-end decoding architecture compared to manual decoding. Our method dynamically predicts temperature and top-p values from the model's hidden states for each generation step. In contrast, manual decoding (bottom) relies on a single set of static, predefined hyperparameters for the entire sequence generation.}
+  \label{fig:architecture}
+\end{figure}
+
+Our contributions are four-fold: \textbf{(i)} We propose \textit{AutoDeco}, a novel and lightweight architecture, along with an efficient strategy to train its prediction heads, that makes LLM generation truly ``end-to-end" by dynamically predicting decoding parameters at each step. \textbf{(ii)} We demonstrate through extensive experiments that \textit{AutoDeco} consistently matches or exceeds the performance of expert-guided tuning, static hyperparameters across eight benchmarks and multiple model families. \textbf{(iii)} We demonstrate for the first time that an LLM's decoding can be controlled by natural language. We achieve this by observing a nascent emergent ability and then solidifying it via targeted training, achieving 95\%+ consistency in steering sampling behavior.
+\textbf{(iv)} In addition to the models evaluated in this paper, we also release \textit{AutoDeco} heads for Deepseek-V3.1-Terminus, Qwen3-235B-A22B-Thinking-2507, and GPT-OSS-120B. However, due to the substantial computational cost of evaluating these large-scale models, a comprehensive benchmark of these models was not performed.
+
+
+
+\section{AutoDeco}
+% After reading the Introduction, we imagine you might be asking two main questions:
+The foregoing discussion raises two fundamental questions that frame the core inquiry of this work:
+
+First, how can we train the \textit{AutoDeco} heads without any token-level ``ground-truth'' labels for the optimal temperature and top-p values?
+Second, how can these predictions be integrated into inference without adding computational latency?
+This section details our solutions to both.
+
+In Section~\ref{sec:training}, we will introduce our training strategy and explain how we train both heads in an ``end-to-end'' manner.
+Then, in Section~\ref{sec:inference_pipeline}, we will walk through our inference process. The \textit{AutoDeco} modifies the model's final output probabilities internally—a design that adds absolutely no extra latency. The result is a model that can be used almost exactly like a standard one, requiring only a ``1-line-change" in a user's code to unlock its dynamic decoding capabilities.
+
+\subsection{Training Strategy}
+\label{sec:training}
+
+The central challenge in training \textit{AutoDeco} is the absence of token-level ``ground-truth'' labels for sampling parameters. A natural approach would be to optimize the temperature and top-p heads directly from the final cross-entropy loss of the generated tokens. However, this path is obstructed by the standard top-p sampling algorithm. Its ``hard cutoff''---retaining only the smallest set of tokens whose cumulative probability exceeds a threshold---is a non-differentiable operation, which severs the gradient flow from the loss back to the top-p head.
+
+\begin{figure}[t!]
+    \centering
+    % Left subfigure
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figure/top-p_function.png}
+        \caption{Top-p mask function.}
+        \label{fig:top_p_fuction}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figure/top-p_example.png}
+        \caption{An example of top-p sampling probability.}
+        \label{fig:top_p_example}
+    \end{subfigure}
+    % Main caption for the entire figure
+    \caption{Comparison of the differentiable soft top-p sampling (decay steepness $\alpha=30$) with the standard hard-cutoff method. (a) illustrates the standard hard-cutoff mask, which has a non-differentiable step, against our proposed smooth and differentiable soft mask. (b) shows the effect of applying both masks to an example original probability distribution, where the soft mask method produces a differentiable probability distribution suitable for ``end-to-end" training.}
+    \label{fig:differentiable_top_p}
+\end{figure}
+
+
+To overcome this, we introduce a novel, differentiable ``soft'' top-p mechanism that is used during training, enabling a fully ``end-to-end" optimization strategy. Traditional top-p sampling methods assign a probability of zero to all tokens beyond the top-p threshold, while our approach is different: for tokens that fall outside the top-p threshold, we apply a differentiable weight scaling. The further a token is from the threshold, the more its probability is scaled down, eventually approaching zero.
+
+The following is the training data stream:
+\begin{enumerate}[leftmargin=2em, ]
+    \item \textbf{Temperature-Scaled Probabilities:} First, we scale the predicted logits $\mathbf{l}$ to compute the initial probability distribution $\mathbf{p}$ using the predicted temperature $\hat{T}$.
+    \begin{equation}
+        \mathbf{p} = \text{softmax}\left(\frac{\mathbf{l}}{\hat{T}}\right).
+    \end{equation}
+
+    \item \textbf{Differentiable Mask Generation:} After sorting the probabilities $\mathbf{p}$ and calculating their cumulative sum $\mathbf{c}$, we generate a ``soft mask'' $\mathbf{m}^{(\text{sorted})}$. This is done in a single step that combines the thresholding and decay logic:
+    \begin{equation}
+        \mathbf{m}^{(\text{sorted})} = \exp\big(-\alpha \cdot \text{ReLU}(\mathbf{c} - \hat{P})\big),
+    \end{equation}
+    Here, $\alpha$ is a hyperparameter that controls the steepness of decay. As shown in Figure~\ref{fig:top_p_fuction}, this formulation ensures that for tokens inside the nucleus (where $\mathbf{c} < \hat{P}$), the ReLU term is zero, resulting in a mask value of 1. For tokens outside, the mask value smoothly decays towards zero as their cumulative probability further exceeds $\hat{P}$.
+
+    \item \textbf{Final Probability Distribution:} The soft mask $\mathbf{m}$ (unsorted to match the original vocabulary order) is applied to the initial probabilities, and the result is re-normalized to form the final, differentiable distribution $\tilde{\mathbf{p}}$:
+    \begin{equation}
+        \tilde{\mathbf{p}} = \frac{\mathbf{p} \odot \mathbf{m}}{\sum (\mathbf{p} \odot \mathbf{m}) + \epsilon},
+    \end{equation}
+    where $\epsilon$ is a small constant for numerical stability. In Figure~\ref{fig:top_p_example}, we provide an example with a vocabulary size of 50 to illustrate how the model's predicted probability distribution changes after the application of our soft top-p sampling. As the probability of the token exceeding $\hat{P}$ decreases gradually and differentially, the soft top-p sampling becomes the final piece of the puzzle for the \textit{AutoDeco}'s ``end-to-end'' training.
+
+\end{enumerate}
+
+\paragraph{Training.}
+With this differentiable pipeline, our training strategy becomes a straightforward ``end-to-end" optimization. The standard cross-entropy loss is computed between the final distribution $\tilde{\mathbf{p}}$ and the ground-truth token $y^*$. Because the entire process is differentiable, gradients from the loss are backpropagated to simultaneously update the parameters of both the temperature and top-p heads, allowing the model to learn its own optimal, context-specific decoding strategy by directly optimizing for the final task objective.
+
+
+% \paragraph{Training Strategy}
+% With this differentiable pipeline, our training strategy becomes a straightforward end-to-end optimization. The standard cross-entropy loss is computed between the final distribution $\tilde{\mathbf{p}}$ and the ground-truth token $y_t^*$. Because the entire process is differentiable, gradients from the loss are backpropagated to simultaneously update the parameters of both the temperature and top-p heads, allowing the model to learn its own optimal, context-specific decoding strategy by directly optimizing for the final task objective.
+
+Theoretically, these two heads could be trained from the pre-training stage. However, in this paper, we build upon a pre-trained LLM, freezing its base parameters and solely training the \textit{AutoDeco} heads. While training these heads on SFT data provides a strong baseline, we find that applying some certain de-biasing operations to the data can further enhance model performance and robustness:
+% \paragraph{Easy-Token Masking.} For many tokens, the base model's greedy prediction already matches the ground-truth. These ``easy" tokens often yield an optimal temperature $\hat{T_t}^*$ near zero, biasing the head to be overly conservative. To mitigate this, we randomly mask the training loss for a large fraction (e.g., 60\%) of these positions, forcing the model to learn from more challenging and informative examples.
+
+
+\begin{itemize}[leftmargin=2em, ]
+    \item \textbf{Easy-Token Masking.} For many tokens, the base model's greedy prediction already matches the ground-truth. These ``easy" tokens often yield an optimal temperature $\hat{T_t}^*$ near zero, biasing the head to be overly conservative. To mitigate this, we randomly mask the training loss for a large fraction (e.g., 60\%) of these positions, forcing the model to learn from more challenging and informative examples.
+
+    \item \textbf{Dynamic Fine-Tuning.} Conversely, a naive fine-tuning approach can cause the temperature head to predict unexpected large values for uncertain tokens. We incorporate Dynamic Fine-Tuning ~\citep{wu2025generalizationsftreinforcementlearning}, which re-weights the training loss to focus on tokens where the model has a reasonable prior. This teaches the head to apply high temperatures more judiciously in situations of calibrated uncertainty, rather than being skewed by outlier signals.
+\end{itemize}
+
+
+
+\subsection{Inference: Dynamic Decoding}
+\label{sec:inference_pipeline}
+
+At the heart of \textit{AutoDeco} lies a design optimized for efficiency. By seamlessly integrating all dynamic adjustments into the model's standard forward pass, it avoids any separate, costly computational steps. This architecture results in a negligible latency overhead, typically adding only 1-2\% to the total generation time. As illustrated in Figure~\ref{fig:architecture}, the process for each token generation step is as follows:
+\begin{enumerate}[leftmargin=2em, ]
+    \item \textbf{Compute Hidden State:} The base LLM computes the final hidden state $\mathbf{h}_t$.
+
+    \item \textbf{Predict Decoding Parameters:} In parallel, the standard \texttt{lm\_head} computes the logits while the \textit{AutoDeco} heads predict the dynamic parameters. The temperature is predicted directly from the hidden state. Crucially, the top-p head then uses both the hidden state \textit{and} the just-predicted temperature as input:
+    \begin{equation}
+                \hat{T_t} = \textit{temp\_head}(\mathbf{h}_t),\quad \hat{P_t} = \textit{top-p\_head}(\mathbf{h}_t, \hat{T_t}).
+    \end{equation}
+    This micro-dependency, shown as a dashed arrow in Figure~\ref{fig:architecture}, allows for a more nuanced interplay between the two parameters.
+
+    \item \textbf{Internal Probability Modification:} The model immediately uses the predicted $\hat{T_t}$ and $\hat{P_t}$ to internally rescale and filter the logits, producing a final, dynamically-adjusted distribution.
+\end{enumerate}
+
+\paragraph{Latency and Simplicity.}
+The \textit{AutoDeco} heads (simple 2-layer MLPs) add negligible computational overhead compared to the massive transformer layers. This internal architecture results in only 1-2\% additional latency and makes usage incredibly simple, and ensures seamless integration, allowing an \textit{AutoDeco}-enabled model to serve as a drop-in replacement for its standard counterpart, requiring no modifications to the user's existing generation logic.
+
+\section{Experiments}
+\label{sec:experiments}
+
+We conduct extensive experiments to validate \textit{AutoDeco}, structuring our evaluation around its core contributions to performance, efficiency, and a surprising capability that emerged as a byproduct.
+
+\begin{itemize}[leftmargin=2em, ]
+    \item In Section~\ref{sec:performance}, we demonstrate the superior performance of \textit{AutoDeco}. It not only substantially outperforms standard, non-expert decoding baselines (Greedy Search and Default Sampling) but also matches or even slightly surpasses the performance of optimal static hyperparameters found through an exhaustive expert-guided tuning.
+    \item  Following this, in Section~\ref{sec:efficiency}, we analyze its practical efficiency and confirm that \textit{AutoDeco} introduces a minimal computational burden, with a marginal latency increase of 1-2\% and a negligible memory footprint.
+    \item We present our most striking finding in Section~\ref{sec:emergent_control}: the emergent capability of \textit{AutoDeco} to interpret natural language commands to dynamically steer its own generation style, a crucial step towards more intuitive and controllable AI.
+\end{itemize}
+
+
+\subsection{Experimental Setup}
+\label{sec:setup}
+
+\paragraph{Models.}
+To demonstrate broad applicability, we select representative models from three of the most popular open-source model families. All \textit{AutoDeco} heads are trained on top of the official pre-trained checkpoints of these models:
+\begin{itemize}[leftmargin=2em, ]
+    \item \textbf{Llama-3.1-Nemotron-Nano-8B-v1}\footnote{https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1}\citep{bercovich2025llama}: A general-purpose model from the widely-used Llama family, developed by Nvidia (hereinafter Llama-Nemotron-8B).
+    \item \textbf{R1-Distill-Qwen-7B}\footnote{https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B}\citep{guo2025deepseek}: A distilled model from the Qwen family developed by DeepSeek, known for its strong reasoning capabilities.
+    \item \textbf{Qwen3-30B-A3B-Instruct-2507}\footnote{https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507}\citep{qwen3technicalreport}: An advanced MoE architecture instruct model from Qwen3.
+    \item \textbf{OpenAI-GPT-OSS-20B}\footnote{https://huggingface.co/openai/gpt-oss-20b}\citep{agarwal2025gpt}: A MoE model with 20B parameters released by OpenAI. The reasoning effort is set to medium by default.
+\end{itemize}
+
+\paragraph{Datasets.}
+The models are trained on a focused domain and evaluate on a wide range of tasks to test for generalization.
+\begin{itemize}[leftmargin=2em, ]
+    \item \textbf{Training Data:} The \textit{AutoDeco} heads are trained on a specialized dataset of reject sampling trajectories. These trajectories were generated by sampling solutions from our four base models on problems from the DeepMath-103K dataset \citep{he2025deepmath}\footnote{https://huggingface.co/datasets/zwhe99/DeepMath-103K}.
+    \item \textbf{Evaluation Benchmarks:} We evaluate on a diverse suite of eight benchmarks, split into two categories to assess both in-domain and out-of-domain performance:
+    \begin{itemize}[leftmargin=1em, topsep=0pt, itemsep=0pt]
+        \item \textbf{In-Domain (Math):} AIME (24+25), BRUMO25, HMMT25 \citep{balunovic_srimatharena_2025}, and BeyondAIME \citep{bytedance_seed_2025_beyondaime}.\footnote{We focus on these recent, hard benchmarks to mitigate the risk of data leakage issues in older datasets.}
+        \item \textbf{Out-of-Domain (General Tasks):} GPQA-Diamond \citep{rein2024gpqa} and MMLU-Pro \citep{wang2024mmlu} (QA) , LiveCodeBenchV6 \citep{jain2024LiveCodeBench} (Code), and IFEval \citep{zhou2023instruction} (Instruction Following).
+    \end{itemize}
+\end{itemize}
+
+\paragraph{Baselines and Evaluation.}
+We evaluate \textit{AutoDeco} against two standard, non-expert decoding strategies: \textbf{Greedy Search} and \textbf{Default Sampling} ($\hat{T}=1.0, \hat{P}=1.0$). Furthermore, to establish a practical upper bound, we also compare against an \textbf{Expert-Guided Tuning}. It is crucial to note that this expert-tuned baseline is an \textit{oracle} setting, as it involves finding the optimal static hyperparameters by tuning on the test set—a process that is infeasible in real-world applications.
+
+Our primary metric is Pass@1 accuracy, estimated via oversampling with 128 samples per problem (with 8 random seeds, 16 samples per seed).
+
+
+\subsection{Main Results}
+\label{sec:main result}
+We present our main findings separately for mathematical reasoning and open-domain question answering to provide a clear and detailed view of \textit{AutoDeco}'s performance across different domains..
+
+
+\begin{table}[t!]
+\caption{Pass@1 accuracy on mathematical reasoning benchmarks. \textit{AutoDeco} consistently outperforms both greedy Search and Default Sampling methods across various models.}
+\label{tab:math_results}
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccccc}
+\toprule
+\textbf{Model} & \textbf{Method} & \textbf{AIME} & \textbf{BRUMO25} & \textbf{HMMT25} & \textbf{BeyondAIME} & \textbf{Average} \\
+\midrule
+\multirow{3}{*}{Llama-Nemotron-8B}
+ & Greedy Search & 51.67 & 56.67 & 26.67 & \textbf{35.00} & 42.50 \\
+ & Default Sampling & 50.84$\pm$1.44 & 57.89$\pm$1.46 & 29.82$\pm$1.60 & 31.82$\pm$0.40 & 42.59 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{55.43$\pm$1.22} & \cellcolor{gray!25}\textbf{60.60$\pm$0.98} & \cellcolor{gray!25}\textbf{33.98$\pm$1.14} & \cellcolor{gray!25}34.19$\pm$0.65 & \cellcolor{gray!25}\textbf{46.05} \\
+\midrule
+\multirow{3}{*}{R1-Distill-Qwen-7B}
+ & Greedy Search & 38.33 & 43.33 & 16.67 & 24.00 & 30.58 \\
+ & Default Sampling & 43.49$\pm$1.38 & 49.01$\pm$1.10 & 22.32$\pm$0.83 & 24.21$\pm$0.79 & 34.76 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{47.03$\pm$1.12} & \cellcolor{gray!25}\textbf{51.64$\pm$1.05} & \cellcolor{gray!25}\textbf{24.14$\pm$0.39} & \cellcolor{gray!25}\textbf{26.65$\pm$0.49} & \cellcolor{gray!25}\textbf{37.37} \\
+\midrule
+% 67.21±0.87 & 43.73±1.26 & 46.75±0.18
+\multirow{3}{*}{Qwen3-30B-A3B-Instruct-2507}
+ & Greedy Search & 65.00 & 63.33 & 36.67 & 44.00 & 52.25 \\
+ & Default Sampling & 67.92$\pm$1.36 & 66.02$\pm$1.11 & \textbf{43.88$\pm$1.28} & 46.38$\pm$0.47 & 56.05 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{68.46$\pm$0.76} &
+ \cellcolor{gray!25}\textbf{67.21$\pm$0.87} & \cellcolor{gray!25}43.73$\pm$1.26 & \cellcolor{gray!25}\textbf{46.75$\pm$0.18} & \cellcolor{gray!25}\textbf{56.54} \\
+\midrule
+\multirow{3}{*}{OpenAI-GPT-OSS-20B}
+ & Greedy Search & 56.67 & 66.67 & \textbf{46.67} & 36.00 & 51.50 \\
+ & Default Sampling & 69.61$\pm$1.32 & 67.03$\pm$1.12 & 44.24$\pm$2.28 & 45.69$\pm$0.13 & 56.64 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{72.33$\pm$1.20} & \cellcolor{gray!25}\textbf{68.25$\pm$0.58} & \cellcolor{gray!25}46.21$\pm$1.08 & \cellcolor{gray!25}\textbf{45.72$\pm$0.44} & \cellcolor{gray!25}\textbf{58.13} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+\begin{table}[t!]
+\caption{Pass@1 accuracy on general-domain benchmarks. \textit{AutoDeco} shows exciting generalization performance across General QA, Code Generation, and Instruction Following tasks.}
+\label{tab:open_domain_results}
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccccc}
+\toprule
+\textbf{Model} & \textbf{Method} & \textbf{GPQA-Diamond} & \textbf{MMLU-Pro} & \textbf{LiveCodeBenchV6} & \textbf{IFEval} & \textbf{Average} \\
+\midrule
+\multirow{3}{*}{Llama-Nemotron-8B}
+ & Greedy Search & \textbf{51.01} & 52.00 & 19.17 & \textbf{71.53} & 48.43 \\
+ & Default Sampling & 44.93 & 54.00 & 21.22 & 65.25 & 46.35 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}50.52 & \cellcolor{gray!25}\textbf{55.64} & \cellcolor{gray!25}\textbf{21.68} & \cellcolor{gray!25}71.02 & \cellcolor{gray!25}\textbf{49.72} \\
+\midrule
+\multirow{3}{*}{R1-Distill-Qwen-7B}
+ & Greedy Search & 37.87 & 47.20 & 49.13 & 32.90 & 39.32 \\
+ & Default Sampling & 47.41 & 47.65 & 53.00 & 32.35 & 42.47 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{48.91} & \cellcolor{gray!25}\textbf{50.75} & \cellcolor{gray!25}\textbf{53.14} & \cellcolor{gray!25}\textbf{33.90} & \cellcolor{gray!25}\textbf{46.88} \\
+\midrule
+\multirow{3}{*}{Qwen3-30B-A3B-Instruct-2507}
+ & Greedy Search & 65.86 & 78.00 & 47.75 & \textbf{83.73} & 68.84 \\
+ & Default Sampling & 69.82 & 76.25 & 48.52 & 81.52 & 69.03 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{69.96} & \cellcolor{gray!25}\textbf{78.38} & \cellcolor{gray!25}\textbf{49.80} & \cellcolor{gray!25}82.81 & \cellcolor{gray!25}\textbf{70.24} \\
+\midrule
+\multirow{3}{*}{OpenAI-GPT-OSS-20B}
+ & Greedy Search & 59.60 & 67.00 & 69.69 & 29.94 & 56.56 \\
+ & Default Sampling & 65.67 & 68.00 & 70.15 & 30.68 & 58.63 \\
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}\textbf{66.48} & \cellcolor{gray!25}\textbf{69.12} & \cellcolor{gray!25}\textbf{71.25} & \cellcolor{gray!25}\textbf{30.84} & \cellcolor{gray!25}\textbf{59.42} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsubsection{Performance}
+\label{sec:performance}
+
+\paragraph{In-Domain Performance.}
+As shown in Table~\ref{tab:math_results} \textit{AutoDeco} consistently demonstrates a performance boost compared to Greedy Search and Default Sampling. For instance, on Llama-Nemotron-8B, it achieves an average score of 46.05, a substantial improvement of nearly 3.5 absolute points over Default Sampling and Greedy Search.
+
+One may notice that the performance gain from \textit{AutoDeco} is less pronounced on Qwen3-30B-A3B-Instruct-2507 compared to other models. This may stem from Qwen3-30B-A3B-Instruct-2507, as a non-thinking-model, produces answers that are significantly shorter than the other models. Consequently, the sensitivity of task accuracy to variations in sampling parameters is substantially lower, a trend that is further demonstrated by the results in Table~\ref{tab:open_domain_results}.
+
+\paragraph{Out-of-Domain Generalization.}
+More strikingly, despite being trained exclusively on mathematical reasoning, \textit{AutoDeco} demonstrates powerful zero-shot generalization to a diverse set of out-of-domain tasks (Table~\ref{tab:open_domain_results}). It consistently secures the highest average scores across general QA, code generation, and instruction following. This strong performance reveals two interesting patterns.
+
+First, the magnitude of improvement is remarkably consistent across domains. For example, on R1-Distill-Qwen-7B, \textit{AutoDeco} improves the average score on general tasks by 4.4 points over Default Sampling—a gain even surpassing that seen in the math domain. This suggests that the benefits of dynamic decoding are fundamental and not tied to a specific task type.
+
+Second, \textit{AutoDeco} shows an ability to dynamically balance deterministic and stochastic strategies. On general tasks, Default Sampling is not always better than Greedy Search (e.g., on Llama-Nemotron-8B for GPQA-Diamond and IFEval). In these cases, \textit{AutoDeco} learns to predict more deterministic, low-temperature parameters, allowing it to match or exceed the performance of the stronger greedy baseline. Conversely, when stochasticity is beneficial, it raises the temperature to outperform Default Sampling.
+
+The above findings suggest that \textit{AutoDeco} is not simply learning ``what'' to generate, but rather the fundamental ``meta-skill of how'' to generate text effectively. By training on a high-signal domain like mathematics, it learns universal principles for balancing exploration and exploitation. We will further discuss this in Sec.~\ref{sec:emergent_control}, and this finding challenges the conventional assumption that adaptive decoding requires broad, task-matched supervision, and instead points toward a more efficient, modular paradigm for real ``end-to-end" controllable generation.
+
+% \paragraph{Comparison with Expert-Guided Decoding.}
+\begin{figure}[t!]
+    \centering % 将整个 figure 环境居中
+
+    % 第一个子图 (上方的图)
+    \begin{subfigure}{\linewidth} % 让子图占据全部可用宽度
+        \centering
+        % 建议图片宽度略小于\linewidth，例如0.8或0.9，以获得更好的视觉边距
+        \includegraphics[width=1.0\linewidth]{figure/llama_fine_grained.png} % <-- 替换为第一张图的路径
+        \caption{Llama-Nemotron-8B with \textit{AutoDeco}.}
+        \label{fig:llama-finegrained} % 用于在正文中引用
+    \end{subfigure}
+
+    \begin{subfigure}{\linewidth} % 让子图占据全部可用宽度
+        \centering
+        \includegraphics[width=1.0\linewidth]{figure/r1_fine_grained.png} % <-- 替换为第二张图的路径
+        \caption{R1-Distill-Qwen-7B with \textit{AutoDeco}.}
+        \label{fig:r1-finegrained} % 用于在正文中引用
+    \end{subfigure}
+
+    % 整个 figure 的总标题
+    \caption{Expert-Guided Tuning Comparison with Search Interval of 0.1. Temperature is adjusted first (setting top-p to 1.0), and the selection is made based on the best performance of temperature to conduct the search for top-p. \textit{AutoDeco} achieves competitive performance without requiring any prior empirical tuning or domain-specific expert knowledge.}
+    \label{fig:top_image} % 用于在正文中引用整个 figure
+\end{figure}
+
+\paragraph{Pass@$k$ Performance.} Some recent works~\citep{yue2025does, chen2025passktrainingadaptivelybalancing} have highlighted a potential trade-off in the training of reasoning models, where achieving superb pass@1 accuracy can come at the expense of performance on pass@$k$ (for $k>1$). To investigate this, we present an extended evaluation of our method on pass@$k$ ($k=16,32,64$) accuracies in Appendix~\ref{sec: supp results}, with encouraging results. We find that the absolute improvements delivered by \textit{AutoDeco} at higher $k$-values are consistent with, and at times even slightly greater than, those observed at pass@1.
+
+It is important to note that for any given model, pass@$k$ accuracy is inherently much higher than pass@1 accuracy. Consequently, it is obvious that securing absolute performance gains becomes substantially more difficult, and a similar absolute improvement at pass@64 translates to a much larger relative error reduction, compared to pass@1. For example, on the OpenAI-GPT-OSS-20B model, we observe that the performance gains from \textit{AutoDeco} are consistent across different $k$ values in pass@$k$ evaluations. More importantly, this consistent absolute gain translates to a significantly larger impact in higher-accuracy (when k is large) scenarios. The relative error reduction dramatically increases from \textbf{3.5\%} at pass@1 to \textbf{18.1\%} at pass@64. This demonstrates that as the task becomes easier for the baseline model (i.e., the error rate decreases at high $k$), the performance gains from our method become even more significant.
+
+\paragraph{Comparison with Expert-Guided Tuning.}
+In real-world applications, developers often undertake a laborious tuning process to find task-specific, optimal static hyperparameters. To assess how \textit{AutoDeco} compares to this best-case scenario, we simulate an expert with an unfair advantage: access to a test-set oracle. As shown in Figure~\ref{fig:top_image}, we first perform a fine-grained search to find the optimal static temperature on the test set, and then, using that temperature, find the optimal top-p. This process represents the practical upper bound for any static decoding strategy.
+
+The results are striking. \textit{AutoDeco}'s single-pass performance is nearly identical to this oracle-tuned baseline, with the performance gap consistently less than one point across all models and datasets. Given that the Expert-Guided Tuning relies on ``hacking the test set'', a process impossible in any real-world scenario where the test data is unknown, we can confidently assert that \textit{AutoDeco} is effectively superior to any feasible expert-tuning strategy in practice.
+
+Furthermore, the figure highlights the fundamental limitation of static decoding: the optimal hyperparameters are extremely task-dependent. For instance, Llama-Nemotron-8B requires drastically different settings for BRUMO25 ($\hat{T}=0.8, \hat{P}=0.9$) versus GPQA-Diamond ($\hat{T} =0.3, \hat{P} =0.6$). However, in real-world scenarios, a model developer has no way to switch hyperparameters based on a user's query type. \textit{AutoDeco} elegantly solves this problem. By achieving near-oracle performance automatically and on-the-fly for any task, it provides the optimal and, frankly, only practical solution for developers seeking robust, high-performance generation across diverse user inputs.
+
+\paragraph{Ablation Study.}
+
+\begin{wrapfigure}{r}{0.4\textwidth} % 'r' 表示图片在右侧, '0.5\textwidth' 是图片的宽度
+    \centering
+    \includegraphics[width=\linewidth]{figure/box-plot-AIME24-both.png} % \linewidth 自动适应wrapfigure的宽度
+    \caption{Ablation study on \textit{AutoDeco} architecture designs. Joint optimization achieves the highest AIME Score.}
+    \label{fig:ablation}
+\end{wrapfigure}
+
+A natural question is what role the temperature and top-p heads play individually. To isolate their effects, we evaluate on AIME using R1-Distill-Qwen-7B to conduct an ablation study, with the results presented in Figure~\ref{fig:ablation}. The most striking finding is the remarkable effectiveness of each component in isolation. Using either the temperature head or the top-p head alone achieves an average performance gain of approximately 3-3.5 absolute points over the Default Sampling baseline.
+
+This result is highly significant. It demonstrates that substantial improvements in decoding do not require a sophisticated architecture. A single, lightweight prediction head is sufficient to dramatically outperform standard static decoding methods.
+
+Of course, while each head is powerful on its own, our results also confirm that the full \textit{AutoDeco} model, with both heads, yields the best performance. They provide complementary benefits, allowing for even finer-grained control over the generation process to achieve optimal results.
+
+
+\subsubsection{Efficiency}
+\label{sec:efficiency}
+
+
+% 在您的文档导言区确保有以下这行
+
+\begin{table}[t!]
+\caption{FLOPs, Memory Usage and latency (1k tokens) across various prompt length for R1-Distill-Qwen-7B with/without temp head and top-p head.}
+\label{tab:Efficiency}
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Metrics} & \textbf{Method} & \textbf{1k} & \textbf{2k} & \textbf{4k} & \textbf{8k} & \textbf{16k} & \textbf{24k} \\
+\midrule
+\multirow{2}{*}{FLOPs}
+ % & Greedy & 2.89e+13 & 4.34e+13 & 7.23e+13 & 13.03e+13 & 24.61e+13 & 36.19e+13 \\
+ & Default Sampling & 2.89e+13  & 4.34e+13 & 7.23e+13 & 13.03e+13 & 24.61e+13 & 36.19e+13 \\
+ % --- 修改开始 ---
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}2.89e+13 & \cellcolor{gray!25}4.34e+13 & \cellcolor{gray!25}7.24e+13 & \cellcolor{gray!25}13.03e+13 & \cellcolor{gray!25}24.62e+13 & \cellcolor{gray!25}36.20e+13 \\
+ % --- 修改结束 ---
+\midrule
+\multirow{2}{*}{Latency (s)}
+ % & Greedy & 18.12 & 18.84 & 18.69 & 19.57 & 22.01 & 25.61 \\
+ & Default Sampling & 18.23 & 18.86 & 18.93 & 19.72 & 22.11 & 25.76 \\
+ % --- 修改开始 ---
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}18.84 & \cellcolor{gray!25}19.10 & \cellcolor{gray!25}19.43 & \cellcolor{gray!25}20.03 & \cellcolor{gray!25}22.36 & \cellcolor{gray!25}26.05 \\
+ % --- 修改结束 ---
+\midrule
+\multirow{2}{*}{Memory (MB)}
+ % & Greedy & 15546 & 16032 & 17130 & 19098 & 23182 & 27262 \\
+ & Default Sampling & 15546 & 16032 & 17130 & 19098 & 23182 & 27262 \\
+ % --- 修改开始 ---
+ & \textit{AutoDeco} (Ours) & \cellcolor{gray!25}15550 & \cellcolor{gray!25}16036 & \cellcolor{gray!25}17134 & \cellcolor{gray!25}19102 & \cellcolor{gray!25}23183 & \cellcolor{gray!25}27266 \\
+ % --- 修改结束 ---
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+
+
+% \paragraph{Inference Efficiency.}
+
+A critical advantage of \textit{AutoDeco} is its computational efficiency. To quantify this, we evaluated its overhead against Default Sampling across three key metrics, with results summarized in Table~\ref{tab:Efficiency}.
+
+The analysis shows that the additional computational burden is minimal. The FLOPs are virtually identical to the baseline, and the memory footprint increases by a mere 4 MB, an insignificant amount for modern hardware. The impact on latency is also negligible. This overhead remains consistently low regardless of prompt length, adding a consistent overhead of 0.29-0.6 s/k tokens, which translates to an average relative increase of just 1.7\%.
+
+These results empirically validate that \textit{AutoDeco} is a lightweight enhancement. When considering the substantial performance gains and the convenience of automatic, task-agnostic hyperparameter tuning demonstrated in Sec.~\ref{sec:performance}, this minor computational cost becomes trivial. \textit{AutoDeco} thus presents a highly practical solution, offering significant benefits for a negligible price.
+
+The analysis regarding training efficiency can be found in the Appendix \ref{sec: supp efficiency}.
+
+\subsection{Emergent Control of Decoding via Natural Language}
+\label{sec:emergent_control}
+
+Beyond outperforming static methods, another interesting finding is an emergent capability: \textit{AutoDeco} learns to interpret abstract, high-level commands to guide its own decoding behavior. This transforms the model from a passive generator into an active participant that can respond to user intent about the desired generation \textit{style}, a foundational step towards truly end-to-end generation.
+
+% ================= FIGURE with NEW CAPTION =================
+\begin{figure}[t!]
+    \centering
+    \includegraphics[width=\linewidth]{figure/Figure4_prompt_control.pdf}
+    \caption{
+        \textbf{An Emergent Phenomenon.} This figure shows the token-level $\hat{T}/\hat{P}$ predictions for the same prompt under three conditions, observed \textit{without} any targeted training.
+        \textbf{(Left) Baseline:} The model's default dynamic $\hat{T}/\hat{P}$ values.
+        \textbf{(Middle) High-Diversity Command:} The model spontaneously elevates its $\hat{T}/\hat{P}$ predictions.
+        \textbf{(Right) Low-Diversity Command:} The model spontaneously suppresses its $\hat{T}/\hat{P}$ predictions.
+    }
+    \label{fig:control_example}
+\end{figure}
+% =============================================================
+
+Figure~\ref{fig:control_example} provides a clear qualitative demonstration of this capability. On the left, a creative prompt generates a dynamic but baseline set of temperature and top-p values (solid lines). In the middle panel, when we append the command, ``I hope the answers can be more innovative and diverse,'' the model's response is immediate and visible: the predicted $\hat{T}$ and $\hat{P}$ values (dotted lines) are consistently elevated above the baseline, effectively ``turning up" its own creativity. Conversely, on the right, the command ``I hope the answers can be as certain as possible'' causes the model to autonomously suppress its $\hat{T}$ and $\hat{P}$ predictions, ``turning down'' its randomness to favor more deterministic outputs. To our knowledge, this is the first demonstration of an LLM directly translating natural language intent for creativity and certainty into its internal sampling parameters on a token-by-token basis.
+
+However, we observed that this emergent capability was not consistent, appearing only occasionally across different prompts. This motivated us to investigate whether this desirable behavior could be explicitly trained. We developed a targeted training strategy, augmenting a subset of prompts with diverse ``decoding-control commands'' and applying a ranking loss. This loss function encourages the model to predict higher $\hat{T}$ and $\hat{P}$ values for ``high diversity'' commands relative to the baseline, and lower values for ``low diversity'' commands.
+
+% ================= TABLE =================
+\begin{table}[t!]
+\centering
+\small
+\caption{Quantitative Impact of Diversity Commands \textbf{After Targeted Training} (N=100).}
+\label{tab:control_results}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Command} & \textbf{Avg. Temp.} & \textbf{$\Delta$ Temp.} & \textbf{Consistency (T)} & \textbf{Avg. top-p} & \textbf{$\Delta$ top-p} & \textbf{Consistency (P)} \\
+\midrule
+Baseline (No Cmd) & 0.72 & - & - & 0.79 & - & - \\
+\textbf{Low Diversity} & \textbf{0.61} & \textcolor{ForestGreen}{\textbf{$\downarrow$ 0.11}} & \textbf{99\%} & \textbf{0.73} & \textcolor{ForestGreen}{\textbf{$\downarrow$ 0.06}} & \textbf{97\%} \\
+\textbf{High Diversity} & \textbf{0.82} & \textcolor{Red}{\textbf{$\uparrow$ 0.10}} & \textbf{96\%} & \textbf{0.83} & \textcolor{Red}{\textbf{$\uparrow$ 0.04}} & \textbf{85\%} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+% =============================================================
+
+After fine-tuning the model with this objective for a small number of steps, we evaluated its effectiveness. The results, presented in Table~\ref{tab:control_results}, confirm that the training was highly successful in making the behavior robust and reliable. For example, the ``low diversity'' command prompted a substantial drop in average temperature from 0.72 to 0.61 with remarkable \textbf{99\% consistency} across a test set of 100 questions. This shows that the initial emergent connection can be developed into a systematic and dependable feature through targeted training.
+
+However, we do not yet have a conclusive understanding of this phenomenon. While the trained model learns the correct directional adjustments, it does not achieve precise, absolute control. For instance, when prompted to ``ensure your generation has no randomness," we observed a modest but directionally correct drop in the average predicted temperature, rather than the ideal of near-zero. We hypothesize that achieving such fine-grained control may require joint training of the base LLM and the \textit{AutoDeco} heads. Given the preliminary nature of this investigation, the models released with this paper do not include this experimental control feature. We will continue to advance this line of research and release updated models as soon as we reach more definitive conclusions.
+
+\section{Related Works}
+
+The process of generating text from a language model, known as decoding, is a critical step that significantly influences the quality of the output~\citep{Wang_2025, shi2024thorough}. Existing decoding strategies can be broadly categorized into deterministic, stochastic sampling, and model-based approaches, most of which traditionally rely on static, predefined configurations.
+
+\paragraph{Deterministic Decoding.}
+Deterministic methods produce a single, reproducible output for a given input. The most fundamental of these is Greedy Search, which selects the token with the highest probability at each step. Another classic one is beam search, which maintains a ``beam'' of k most probable partial sequences to explore a larger search space~\citep{sutskever2014sequence, graves2013generating}.  However, both of them are known to favor dull, high-frequency phrases~\citep{vijayakumar2016diverse}, this results in their good performance on Machine Translation and QA tasks, but not suitable for open-ended generation tasks. A more recent line of deterministic methods, Contrastive Search\citep{su2022contrastive, su2022}, directly optimizes for open-ended generation quality by penalizing tokens that are too similar to previous tokens, effectively mitigating the degeneration problem.
+
+\paragraph{Stochastic Sampling.}
+ To inject diversity, stochastic sampling methods are essential. These methods sample from the model's output probability distribution, which is typically modulated by some hyperparameters. However, unrestricted sampling can produce incoherent text. To counter this, truncation methods were developed. Top-K sampling\citep{fan2018hierarchical} restricts the sampling pool to the $k$ most likely tokens, while the more adaptive Nucleus Sampling (top-p)\citep{holtzmancurious} selects the smallest set of tokens whose cumulative probability exceeds a threshold $p$. Despite their power, as our introduction highlights, finding the optimal configuration for these hyperparameters is a non-trivial, task-dependent manual process~\citep{shi2024thorough}.
+
+\paragraph{Model-Based Decoding.}
+To gain more fine-grained control over generation, a third category of methods modifies the model's output distribution using external signals or auxiliary models. Early examples include \textbf{Plug-and-Play Language Models}, which leverage attribute models to steer generation towards desired topics~\citep{dathathriplug}. More recently, \textbf{Contrastive Decoding} uses a smaller ``amateur'' model to steer a larger ``expert'' model away from generic text~\citep{li2023contrastive, chuang2023dola}. Similarly, Speculative Decoding utilizes a faster ``draft" model to generate sequences of tokens that are then verified by the larger model, significantly accelerating inference~\citep{leviathan2023fast, chen2023accelerating}. There is also an art to verification methods~\citep{liu2025trust}. While they are effective, they still operate under a fixed algorithmic framework: the choice of the ``guidance model'' itself acts as another form of hyperparameter. For example, in contrastive decoding and speculative decoding, the authors suggest that using a smaller LM of the same architecture as the guidance model yields the best results.
+
+
+
+Despite this rich landscape of research, a fundamental limitation persists: all these methods rely on a static decoding strategy. Whether it's a fixed algorithm (like Beam Search) or a fixed set of hyperparameters, this ``one-size-fits-all" approach is inherently suboptimal. In contrast, \textit{AutoDeco} proposes a paradigm shift. Instead of relying on fixed hyperparameters or predefined heuristics, we empower the model to dynamically control its own stochasticity at each generation step.
+
+
+
+
+\section{Conclusion and Future Work}
+
+In this work, we challenged that the ``end-to-end'' label for LLM is a misnomer. We introduced \textit{AutoDeco}, a truly ``end-to-end'' architecture that empowers models to dynamically control their own decoding strategy. By learning to predict token-level temperature and top-p values, \textit{AutoDeco} transforms decoding from a manual, static process into a dynamic, self-regulating pipeline.
+
+Our extensive experiments reveal three key contributions. First, \textit{AutoDeco} demonstrates remarkable generalization, consistently outperforming standard decoding methods across diverse models and tasks, even matching oracle-tuned baselines without any task-specific tuning. Second, this performance is achieved with negligible computational overhead, making it a practical, drop-in enhancement for any transformer-based model. Most significantly, we discovered a remarkable emergent capability: \textit{AutoDeco} learns to interpret natural language commands to steer its own generation style, a foundational step towards more intuitive human-AI interaction.
+
+Future Work. Our immediate future work involves jointly training the base model with \textit{AutoDeco}. We believe this will address current limitations like imprecise prompt-based control and data biases—both likely consequences of a frozen backbone—thereby enabling more granular control over generation.
+
+% \section{Limitations and Future Work}
+% \label{sec:limitations_future_work}
+
+% Our work lays a foundation for read end-to-end decoding, illuminating several exciting avenues for future research. A natural next step is to expand \textit{AutoDeco}'s predictive scope beyond temperature and Top to include other parameters, such as repetition penalties. Furthermore, the emergent capability for natural language control is a particularly promising direction; targeted instruction-based fine-tuning could transform this nascent ability into a robust feature, enabling a new paradigm of intuitive, conversational control over generation. Finally, we believe the core principles of our approach could be extended to other generative modalities, representing a promising frontier for adaptive AI systems.
+
+\clearpage
+\newpage
+
+\bibliography{Lab/ref}
+\bibliographystyle{Lab/colm2024_conference}
+
+\clearpage
+\newpage
+
+\input{appendix}
+
+\end{document}

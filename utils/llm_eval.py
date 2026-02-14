@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser.add_argument('--top_p', type=float, default=1.0)
     parser.add_argument('--top_k', type=int, default=-1)
     parser.add_argument('--rp', type=float, default=1.0)
-    parser.add_argument('--k', type=int, default=16)
+    parser.add_argument('--num_samples', '--k', type=int, default=16)
     parser.add_argument('--model_name_or_path', type=str, default='/apdcephfs_qy3/share_301812049/shared/model/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--dataset', type=str, default='aime24')
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     ckpt_name = extract_model_name(args.model_name_or_path)
     temp = args.temp
-    k = args.k
+    k = args.num_samples
     seed = args.seed
 
     with open(f'data/TempTest/{args.dataset}.jsonl', 'r') as f:
@@ -121,6 +121,5 @@ if __name__ == "__main__":
 
         txt_path = os.path.splitext(f.name)[0] + '.txt'
         write_ascii_table(txt_path, args.dataset, avg_acc)
-
 
 
