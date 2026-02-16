@@ -49,6 +49,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='aime24')
     parser.add_argument('--tp_size', type=int, default=4)
     parser.add_argument('--max_tokens', type=int, default=32768)
+    parser.add_argument('--save-outputs', '--save_outputs', dest='save_outputs', type=str, default=None,
+                        help='Optional jsonl output path for per-sample generations.')
     args = parser.parse_args()
 
 
@@ -84,6 +86,12 @@ if __name__ == "__main__":
     if not os.path.exists(f'generation_log/{args.dataset}'):
         os.makedirs(f'generation_log/{args.dataset}')
     outputs = llm.generate(problems, sampling_params)
+    save_outputs_f = None
+    if args.save_outputs:
+        save_dir = os.path.dirname(args.save_outputs)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+        save_outputs_f = open(args.save_outputs, 'w')
 
     def aggregate_score(scores, mode):
         if mode == 'pass@k':
@@ -100,7 +108,7 @@ if __name__ == "__main__":
             scores = []
             logprobs = []
             top_ps = []
-            for output in output_group.outputs:
+            for sample_idx, output in enumerate(output_group.outputs):
                 generated_text = output.text
                 temp = getattr(output, 'temperatures', None)  # 使用当前循环的temp值作为默认值
                 top_p = getattr(output, 'top_ps', None)
@@ -111,6 +119,27 @@ if __name__ == "__main__":
                     temps.append(temp)
                 if top_p is not None:
                     top_ps.append(top_p)
+                if save_outputs_f is not None:
+                    save_outputs_f.write(json.dumps({
+                        'prompt': problems[idx],
+                        'response': generated_text,
+                        'metadata': {
+                            'dataset': args.dataset,
+                            'problem_index': idx,
+                            'sample_index': sample_idx,
+                            'ground_truth': ground_truths[idx],
+                            'score': score,
+                            'temp': temp if temp is not None else args.temp,
+                            'top_p': top_p if top_p is not None else args.top_p,
+                            'top_k': args.top_k,
+                            'rp': args.rp,
+                            'max_tokens': args.max_tokens,
+                            'mode': args.mode,
+                            'seed': args.seed,
+                            'model_name_or_path': args.model_name_or_path,
+                            'ckpt_name': ckpt_name,
+                        }
+                    }, ensure_ascii=False) + '\n')
                 # logprobs.append(output.logprobs)
             problem_acc = round(aggregate_score(scores, args.mode) * 100, 2)
             all_acc.append(problem_acc)
@@ -130,4 +159,5 @@ if __name__ == "__main__":
 
         txt_path = os.path.splitext(f.name)[0] + '.txt'
         write_ascii_table(txt_path, args.dataset, avg_acc)
-
+    if save_outputs_f is not None:
+        save_outputs_f.close()

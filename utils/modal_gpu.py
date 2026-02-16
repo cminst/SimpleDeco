@@ -46,13 +46,15 @@ autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
 
 app = modal.App(image=image, name="AutoDeco Experiments")
 
-@app.function(gpu="H100:1", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
-def runwithgpu():
-    token = 'modal'
-
+@app.function(timeout=3600, volumes={"/autodeco-saved": autodeco_volume})
+def get_autodeco():
     subprocess.run(["hf", "download", "cminst/SimpleDeco-CKPT", "SimpleDeco.tar.gz", "--local-dir", "."], check=True)
     subprocess.run(["tar", "-xzvf", "SimpleDeco.tar.gz"], check=True)
     subprocess.run(["rm", "SimpleDeco.tar.gz"], check=True)
+
+@app.function(gpu="H100:1", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
+def runwithgpu():
+    token = 'modal'
 
     with modal.forward(8888) as tunnel:
         url = tunnel.url + "/?token=" + token
@@ -77,4 +79,5 @@ def runwithgpu():
 
 @app.local_entrypoint()
 def main():
+    get_autodeco.remote()
     runwithgpu.remote()
