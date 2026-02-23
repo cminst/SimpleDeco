@@ -499,7 +499,7 @@ def main() -> None:
                     for tok_id, prob in zip(topk_ids, topk_ps):
                         tok = tokenizer.decode([tok_id], skip_special_tokens=False)
                         tok_disp = _display_token(tok)
-                        tip_lines.append(f"{tok_disp}  {prob:.4f}")
+                        tip_lines.append(f"'{tok_disp}'  {prob:.4f}")
         temp_value = aligned_temps[idx] if aligned_temps is not None else None
         if temp_value is None:
             temp_color = "#E0E0E0"
