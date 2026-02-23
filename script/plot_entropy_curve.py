@@ -417,16 +417,37 @@ def main() -> None:
         gen_max = max(gen_entropies)
     else:
         gen_min, gen_max = 0.0, 1.0
+    gen_temps: List[float] = []
+    if aligned_temps is not None:
+        gen_temps = [t for t in aligned_temps[gen_start:] if t is not None]
+    if gen_temps:
+        gen_temp_min = min(gen_temps)
+        gen_temp_max = max(gen_temps)
+    else:
+        gen_temp_min, gen_temp_max = 0.0, 1.0
+    gen_deltas: List[float] = []
+    if aligned_temps is not None:
+        for idx in range(gen_start, len(token_ids)):
+            t = aligned_temps[idx]
+            e = aligned_entropy[idx]
+            if t is None or e is None:
+                continue
+            gen_deltas.append(abs(t - e))
+    if gen_deltas:
+        gen_delta_min = min(gen_deltas)
+        gen_delta_max = max(gen_deltas)
+    else:
+        gen_delta_min, gen_delta_max = 0.0, 1.0
     token_spans_html: List[str] = []
     for idx in range(gen_start, len(token_ids)):
         token_text = decoded[spans[idx][0]:spans[idx][1]]
         escaped = html.escape(token_text)
         entropy_value = aligned_entropy[idx]
         if entropy_value is None:
-            color = "#E0E0E0"
+            entropy_color = "#E0E0E0"
             tip_lines = ["entropy=n/a (no previous token)"]
         else:
-            color = _value_to_hex(entropy_value, gen_min, gen_max)
+            entropy_color = _value_to_hex(entropy_value, gen_min, gen_max)
             tip_lines = [f"entropy={entropy_value:.4f}"]
             if args.smooth_window > 1 and aligned_smoothed[idx] is not None:
                 tip_lines.append(f"smooth={aligned_smoothed[idx]:.4f}")
@@ -439,9 +460,35 @@ def main() -> None:
                         tok = tokenizer.decode([tok_id], skip_special_tokens=False)
                         tok_disp = _display_token(tok)
                         tip_lines.append(f"{tok_disp}  {prob:.4f}")
+        temp_value = aligned_temps[idx] if aligned_temps is not None else None
+        if temp_value is None:
+            temp_color = "#E0E0E0"
+            if aligned_temps is not None:
+                tip_lines.append("temp=n/a")
+        else:
+            temp_color = _value_to_hex(temp_value, gen_temp_min, gen_temp_max)
+            tip_lines.append(f"temp={temp_value:.4f}")
+        delta_value = None
+        if temp_value is not None and entropy_value is not None:
+            delta_value = abs(temp_value - entropy_value)
+            tip_lines.append(f"delta=|temp-entropy|={delta_value:.4f}")
+            delta_color = _value_to_hex(delta_value, gen_delta_min, gen_delta_max)
+        else:
+            delta_color = "#E0E0E0"
         title = "&#10;".join(html.escape(line) for line in tip_lines)
+        entropy_attr = "" if entropy_value is None else f"{entropy_value:.6f}"
+        temp_attr = "" if temp_value is None else f"{temp_value:.6f}"
+        delta_attr = "" if delta_value is None else f"{delta_value:.6f}"
         token_spans_html.append(
-            f"<span class='tok' style='background-color: {color};' data-tip='{title}'>"
+            "<span class='tok' "
+            f"style='background-color: {entropy_color};' "
+            f"data-tip='{title}' "
+            f"data-entropy='{entropy_attr}' "
+            f"data-temp='{temp_attr}' "
+            f"data-delta='{delta_attr}' "
+            f"data-color-entropy='{entropy_color}' "
+            f"data-color-temp='{temp_color}' "
+            f"data-color-delta='{delta_color}'>"
             f"{escaped}</span>"
         )
     generation_html = "".join(token_spans_html)
@@ -528,6 +575,17 @@ def main() -> None:
         smoothing_note = ""
         if args.smooth_window > 1:
             smoothing_note = f" Smoothed with window={args.smooth_window}."
+        has_temp = aligned_temps is not None
+        pearson_display = (
+            "n/a (no temp head)"
+            if aligned_temps is None
+            else ("n/a" if pearson_r is None else f"{pearson_r:.4f}")
+        )
+        pearson_suffix = (
+            ""
+            if aligned_temps is None
+            else (f"(n={pearson_n})" if pearson_n else "")
+        )
         f.write(
             "<!doctype html>\n"
             "<html><head><meta charset='utf-8'><title>Entropy Trace</title>\n"
@@ -548,21 +606,54 @@ def main() -> None:
             "box-shadow: 0 6px 18px rgba(0,0,0,0.25); "
             "z-index: 5; min-width: 200px; }\n"
             ".legend { font-size: 12px; color: #444; }\n"
+            ".controls { display: flex; align-items: center; gap: 8px; margin: 8px 0 6px; }\n"
+            ".controls label { font-size: 13px; color: #333; }\n"
             "</style></head>\n"
             "<body>\n"
             f"<h2>Entropy Trace ({args.dataset_name}:{split_name} idx={args.row_index})</h2>\n"
+            f"<p>Pearson r (temp vs entropy, generated tokens): {pearson_display} {pearson_suffix}</p>\n"
             "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks."
             " Entropy values are aligned to the token they generate (first token has no prediction)."
             f"{smoothing_note}</p>\n"
             f"<img src='entropy_trace.png' style='max-width: 100%; height: auto;' />\n"
             f"<p>Prompt length: {prompt_len} tokens, total length: {len(token_ids)} tokens.</p>\n"
-            f"<p>Pearson r (temp vs entropy, generated tokens): "
-            f"{'n/a (no temp head)' if aligned_temps is None else ('n/a' if pearson_r is None else f'{pearson_r:.4f}')} "
-            f"{'' if aligned_temps is None else (f'(n={pearson_n})' if pearson_n else '')}</p>\n"
-            "<h3>Generated Tokens (colored by base LLM entropy)</h3>\n"
-            f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
-            f"&nbsp; (hover a token for exact value)</div>\n"
+            "<h3>Generated Tokens</h3>\n"
+            "<div class='controls'>\n"
+            "<label for='color-mode'>Color by</label>\n"
+            "<select id='color-mode'>\n"
+            "<option value='entropy' selected>Base LLM entropy</option>\n"
+            f"<option value='temp' {'disabled' if not has_temp else ''}>SimpleDeco predicted temperature</option>\n"
+            f"<option value='delta' {'disabled' if not has_temp else ''}>Delta (|temp - entropy|)</option>\n"
+            "</select>\n"
+            "</div>\n"
+            f"<div class='legend'>Min: <span id='legend-min'>{gen_min:.4f}</span> &nbsp; "
+            f"Max: <span id='legend-max'>{gen_max:.4f}</span> &nbsp; "
+            "(hover a token for exact value)</div>\n"
             f"<div class='token-box'>{generation_html}</div>\n"
+            "<script>\n"
+            "const modeSelect = document.getElementById('color-mode');\n"
+            "const legendMin = document.getElementById('legend-min');\n"
+            "const legendMax = document.getElementById('legend-max');\n"
+            "const tokens = Array.from(document.querySelectorAll('.tok'));\n"
+            f"const ranges = {{\n"
+            f"  entropy: {{min: {gen_min:.6f}, max: {gen_max:.6f}}},\n"
+            f"  temp: {{min: {gen_temp_min:.6f}, max: {gen_temp_max:.6f}}},\n"
+            f"  delta: {{min: {gen_delta_min:.6f}, max: {gen_delta_max:.6f}}},\n"
+            "};\n"
+            "function applyMode(mode) {\n"
+            "  tokens.forEach((tok) => {\n"
+            "    const key = `color${mode[0].toUpperCase()}${mode.slice(1)}`;\n"
+            "    const color = tok.dataset[key] || '#E0E0E0';\n"
+            "    tok.style.backgroundColor = color;\n"
+            "  });\n"
+            "  if (ranges[mode]) {\n"
+            "    legendMin.textContent = ranges[mode].min.toFixed(4);\n"
+            "    legendMax.textContent = ranges[mode].max.toFixed(4);\n"
+            "  }\n"
+            "}\n"
+            "modeSelect.addEventListener('change', (event) => applyMode(event.target.value));\n"
+            "applyMode(modeSelect.value);\n"
+            "</script>\n"
             "</body></html>\n"
         )
 
