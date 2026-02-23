@@ -7,6 +7,7 @@ Requires merged AutoDeco model, not just the small add-on head file!
 from __future__ import annotations
 
 import argparse
+import bisect
 import html
 import json
 import math
@@ -269,6 +270,8 @@ def main() -> None:
     parser.add_argument("--user_suffix", default=None)
     parser.add_argument("--smooth_window", type=int, default=0)
     parser.add_argument("--output_dir", default="figure")
+    parser.add_argument("--comparison_top_k", type=int, default=12)
+    parser.add_argument("--comparison_context_lines", type=int, default=1)
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -421,6 +424,15 @@ def main() -> None:
                 aligned_temp_entropy[idx] = None
             else:
                 aligned_temp_entropy[idx] = float(val)
+
+    delta_by_idx: List[float | None] = [None] * len(token_ids)
+    if aligned_temp_entropy is not None:
+        for idx in range(len(token_ids)):
+            t = aligned_temp_entropy[idx]
+            e = aligned_entropy[idx]
+            if t is None or e is None:
+                continue
+            delta_by_idx[idx] = abs(t - e)
         if aligned_topk_indices is not None and aligned_topk_probs is not None:
             aligned_topk_indices[idx] = topk_indices[idx - 1]
             aligned_topk_probs[idx] = topk_probs[idx - 1]
@@ -563,6 +575,97 @@ def main() -> None:
             if args.smooth_window > 1:
                 entry["entropy_smoothed"] = aligned_smoothed[idx]
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    output_comparison_path = os.path.join(args.output_dir, "entropy_trace_comparison.txt")
+    prompt_char_end = spans[gen_start][0] if gen_start < len(spans) else len(decoded)
+    prompt_text = decoded[:prompt_char_end]
+    generated_text = decoded[prompt_char_end:]
+    selected_indices: List[int] = []
+    if args.comparison_top_k > 0 and aligned_temp_entropy is not None:
+        candidates: List[Tuple[float, int]] = []
+        for idx in range(gen_start, len(token_ids)):
+            delta_val = delta_by_idx[idx]
+            if delta_val is None:
+                continue
+            candidates.append((delta_val, idx))
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        selected_indices = [idx for _, idx in candidates[: args.comparison_top_k]]
+    selected_set = set(selected_indices)
+    if not selected_indices:
+        notice = ""
+        if aligned_temp_entropy is None:
+            notice = "\n[delta comparison unavailable: no temp head]\n"
+        with open(output_comparison_path, "w", encoding="utf-8") as f:
+            f.write(prompt_text)
+            if not prompt_text.endswith("\n"):
+                f.write("\n")
+            if notice:
+                f.write(notice)
+            f.write(generated_text)
+    else:
+        context_lines = max(0, args.comparison_context_lines)
+        base_lines = generated_text.splitlines()
+        keep_lines: set[int] = set()
+        for idx in selected_indices:
+            token_start_rel = spans[idx][0] - prompt_char_end
+            line_idx = generated_text.count("\n", 0, token_start_rel)
+            for line_id in range(line_idx - context_lines, line_idx + context_lines + 1):
+                if 0 <= line_id < len(base_lines):
+                    keep_lines.add(line_id)
+
+        decorated_chunks: List[str] = []
+        for idx in range(gen_start, len(token_ids)):
+            token_text = decoded[spans[idx][0]:spans[idx][1]]
+            if idx in selected_set:
+                token_disp = _display_token(token_text).replace("'", "\\'")
+                parts = [f"picked token: '{token_disp}'"]
+                entropy_val = aligned_entropy[idx]
+                temp_val = aligned_temps[idx] if aligned_temps is not None else None
+                temp_entropy_val = aligned_temp_entropy[idx] if aligned_temp_entropy is not None else None
+                delta_val = delta_by_idx[idx]
+                if entropy_val is not None:
+                    parts.append(f"entropy: {entropy_val:.4f}")
+                if temp_entropy_val is not None:
+                    parts.append(f"entropy@temp: {temp_entropy_val:.4f}")
+                if delta_val is not None:
+                    parts.append(f"delta: {delta_val:.4f}")
+                if temp_val is not None:
+                    parts.append(f"temp: {temp_val:.4f}")
+                if aligned_topk_indices is not None and aligned_topk_probs is not None:
+                    topk_ids = aligned_topk_indices[idx]
+                    topk_ps = aligned_topk_probs[idx]
+                    if topk_ids is not None and topk_ps is not None:
+                        top5_items = []
+                        for tok_id, prob in zip(topk_ids, topk_ps):
+                            tok = tokenizer.decode([tok_id], skip_special_tokens=False)
+                            tok_disp = _display_token(tok).replace("'", "\\'")
+                            top5_items.append(f"'{tok_disp}' ({prob:.4f})")
+                        if top5_items:
+                            parts.append(f"top5: {', '.join(top5_items)}")
+                annotation = "{{{" + " | ".join(parts) + "}}}"
+                decorated_chunks.append(annotation)
+            decorated_chunks.append(token_text)
+
+        decorated_text = "".join(decorated_chunks)
+        decorated_lines = decorated_text.splitlines()
+        summary_lines: List[str] = []
+        skipping = False
+        for idx, line in enumerate(decorated_lines):
+            if idx in keep_lines:
+                summary_lines.append(line)
+                skipping = False
+            else:
+                if not skipping:
+                    summary_lines.append("...")
+                    skipping = True
+        summary_text = "\n".join(summary_lines)
+        if decorated_text.endswith("\n"):
+            summary_text += "\n"
+        with open(output_comparison_path, "w", encoding="utf-8") as f:
+            f.write(prompt_text)
+            if not prompt_text.endswith("\n"):
+                f.write("\n")
+            f.write(summary_text)
 
     fig, ax = plt.subplots(figsize=(14, 4))
     plot_entropy = [t if t is not None else float("nan") for t in aligned_entropy]
