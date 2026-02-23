@@ -424,6 +424,10 @@ def main() -> None:
                 aligned_temp_entropy[idx] = None
             else:
                 aligned_temp_entropy[idx] = float(val)
+        if aligned_topk_indices is not None and aligned_topk_probs is not None:
+            if topk_indices is not None and topk_probs is not None and idx - 1 < len(topk_indices):
+                aligned_topk_indices[idx] = topk_indices[idx - 1]
+                aligned_topk_probs[idx] = topk_probs[idx - 1]
 
     delta_by_idx: List[float | None] = [None] * len(token_ids)
     if aligned_temp_entropy is not None:
@@ -433,9 +437,6 @@ def main() -> None:
             if t is None or e is None:
                 continue
             delta_by_idx[idx] = abs(t - e)
-        if aligned_topk_indices is not None and aligned_topk_probs is not None:
-            aligned_topk_indices[idx] = topk_indices[idx - 1]
-            aligned_topk_probs[idx] = topk_probs[idx - 1]
 
     decoded = ""
     spans: List[Tuple[int, int]] = []
