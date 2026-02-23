@@ -1,0 +1,748 @@
+<|im_start|>user
+You are to implement a simple key-value store in Python that interacts via standard input and output. The key-value store should support the following commands, one per line:
+
+- SET key value: Sets the value for the given key.
+- GET key: Retrieves and prints the value associated with the key, or prints None if the key does not exist.
+- DELETE key: Deletes the key from the store if it exists.
+- SAVE filename: Saves the current key-value store to a given filename in JSON format.
+- LOAD filename: Loads the key-value store from a given filename (overwriting the current store). If the file does not exist, clears the store.
+- EXIT: Terminates the program.
+
+Input:
+Lines of commands described above.
+
+Output:
+For GET, output the value or None. For other commands, output nothing.
+
+Example Input:
+SET name Alice
+GET name
+DELETE name
+GET name
+EXIT
+
+Example Output:
+Alice
+None<|im_end|>
+<|im_start|>assistant
+<think>
+We are going to create a simple key-value store in Python.
+ We'll use a dictionary to store the key-value pairs.
+ Steps:
+ 1. Initialize an empty dictionary for the store.
+ 2. We'll read lines from standard input until we get the command "EXIT".
+ 3. For each line, split the command to get the command and the arguments.
+
+ Important: The commands are given as one per line.
+
+ We have to handle:
+   - SET key value: split into tokens, the first token is "SET", then key, then value.
+   - GET key: tokens: ['GET', 'key']
+   - DELETE key: tokens: ['DELETE', 'key']
+   - SAVE filename: tokens: ['SAVE', 'filename']
+   - LOAD filename: tokens: ['LOAD', 'filename']
+   - EXIT: tokens: ['EXIT']
+
+ Note: The value for SET might have spaces? But the problem says "one per line" and the example doesn't have spaces in value.
+ However, the problem states: "SET key value" meaning the value is a single token? But the problem says: "the value for the given key".
+
+ Let's read the problem: "SET key value" - so the value is a single word? But the example: "SET name Alice" -> value is "Alice", which is one word.
+
+ However, the problem does not specify that the value is without spaces. But the example input is without spaces.
+
+ Since the problem says: "one per line", and the commands are given as one line per command, we can assume that the value for SET is a single token (without spaces) because if it had spaces, the command would be broken.
+
+ But the problem says: "The key-value store should support the following commands, one per line"
+
+ We'll design for the case where the value has no spaces. If we want to support spaces in the value, we would have to split differently. However, the problem does not specify that.
+
+ Let's stick to the problem: the example input has no spaces in the value.
+
+ Approach for SET:
+   We split the line -> tokens = line.split()
+   tokens[0] should be "SET", then tokens[1] is the key, and tokens[2] is the value.
+
+ But what if the value has spaces? The problem says: "the value" (singular) and the example doesn't have spaces.
+
+ Since the problem says "simple", and the example doesn't have spaces, we assume the value is a single word (without spaces).
+
+ However, to be safe, we can note that the problem says: "the value" for SET. In the example, it's one word.
+
+ Let's assume the input for SET has exactly 3 tokens.
+
+ Similarly, for GET and DELETE, we have 2 tokens.
+
+ Steps in code:
+
+   store = {}   # our dictionary
+
+   while True:
+        line = input().strip()
+        if not line:
+            continue   # skip empty lines
+
+        tokens = line.split()
+        cmd = tokens[0]
+
+        if cmd == "SET":
+            # tokens should be [ "SET", key, value ]
+            if len(tokens) < 3:
+                # Not enough tokens? We'll print nothing? But problem says: for other commands output nothing.
+                # However, the problem doesn't specify error handling. We assume valid input.
+                # So we skip if not enough tokens? Or just ignore? Let's assume the input is well-formed.
+                pass
+            else:
+                key = tokens[1]
+                value = tokens[2]
+                store[key] = value
+
+        elif cmd == "GET":
+            if len(tokens) < 2:
+                # If no key, then we output None? But the problem says: "GET key" -> so we expect a key.
+                # We'll output None if no key? But the problem says: "retrieves and prints the value associated with the key, or prints None if the key does not exist"
+                # So if there's no key provided, then we output None? Actually, the command is "GET key", so we require one key.
+                # We'll assume at least one token for the key.
+                pass
+            else:
+                key = tokens[1]
+                if key in store:
+                    print(store[key])
+                else:
+                    print(None)
+
+        elif cmd == "DELETE":
+            if len(tokens) < 2:
+                pass
+            else:
+                key = tokens[1]
+                if key in store:
+                    del store[key]
+
+        elif cmd == "SAVE":
+            if len(tokens) < 2:
+                pass
+            else:
+                filename = tokens[1]
+                # Save the store to a JSON file
+                import json
+                with open(filename, 'w') as f:
+                    json.dump(store, f)
+
+        elif cmd == "LOAD":
+            if len(tokens) < 2:
+                pass
+            else:
+                filename = tokens[1]
+                try:
+                    with open(filename, 'r') as f:
+                        store = json.load(f)
+                except FileNotFoundError:
+                    # If the file doesn't exist, we clear the store (as per problem: "clears the store")
+                    store = {}
+                except Exception as e:
+                    # We'll just do nothing? Or print an error? The problem says: for other commands output nothing.
+                    # But the problem doesn't specify error handling. We'll assume the file exists and is valid.
+                    # However, the problem says: "If the file does not exist, clears the store", so we don't have to do anything for errors?
+                    # We'll handle only the FileNotFoundError and set store to {} for that.
+                    # But the problem says: "clears the store" only if the file doesn't exist. So we do:
+                    #   if file not found -> clear the store (so we set store = {})
+                    #   else, load the file and overwrite the current store.
+                    # So we can do: if the file doesn't exist, we set store to {} (but the problem says: "clears the store", meaning the current store is replaced by an empty one).
+                    # We already handled FileNotFoundError above? Actually, we did a try-except for FileNotFoundError.
+                    # But note: the problem says: "If the file does not exist, clears the store". So we set store to {} in that case.
+                    # We did that in the except block? Actually, we did:
+                    #   except FileNotFoundError: store = {}
+                    # But what about other exceptions? The problem doesn't specify. We'll ignore other exceptions and do nothing? 
+                    # However, the problem says: "LOAD filename: Loads the key-value store from a given filename (overwriting the current store). If the file does not exist, clears the store."
+                    # So we only clear the store if the file doesn't exist. For other errors, we don't do anything? But the problem doesn't specify.
+                    # Since the problem is simple, we'll just handle the FileNotFoundError and ignore other exceptions (so the store remains the same).
+                    # But the problem says: the program should be simple. We'll do:
+                    #   try to load, if it fails (file not found) then clear the store. Otherwise, if it loads, then we overwrite.
+                    # We did that above? Actually, we did:
+                    #   try: ... 
+                    #   except FileNotFoundError: store = {}
+                    # But note: the problem says "clears the store" meaning we set store to an empty dict. We do that in the except block.
+                    # However, the problem doesn't say what to do for other exceptions. We'll assume the file is either there or not, and if it's not there we clear.
+                    # So we can do without the try-except for other exceptions? But the problem says: "the file does not exist" -> clear. So we only clear for FileNotFoundError.
+                    # We'll do: 
+                    #   try:
+                    #       store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}
+                    #   else:
+                    #       # we don't do anything because we overwrite the current store? Actually, we are reassigning store to the loaded dict.
+                    #       pass
+                    # But note: we are doing `store = json.load(f)` which overwrites the current store? Yes, because we have a new store.
+                    # However, in the code above, we did: `store = json.load(f)` -> that would change the store to the loaded dict.
+                    # But the problem says: "overwriting the current store". So we want to replace the current store with the loaded one.
+                    # We'll do:
+                    #   try:
+                    #       with open(filename, 'r') as f:
+                    #           store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}   # clear the store
+                    # But note: the problem says "clears the store" meaning set to empty. So we do that.
+
+                    # However, we already did the try-except above? Actually, in the code above we did:
+                    #   try: ... 
+                    #   except FileNotFoundError: store = {}
+                    # But wait, in the code we wrote: 
+                    #   try:
+                    #       with open(filename, 'r') as f:
+                    #           store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}
+                    # But that's not exactly: because the `store` variable we are using is the same one. We want to set the global store to the loaded dict (if exists) or to {} (if not).
+                    # We'll do that.
+
+                    # However, in the above code we did not handle the exception for the file not found? We did a try-except for FileNotFoundError, but what about other exceptions? 
+                    # The problem doesn't specify, so we'll do only the FileNotFoundError and ignore others (so the store remains as it was, but that's not what the problem says). 
+                    # But the problem says: "If the file does not exist, clears the store". So we only clear for file not found. For other errors, we don't do anything? 
+                    # Actually, the problem doesn't specify, so we'll assume the file is either there or not. We'll do:
+
+                    #   try:
+                    #       with open(filename, 'r') as f:
+                    #           store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}
+                    #   except Exception as e:
+                    #       # do nothing? or print? The problem says: for other commands output nothing. So we don't print.
+                    #       pass
+
+                    # But the problem says: "the file does not exist" -> clear. So we do the above.
+
+                    # We'll adjust: we'll do the try-except only for FileNotFoundError? Actually, the problem says: "if the file does not exist", so we only care about that.
+
+                    # Since the problem is simple, we'll do:
+
+                    #   try:
+                    #       with open(filename, 'r') as f:
+                    #           store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}
+
+                    # But note: the problem says "clears the store", meaning we set the current store to empty. So we do that.
+
+                    # However, the above code in the LOAD branch already has a try-except? Actually, we wrote:
+                    #   try:
+                    #       with open(filename, 'r') as f:
+                    #           store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}
+                    #   ... but wait, we didn't write the except block above? We did an empty except? 
+
+                    # Let me rewrite the LOAD part:
+
+                    #   try:
+                    #       with open(filename, 'r') as f:
+                    #           store = json.load(f)
+                    #   except FileNotFoundError:
+                    #       store = {}
+
+                    # But note: the problem says "clears the store" meaning we set the store to empty. So we do that.
+
+                    # However, we have to be cautious: if the file exists but the JSON is invalid, then we get an exception. The problem doesn't specify, so we assume valid JSON.
+
+        elif cmd == "EXIT":
+            break
+
+ But wait: the problem says that for GET, we output the value or None. We do that.
+
+ However, note: the problem says "For GET, output the value or None". We output the string "None" (with quotes) for None? 
+ Actually, in Python, when we print(None) it prints "None" (without quotes). But the problem example output is:
+        Alice
+        None
+
+ So we are good.
+
+ But note: the problem says "None" (the string "None")? Actually, in Python, `print(None)` outputs the string "None" (without quotes). 
+ However, the problem example output is "None" (without quotes) but the example output is written as:
+
+        Example Output:
+          Alice
+          None
+
+ So we output the string "None" (without quotes) for the missing key.
+
+ Implementation:
+
+   We'll do:
+
+        if key in store:
+            print(store[key])
+        else:
+            print(None)
+
+ But note: the problem says: "prints None" (the string "None" without quotes? Actually, in the example output, it's written as "None", meaning the word None).
+
+ However, in Python, `print(None)` outputs the string "None" (without quotes). So that's what we want.
+
+ Important: We must import json for SAVE and LOAD.
+
+ But note: we are reading from stdin until we get "EXIT".
+
+ However, we have to be cautious: the input might have multiple lines.
+
+ Let's code accordingly.
+
+ Steps:
+
+   - Import json at the top (but note: we only need it for SAVE and LOAD, so we import when we use it? or at the top? We'll import at the top of the file).
+
+   - We'll have a main loop.
+
+   - We'll read lines until we get "EXIT".
+
+   - We have to handle the case when the input ends? The problem says: input is lines of commands.
+
+   - We assume the input ends with "EXIT".
+
+ Code structure:
+
+   import json
+
+   store = {}
+
+   while True:
+        try:
+            line = input().strip()
+        except EOFError:
+            break
+
+        if not line:
+            continue
+
+        tokens = line.split()
+        cmd = tokens[0]
+
+        if cmd == "SET":
+            if len(tokens) >= 3:
+                key = tokens[1]
+                value = tokens[2]
+                store[key] = value
+
+        elif cmd == "GET":
+            if len(tokens) >= 2:
+                key = tokens[1]
+                if key in store:
+                    print(store[key])
+                else:
+                    print(None)
+
+        elif cmd == "DELETE":
+            if len(tokens) >= 2:
+                key = tokens[1]
+                if key in store:
+                    del store[key]
+
+        elif cmd == "SAVE":
+            if len(tokens) >= 2:
+                filename = tokens[1]
+                with open(filename, 'w') as f:
+                    json.dump(store, f)
+
+        elif cmd == "LOAD":
+            if len(tokens) >= 2:
+                filename = tokens[1]
+                try:
+                    with open(filename, 'r') as f:
+                        store = json.load(f)
+                except FileNotFoundError:
+                    store = {}   # clear the store
+
+        elif cmd == "EXIT":
+            break
+
+   But note: the problem says "EXIT" terminates the program. We break the loop.
+
+ However, the problem says: "Input: Lines of commands described above."
+
+ We assume that the input ends with "EXIT", but what if there's an EOF before EXIT? The problem doesn't specify. We'll handle EOF as break.
+
+ But the problem says: the input is as described. We'll assume we get the commands until "EXIT".
+
+ Let's test with the example:
+
+        Input:
+          SET name Alice
+          GET name
+          DELETE name
+          GET name
+          EXIT
+
+        Steps:
+          Line1: "SET name Alice" -> tokens = ['SET','name','Alice'] -> store: {'name':'Alice'}
+          Line2: "GET name" -> tokens = ['GET','name'] -> print(store['name']) -> 'Alice'
+          Line3: "DELETE name" -> tokens = ['DELETE','name'] -> delete 'name'
+          Line4: "GET name" -> tokens = ['GET','name'] -> print(None)
+          Line5: "EXIT" -> break.
+
+        Output: 
+            Alice
+            None
+
+        So we output two lines: "Alice" and "None".
+
+        This matches.
+
+ However, note: the problem says "For other commands, output nothing". So we don't output anything for SET, DELETE, SAVE, LOAD, and EXIT.
+
+ One more note: the problem says "SAVE filename" saves in JSON format. We use json.dump which by default uses pretty printing? 
+ But the problem doesn't specify the JSON format (it says "JSON format"). The standard is to use the minimal representation? 
+ Actually, the problem doesn't specify. We'll use the standard json.dump which by default uses the most compact representation.
+
+ But note: the problem says "in JSON format". We can use `json.dump` without pretty printing.
+
+ However, the problem doesn't require pretty printing. So we do:
+
+        json.dump(store, f)
+
+ This writes the JSON without extra spaces.
+
+ Let's code accordingly.
+
+ But note: the problem says "simple", so we do the minimal.
+
+ Implementation:
+
+   We'll write the code as described.
+
+   However, we must be cautious: the problem says "the key-value store" is stored as a dictionary.
+
+   We assume the keys are strings and the values are strings (as per the example).
+
+   The problem doesn't specify the type of values, but the example is string.
+
+   We'll store everything as strings.
+
+   For the LOAD and SAVE, we are saving as JSON strings. So the values are strings.
+
+   This is acceptable.
+
+ Let's code.
+
+ Note: We must import json at the top.
+
+ Also, we handle the case when the input ends without EXIT? The problem says the input ends with EXIT? But the problem says: "Input: Lines of commands described above."
+
+ We'll assume the input is well-formed and ends with "EXIT".
+
+ But to be safe, we break on EOF.
+
+ Code:
+
+   import json
+
+   store = {}
+
+   while True:
+        try:
+            line = input().strip()
+        except EOFError:
+            break
+
+        if not line:
+            continue
+
+        tokens = line.split()
+        cmd = tokens[0]
+
+        if cmd == "SET":
+            if len(tokens) >= 3:
+                key = tokens[1]
+                value = tokens[2]
+                store[key] = value
+
+        elif cmd == "GET":
+            if len(tokens) >= 2:
+                key = tokens[1]
+                if key in store:
+                    print(store[key])
+                else:
+                    print(None)
+
+        elif cmd == "DELETE":
+            if len(tokens) >= 2:
+                key = tokens[1]
+                if key in store:
+                    del store[key]
+
+        elif cmd == "SAVE":
+            if len(tokens) >= 2:
+                filename = tokens[1]
+                try:
+                    with open(filename, 'w') as f:
+                        json.dump(store, f)
+                except Exception as e:
+                    # The problem doesn't specify what to do on error for SAVE? 
+                    # But the problem says: "Saves the current key-value store to a given filename in JSON format"
+                    # We'll assume the file can be written. If not, we ignore? 
+                    # However, the problem doesn't specify error handling. We'll do nothing on error (so the command is executed but if there's an error we don't output anything).
+                    pass
+
+        elif cmd == "LOAD":
+            if len(tokens) >= 2:
+                filename = tokens[1]
+                try:
+                    with open(filename, 'r') as f:
+                        store = json.load(f)
+                except FileNotFoundError:
+                    store = {}
+                # Note: we don't handle other exceptions? The problem says: "If the file does not exist, clears the store". 
+                # So we only clear for FileNotFoundError. For other exceptions, we leave the store as it is (so no change) and that's acceptable per the problem? 
+                # But the problem doesn't specify. We'll do as above.
+
+        elif cmd == "EXIT":
+            break
+
+ However, note: in the LOAD command, we are reassigning `store` to the loaded dictionary. But the problem says: "overwriting the current store". 
+ This reassignment is correct.
+
+ But what if there's an exception in the LOAD? We don't want to crash. We do nothing for other exceptions? 
+ The problem says: "LOAD filename: Loads the key-value store from a given filename (overwriting the current store). If the file does not exist, clears the store."
+ So we only clear for file not found. For other exceptions, we do nothing (so the store remains as it was). 
+
+ We'll do that.
+
+ Let's run the example through the code.
+
+ But note: the problem says "simple". We'll write the code as above.
+
+ One more note: the problem says "the key-value store" is implemented in Python. We are using a dict.
+
+ We'll write the code accordingly.
+
+ However, we have to be cautious: in the LOAD command, we do:
+
+        try:
+            with open(filename, 'r') as f:
+                store = json.load(f)
+        except FileNotFoundError:
+            store = {}
+
+ But what if the file exists but the JSON is invalid? Then we get a JSONDecodeError. We don't handle that. 
+ The problem doesn't specify, so we assume the JSON is valid.
+
+ We'll do as above.
+
+ Code:
+
+   Let me write the entire code.
+
+   Note: We are not printing anything for SET, DELETE, SAVE, LOAD, and EXIT (except the GET command).
+
+   We break on "EXIT".
+
+   We assume the input is given via stdin.
+
+   We'll write:
+
+        import json
+
+        store = {}
+
+        while True:
+            try:
+                line = input().strip()
+            except EOFError:
+                break
+
+            if not line:
+                continue
+
+            tokens = line.split()
+            cmd = tokens[0]
+
+            if cmd == "SET":
+                if len(tokens) >= 3:
+                    key = tokens[1]
+                    value = tokens[2]
+                    store[key] = value
+
+            elif cmd == "GET":
+                if len(tokens) >= 2:
+                    key = tokens[1]
+                    if key in store:
+                        print(store[key])
+                    else:
+                        print(None)
+
+            elif cmd == "DELETE":
+                if len(tokens) >= 2:
+                    key = tokens[1]
+                    if key in store:
+                        del store[key]
+
+            elif cmd == "SAVE":
+                if len(tokens) >= 2:
+                    filename = tokens[1]
+                    try:
+                        with open(filename, 'w') as f:
+                            json.dump(store, f)
+                    # We don't handle exceptions for SAVE? The problem doesn't specify, so we do nothing on error.
+                    # But the problem says: "Saves the current key-value store to a given filename in JSON format", so if it fails we don't output anything and the command is not fully executed? 
+                    # However, the problem doesn't specify error handling. We'll skip the exception for now.
+
+            elif cmd == "LOAD":
+                if len(tokens) >= 2:
+                    filename = tokens[1]
+                    try:
+                        with open(filename, 'r') as f:
+                            store = json.load(f)
+                    except FileNotFoundError:
+                        store = {}
+
+            elif cmd == "EXIT":
+                break
+
+ But note: the problem says "the key-value store" is implemented as described.
+
+ However, the problem does not require error handling for invalid commands? We assume the input is one of the commands.
+
+ We'll assume the input is well-formed.
+
+ Let's run the example:
+
+        Input: 
+            SET name Alice
+            GET name
+            DELETE name
+            GET name
+            EXIT
+
+        Output: 
+            Alice
+            None
+
+        This matches.
+
+ One more test: 
+        LOAD afile   (if afile doesn't exist, we set store to {})
+
+        Then we do: GET somekey -> prints None.
+
+        Then we do: SET somekey "hello"
+        Then we do: GET somekey -> prints "hello"
+
+        Then we do: SAVE output.json -> writes to output.json
+
+        Then we do: LOAD output.json -> should load the store (with one key: somekey -> "hello")
+
+        Then we do: GET somekey -> prints "hello"
+
+        Then we do: EXIT
+
+        This should work.
+
+ However, note: in the LOAD command, we do:
+
+        store = json.load(f)
+
+        So the store becomes the loaded dictionary.
+
+        Then when we do GET, we get the value.
+
+ We'll code accordingly.
+
+ Let's write the code.
+
+ Note: We must be cautious for the case when the value has spaces? The problem says: the value is a single token (without spaces). 
+ So we don't handle multi-word values.
+
+ If the problem intended multi-word values, it would have specified. But the problem says: "the value" (singular) and the example is one word.
+
+ We'll assume single words.
+
+ Code:
+</think>
+
+To solve this problem, we need to implement a simple key-value store that processes commands from standard input and outputs results for specific commands. The key-value store supports five commands: `SET`, `GET`, `DELETE`, `SAVE`, `LOAD`, and `EXIT`. The solution involves reading commands line by line, processing them, and maintaining a dictionary to store key-value pairs.
+
+### Approach
+1. **Initialization**: Start with an empty dictionary to hold the key-value pairs.
+2. **Command Processing**: For each line of input:
+   - **`SET key value`**: Add or update the key-value pair in the dictionary.
+   - **`GET key`**: Retrieve and print the value associated with the key or `None` if the key does not exist.
+   - **`DELETE key`**: Remove the key from the dictionary if it exists.
+   - **`SAVE filename`**: Save the current dictionary to a JSON file with the given filename.
+   - **`LOAD filename`**: Load the dictionary from a JSON file with the given filename. If the file does not exist, clear the dictionary.
+   - **`EXIT`**: Terminate the program.
+3. **Error Handling**: The solution handles basic cases (like file not found for `LOAD`) without additional error messages, as specified. It assumes valid input for commands (no extra spaces in values for `SET`).
+4. **Input/Output**: The program reads from standard input and writes to standard output only for `GET` commands.
+
+### Solution Code
+```python
+import json
+
+def main():
+    store = {}
+    while True:
+        try:
+            line = input().strip()
+        except EOFError:
+            break
+        
+        if not line:
+            continue
+        
+        tokens = line.split()
+        cmd = tokens[0]
+        
+        if cmd == "SET":
+            if len(tokens) >= 3:
+                key = tokens[1]
+                value = tokens[2]
+                store[key] = value
+                
+        elif cmd == "GET":
+            if len(tokens) >= 2:
+                key = tokens[1]
+                if key in store:
+                    print(store[key])
+                else:
+                    print(None)
+                    
+        elif cmd == "DELETE":
+            if len(tokens) >= 2:
+                key = tokens[1]
+                if key in store:
+                    del store[key]
+                    
+        elif cmd == "SAVE":
+            if len(tokens) >= 2:
+                filename = tokens[1]
+                try:
+                    with open(filename, 'w') as f:
+                        json.dump(store, f)
+                except Exception:
+                    pass
+                    
+        elif cmd == "LOAD":
+            if len(tokens) >= 2:
+                filename = tokens[1]
+                try:
+                    with open(filename, 'r') as f:
+                        store = json.load(f)
+                except FileNotFoundError:
+                    store = {}
+                    
+        elif cmd == "EXIT":
+            break
+
+if __name__ == "__main__":
+    main()
+```
+
+### Explanation
+1. **Initialization**: The `store` dictionary is initialized to keep track of key-value pairs.
+2. **Reading Input**: The loop reads each line from standard input until an `EOFError` (end of file) occurs or the `EXIT` command is encountered.
+3. **Command Handling**:
+   - **`SET`**: Splits the input line into tokens. The second token is the key, and the third is the value. The key-value pair is added to the dictionary.
+   - **`GET`**: Checks if the key exists in the dictionary. If it does, the value is printed; otherwise, `None` is printed.
+   - **`DELETE`**: Removes the specified key from the dictionary if it exists.
+   - **`SAVE`**: Writes the current dictionary to a JSON file specified by the filename. Any errors during file writing are ignored.
+   - **`LOAD`**: Reads the dictionary from a JSON file specified by the filename. If the file does not exist, the dictionary is cleared.
+   - **`EXIT`**: Breaks the loop to terminate the program.
+4. **Output**: The program only prints results for `GET` commands, as specified. All other commands do not produce any output.
+
+This solution efficiently handles the specified commands with minimal error handling, ensuring it meets the problem requirements while being straightforward and easy to understand. The use of JSON for saving and loading ensures compatibility with standard JSON formats.<|im_end|>
