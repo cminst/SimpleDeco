@@ -494,12 +494,12 @@ def main() -> None:
             if aligned_topk_indices is not None and aligned_topk_probs is not None:
                 topk_ids = aligned_topk_indices[idx]
                 topk_ps = aligned_topk_probs[idx]
-                if topk_ids is not None and topk_ps is not None:
-                    tip_lines.append("top5:")
-                    for tok_id, prob in zip(topk_ids, topk_ps):
-                        tok = tokenizer.decode([tok_id], skip_special_tokens=False)
-                        tok_disp = _display_token(tok)
-                        tip_lines.append(f"'{tok_disp}'  {prob:.4f}")
+            if topk_ids is not None and topk_ps is not None:
+                tip_lines.append("top5:")
+                for tok_id, prob in zip(topk_ids, topk_ps):
+                    tok = tokenizer.decode([tok_id], skip_special_tokens=False)
+                    tok_disp = _display_token(tok)
+                    tip_lines.append(f"'{tok_disp}'  {prob:.4f}")
         temp_value = aligned_temps[idx] if aligned_temps is not None else None
         if temp_value is None:
             temp_color = "#E0E0E0"
@@ -635,14 +635,14 @@ def main() -> None:
                 if aligned_topk_indices is not None and aligned_topk_probs is not None:
                     topk_ids = aligned_topk_indices[idx]
                     topk_ps = aligned_topk_probs[idx]
-                    if topk_ids is not None and topk_ps is not None:
-                        top5_items = []
-                        for tok_id, prob in zip(topk_ids, topk_ps):
-                            tok = tokenizer.decode([tok_id], skip_special_tokens=False)
-                            tok_disp = _display_token(tok).replace("'", "\\'")
-                            top5_items.append(f"'{tok_disp}' ({prob:.4f})")
-                        if top5_items:
-                            parts.append(f"top5: {', '.join(top5_items)}")
+                if topk_ids is not None and topk_ps is not None:
+                    top5_items = []
+                    for tok_id, prob in zip(topk_ids, topk_ps):
+                        tok = tokenizer.decode([tok_id], skip_special_tokens=False)
+                        tok_disp = _display_token(tok).replace("'", "\\'")
+                        top5_items.append(f"'{tok_disp}' ({prob:.4f})")
+                    if top5_items:
+                        parts.append(f"top5: {', '.join(top5_items)}")
                 annotation = "{{{" + " | ".join(parts) + "}}}"
                 decorated_chunks.append(annotation)
             decorated_chunks.append(token_text)
