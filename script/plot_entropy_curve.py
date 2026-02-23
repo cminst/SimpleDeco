@@ -369,11 +369,29 @@ def main() -> None:
     if entropies is None:
         raise RuntimeError("Model did not return logits for entropy computation.")
     temps = None
+    temp_entropies = None
     temp_logits = getattr(outputs, "temp_logits", None)
     if temp_logits is not None:
-        temps = temp_logits.squeeze(-1).detach().cpu().tolist()
+        temps_tensor = temp_logits.squeeze(-1).float()
+        temps = temps_tensor.detach().cpu().tolist()
         if temps and isinstance(temps[0], list):
             temps = temps[0]
+        if logits is not None:
+            if temps_tensor.dim() == 2:
+                temps_tensor = temps_tensor.squeeze(0)
+            safe_temps = torch.where(
+                temps_tensor > 0.0,
+                temps_tensor,
+                torch.full_like(temps_tensor, float("nan")),
+            )
+            scaled_logits = logits_f / safe_temps.unsqueeze(-1)
+            log_denom_temp = torch.logsumexp(scaled_logits, dim=-1)
+            log_probs_temp = scaled_logits - log_denom_temp.unsqueeze(-1)
+            probs_temp = torch.exp(log_probs_temp)
+            entropy_temp = -(probs_temp * log_probs_temp).sum(-1)
+            temp_entropies = entropy_temp.squeeze(0).detach().cpu().tolist()
+            if temp_entropies and isinstance(temp_entropies[0], list):
+                temp_entropies = temp_entropies[0]
     smoothed_entropies = _moving_average(entropies, args.smooth_window)
     token_ids = output_ids.tolist()
 
@@ -381,6 +399,9 @@ def main() -> None:
     aligned_entropy: List[float | None] = [None] * len(token_ids)
     aligned_smoothed: List[float | None] = [None] * len(token_ids)
     aligned_temps: List[float | None] | None = [None] * len(token_ids) if temps is not None else None
+    aligned_temp_entropy: List[float | None] | None = (
+        [None] * len(token_ids) if temp_entropies is not None else None
+    )
     aligned_topk_indices: List[List[int] | None] | None = (
         [None] * len(token_ids) if topk_indices is not None else None
     )
@@ -394,6 +415,12 @@ def main() -> None:
             aligned_smoothed[idx] = smoothed_entropies[idx - 1]
         if aligned_temps is not None and temps is not None and idx - 1 < len(temps):
             aligned_temps[idx] = temps[idx - 1]
+        if aligned_temp_entropy is not None and temp_entropies is not None and idx - 1 < len(temp_entropies):
+            val = temp_entropies[idx - 1]
+            if val is None or (isinstance(val, float) and not math.isfinite(val)):
+                aligned_temp_entropy[idx] = None
+            else:
+                aligned_temp_entropy[idx] = float(val)
         if aligned_topk_indices is not None and aligned_topk_probs is not None:
             aligned_topk_indices[idx] = topk_indices[idx - 1]
             aligned_topk_probs[idx] = topk_probs[idx - 1]
@@ -426,9 +453,9 @@ def main() -> None:
     else:
         gen_temp_min, gen_temp_max = 0.0, 1.0
     gen_deltas: List[float] = []
-    if aligned_temps is not None:
+    if aligned_temp_entropy is not None:
         for idx in range(gen_start, len(token_ids)):
-            t = aligned_temps[idx]
+            t = aligned_temp_entropy[idx]
             e = aligned_entropy[idx]
             if t is None or e is None:
                 continue
@@ -468,10 +495,13 @@ def main() -> None:
         else:
             temp_color = _value_to_hex(temp_value, gen_temp_min, gen_temp_max)
             tip_lines.append(f"temp={temp_value:.4f}")
+        temp_entropy_value = aligned_temp_entropy[idx] if aligned_temp_entropy is not None else None
+        if temp_entropy_value is not None:
+            tip_lines.append(f"entropy@temp={temp_entropy_value:.4f}")
         delta_value = None
-        if temp_value is not None and entropy_value is not None:
-            delta_value = abs(temp_value - entropy_value)
-            tip_lines.append(f"delta=|temp-entropy|={delta_value:.4f}")
+        if temp_entropy_value is not None and entropy_value is not None:
+            delta_value = abs(temp_entropy_value - entropy_value)
+            tip_lines.append(f"delta=|entropy@temp-entropy|={delta_value:.4f}")
             delta_color = _value_to_hex(delta_value, gen_delta_min, gen_delta_max)
         else:
             delta_color = "#E0E0E0"
@@ -614,6 +644,7 @@ def main() -> None:
             f"<p>Pearson r (temp vs entropy, generated tokens): {pearson_display} {pearson_suffix}</p>\n"
             "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks."
             " Entropy values are aligned to the token they generate (first token has no prediction)."
+            " Delta uses entropy after applying the predicted temperature to logits."
             f"{smoothing_note}</p>\n"
             f"<img src='entropy_trace.png' style='max-width: 100%; height: auto;' />\n"
             f"<p>Prompt length: {prompt_len} tokens, total length: {len(token_ids)} tokens.</p>\n"
@@ -623,7 +654,7 @@ def main() -> None:
             "<select id='color-mode'>\n"
             "<option value='entropy' selected>Base LLM entropy</option>\n"
             f"<option value='temp' {'disabled' if not has_temp else ''}>SimpleDeco predicted temperature</option>\n"
-            f"<option value='delta' {'disabled' if not has_temp else ''}>Delta (|temp - entropy|)</option>\n"
+            f"<option value='delta' {'disabled' if not has_temp else ''}>Delta (|entropy@temp - entropy|)</option>\n"
             "</select>\n"
             "</div>\n"
             f"<div class='legend'>Min: <span id='legend-min'>{gen_min:.4f}</span> &nbsp; "
