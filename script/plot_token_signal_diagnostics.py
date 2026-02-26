@@ -711,12 +711,25 @@ def main() -> None:
         float(confident_incorrect) / confident_count if confident_count > 0 else None
     )
 
+    auroc_entropy_confident = None
+    auroc_neg_pmax_confident = None
     auroc_tpred_confident = None
-    if used_temp_head and t_pred_arr is not None and confident_count >= args.min_confident_tokens:
-        auroc_tpred_confident = _roc_auc_score(
+    if confident_count > 0:
+        auroc_entropy_confident = _roc_auc_score(
             incorrect_arr[confident_mask],
-            t_pred_arr[confident_mask],
+            entropy_arr[confident_mask],
         )
+        auroc_neg_pmax_confident = _roc_auc_score(
+            incorrect_arr[confident_mask],
+            -p_max_arr[confident_mask],
+        )
+        if used_temp_head and t_pred_arr is not None:
+            auroc_tpred_confident = _roc_auc_score(
+                incorrect_arr[confident_mask],
+                t_pred_arr[confident_mask],
+            )
+    results["auroc_entropy_confident"] = auroc_entropy_confident
+    results["auroc_neg_pmax_confident"] = auroc_neg_pmax_confident
     results["auroc_t_pred_confident"] = auroc_tpred_confident
 
     print(f"AUROC T_pred: {results['auroc_t_pred']}")
@@ -732,8 +745,16 @@ def main() -> None:
         f"incorrect={confident_incorrect} rate="
         f"{results['confident_incorrect_rate']}"
     )
-    if used_temp_head and confident_count >= args.min_confident_tokens:
-        print(f"AUROC T_pred | confident: {auroc_tpred_confident}")
+    if confident_count > 0:
+        print(f"AUROC H | confident:      {auroc_entropy_confident}")
+        print(f"AUROC -Pmax | confident:  {auroc_neg_pmax_confident}")
+        if used_temp_head:
+            print(f"AUROC T_pred | confident: {auroc_tpred_confident}")
+        if confident_count < args.min_confident_tokens:
+            print(
+                f"[!] confident token count ({confident_count}) is below --min_confident_tokens "
+                f"({args.min_confident_tokens}); confident-only AUROCs may be noisy."
+            )
 
     summary_path = os.path.join(args.output_dir, "token_signal_summary.json")
     with open(summary_path, "w", encoding="utf-8") as f:
