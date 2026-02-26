@@ -304,33 +304,149 @@ def _roc_auc_score(y_true: np.ndarray, y_score: np.ndarray) -> float | None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name_or_path", required=True)
-    parser.add_argument("--dataset_name", required=True)
-    parser.add_argument("--dataset_config", default=None)
-    parser.add_argument("--dataset_split", default=None)
-    parser.add_argument("--dataset_text_field", default=None)
-    parser.add_argument("--max_examples", type=int, default=None)
-    parser.add_argument("--max_tokens", type=int, default=None)
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--shuffle", action="store_true")
-    parser.add_argument("--device", default=None)
-    parser.add_argument("--device_map", default=None)
-    parser.add_argument("--torch_dtype", default="bfloat16")
-    parser.add_argument("--trust_remote_code", action="store_true")
-    parser.add_argument("--add_generation_prompt", action="store_true")
-    parser.add_argument("--enable_thinking", action="store_true")
-    parser.add_argument("--strip_assistant", action="store_true")
-    parser.add_argument("--user_suffix", default=None)
-    parser.add_argument("--assistant_only", action="store_true")
-    parser.add_argument("--completion_only", action="store_true")
-    parser.add_argument("--confidence_threshold", type=float, default=0.8)
-    parser.add_argument("--confidence_quantile", type=float, default=None)
-    parser.add_argument("--min_confident_tokens", type=int, default=50)
-    parser.add_argument("--max_scatter_points", type=int, default=20000)
-    parser.add_argument("--output_dir", default="figure/token_signal_diagnostics")
-    parser.add_argument("--log_every", type=int, default=50)
+    parser = argparse.ArgumentParser(
+        description="Run token-level signal diagnostics for a merged AutoDeco model.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--model_name_or_path",
+        required=True,
+        help="Path or Hugging Face model id for the merged AutoDeco/SimpleDeco checkpoint.",
+    )
+    parser.add_argument(
+        "--dataset_name",
+        required=True,
+        help="Dataset name, local JSON file path, or dataset file name under data/.",
+    )
+    parser.add_argument(
+        "--dataset_config",
+        default=None,
+        help="Optional dataset config name passed to datasets.load_dataset().",
+    )
+    parser.add_argument(
+        "--dataset_split",
+        default=None,
+        help="Dataset split to use; if omitted, the first available split is used.",
+    )
+    parser.add_argument(
+        "--dataset_text_field",
+        default=None,
+        help="Text/chat field name; if omitted, the script auto-detects one.",
+    )
+    parser.add_argument(
+        "--max_examples",
+        type=int,
+        default=None,
+        help="Maximum number of dataset examples to process.",
+    )
+    parser.add_argument(
+        "--max_tokens",
+        type=int,
+        default=None,
+        help="Stop once this many valid tokens have been collected.",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=4,
+        help="Number of examples processed together per forward pass.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed used for shuffling and scatter subsampling.",
+    )
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="Shuffle dataset indices before applying max_examples.",
+    )
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Torch device (e.g., cuda:0, cpu) used when --device_map is unset.",
+    )
+    parser.add_argument(
+        "--device_map",
+        default=None,
+        help="Device map passed to from_pretrained (e.g., auto).",
+    )
+    parser.add_argument(
+        "--torch_dtype",
+        default="bfloat16",
+        help="Torch dtype name used when loading the model.",
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help="Allow custom modeling code from remote repositories.",
+    )
+    parser.add_argument(
+        "--add_generation_prompt",
+        action="store_true",
+        help="Add generation prompt when applying the chat template.",
+    )
+    parser.add_argument(
+        "--enable_thinking",
+        action="store_true",
+        help="Enable the tokenizer's thinking mode when supported.",
+    )
+    parser.add_argument(
+        "--strip_assistant",
+        action="store_true",
+        help="Strip trailing assistant turns before applying chat templates.",
+    )
+    parser.add_argument(
+        "--user_suffix",
+        default=None,
+        help="Optional suffix appended to the final user turn or plain text.",
+    )
+    parser.add_argument(
+        "--assistant_only",
+        action="store_true",
+        help="Score only assistant tokens when assistant masks are available.",
+    )
+    parser.add_argument(
+        "--completion_only",
+        action="store_true",
+        help="For prompt/completion rows, score completion tokens only.",
+    )
+    parser.add_argument(
+        "--confidence_threshold",
+        type=float,
+        default=0.8,
+        help="P_max threshold for selecting confident tokens.",
+    )
+    parser.add_argument(
+        "--confidence_quantile",
+        type=float,
+        default=None,
+        help="If set, use this p_max quantile (0, 1) instead of a fixed threshold.",
+    )
+    parser.add_argument(
+        "--min_confident_tokens",
+        type=int,
+        default=50,
+        help="Minimum confident tokens required before confident-only AUROC is computed.",
+    )
+    parser.add_argument(
+        "--max_scatter_points",
+        type=int,
+        default=20000,
+        help="Maximum points to draw in the entropy vs T_pred scatter plot.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default="figure/token_signal_diagnostics",
+        help="Output directory for summaries and generated plots.",
+    )
+    parser.add_argument(
+        "--log_every",
+        type=int,
+        default=50,
+        help="Progress logging frequency in processed examples; use <=0 to disable.",
+    )
     args = parser.parse_args()
 
     if args.confidence_quantile is not None:
