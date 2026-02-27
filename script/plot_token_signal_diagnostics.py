@@ -3,6 +3,7 @@ Token-level diagnostics for SimpleDeco heads using teacher forcing.
 
 Computes:
   - AUROC for T_pred, entropy, and -P_max on incorrect tokens.
+  - AUROC for T_oracle (analytic min-p required temperature) on incorrect tokens.
   - Conditional AUROC for T_pred on confident tokens (P_max > threshold or top quantile).
   - Scatter plot of entropy vs T_pred colored by correctness.
 
@@ -425,6 +426,12 @@ def main() -> None:
         help="If set, use this p_max quantile (0, 1) instead of a fixed threshold.",
     )
     parser.add_argument(
+        "--min_p_ratio",
+        type=float,
+        default=0.05,
+        help="min-p ratio used to compute T_oracle = relu(max_logit - gt_logit) / -log(min_p_ratio).",
+    )
+    parser.add_argument(
         "--min_confident_tokens",
         type=int,
         default=50,
@@ -452,6 +459,10 @@ def main() -> None:
     if args.confidence_quantile is not None:
         if not 0.0 < args.confidence_quantile < 1.0:
             raise ValueError("--confidence_quantile must be in (0, 1).")
+    if not 0.0 < args.min_p_ratio < 1.0:
+        raise ValueError("--min_p_ratio must be in (0, 1).")
+    min_p_ratio = float(min(max(args.min_p_ratio, 1e-6), 1.0 - 1e-6))
+    oracle_denom = float(-math.log(min_p_ratio))
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -507,6 +518,7 @@ def main() -> None:
     t_pred_values: List[float] = []
     entropy_values: List[float] = []
     p_max_values: List[float] = []
+    t_oracle_values: List[float] = []
     incorrect_values: List[int] = []
     assistant_mask_used_examples = 0
     assistant_mask_missing_examples = 0
@@ -581,6 +593,8 @@ def main() -> None:
         probs = torch.exp(log_probs)
         entropy = -(probs * log_probs).sum(-1)
         p_max = torch.exp(logits_f.max(dim=-1).values - log_denom)
+        gt_logits = logits_f.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+        t_oracle = torch.relu(logits_f.max(dim=-1).values - gt_logits) / oracle_denom
         pred_ids = logits_valid.argmax(dim=-1)
         correct = pred_ids == labels_valid
 
@@ -590,13 +604,14 @@ def main() -> None:
             temp_valid = temp_logits[:, :-1, :].squeeze(-1)[valid_mask]
             used_temp_head = True
 
-        finite_mask = torch.isfinite(entropy) & torch.isfinite(p_max)
+        finite_mask = torch.isfinite(entropy) & torch.isfinite(p_max) & torch.isfinite(t_oracle)
         if temp_valid is not None:
             finite_mask &= torch.isfinite(temp_valid)
 
         if finite_mask.any():
             entropy_values.extend(entropy[finite_mask].detach().cpu().tolist())
             p_max_values.extend(p_max[finite_mask].detach().cpu().tolist())
+            t_oracle_values.extend(t_oracle[finite_mask].detach().cpu().tolist())
             incorrect_values.extend((~correct[finite_mask]).to(torch.int).detach().cpu().tolist())
             if temp_valid is not None:
                 t_pred_values.extend(temp_valid[finite_mask].detach().cpu().tolist())
@@ -642,6 +657,8 @@ def main() -> None:
             probs = torch.exp(log_probs)
             entropy = -(probs * log_probs).sum(-1)
             p_max = torch.exp(logits_f.max(dim=-1).values - log_denom)
+            gt_logits = logits_f.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
+            t_oracle = torch.relu(logits_f.max(dim=-1).values - gt_logits) / oracle_denom
             pred_ids = logits_valid.argmax(dim=-1)
             correct = pred_ids == labels_valid
             temp_logits = getattr(outputs, "temp_logits", None)
@@ -649,12 +666,13 @@ def main() -> None:
             if temp_logits is not None:
                 temp_valid = temp_logits[:, :-1, :].squeeze(-1)[valid_mask]
                 used_temp_head = True
-            finite_mask = torch.isfinite(entropy) & torch.isfinite(p_max)
+            finite_mask = torch.isfinite(entropy) & torch.isfinite(p_max) & torch.isfinite(t_oracle)
             if temp_valid is not None:
                 finite_mask &= torch.isfinite(temp_valid)
             if finite_mask.any():
                 entropy_values.extend(entropy[finite_mask].detach().cpu().tolist())
                 p_max_values.extend(p_max[finite_mask].detach().cpu().tolist())
+                t_oracle_values.extend(t_oracle[finite_mask].detach().cpu().tolist())
                 incorrect_values.extend((~correct[finite_mask]).to(torch.int).detach().cpu().tolist())
                 if temp_valid is not None:
                     t_pred_values.extend(temp_valid[finite_mask].detach().cpu().tolist())
@@ -666,6 +684,7 @@ def main() -> None:
 
     entropy_arr = np.asarray(entropy_values, dtype=np.float64)
     p_max_arr = np.asarray(p_max_values, dtype=np.float64)
+    t_oracle_arr = np.asarray(t_oracle_values, dtype=np.float64)
     incorrect_arr = np.asarray(incorrect_values, dtype=np.int64)
     t_pred_arr = np.asarray(t_pred_values, dtype=np.float64) if used_temp_head else None
 
@@ -680,12 +699,15 @@ def main() -> None:
         "assistant_mask_used_examples": int(assistant_mask_used_examples),
         "assistant_mask_missing_examples": int(assistant_mask_missing_examples),
         "used_temp_head": bool(used_temp_head),
+        "min_p_ratio_for_t_oracle": min_p_ratio,
     }
 
     auroc_entropy = _roc_auc_score(incorrect_arr, entropy_arr)
     auroc_neg_pmax = _roc_auc_score(incorrect_arr, -p_max_arr)
+    auroc_t_oracle = _roc_auc_score(incorrect_arr, t_oracle_arr)
     results["auroc_entropy"] = auroc_entropy
     results["auroc_neg_pmax"] = auroc_neg_pmax
+    results["auroc_t_oracle"] = auroc_t_oracle
 
     if used_temp_head and t_pred_arr is not None:
         auroc_tpred = _roc_auc_score(incorrect_arr, t_pred_arr)
@@ -713,6 +735,7 @@ def main() -> None:
 
     auroc_entropy_confident = None
     auroc_neg_pmax_confident = None
+    auroc_t_oracle_confident = None
     auroc_tpred_confident = None
     if confident_count > 0:
         auroc_entropy_confident = _roc_auc_score(
@@ -723,6 +746,10 @@ def main() -> None:
             incorrect_arr[confident_mask],
             -p_max_arr[confident_mask],
         )
+        auroc_t_oracle_confident = _roc_auc_score(
+            incorrect_arr[confident_mask],
+            t_oracle_arr[confident_mask],
+        )
         if used_temp_head and t_pred_arr is not None:
             auroc_tpred_confident = _roc_auc_score(
                 incorrect_arr[confident_mask],
@@ -730,11 +757,13 @@ def main() -> None:
             )
     results["auroc_entropy_confident"] = auroc_entropy_confident
     results["auroc_neg_pmax_confident"] = auroc_neg_pmax_confident
+    results["auroc_t_oracle_confident"] = auroc_t_oracle_confident
     results["auroc_t_pred_confident"] = auroc_tpred_confident
 
     print(f"AUROC T_pred: {results['auroc_t_pred']}")
     print(f"AUROC H:      {results['auroc_entropy']}")
     print(f"AUROC -Pmax:  {results['auroc_neg_pmax']}")
+    print(f"AUROC T_oracle: {results['auroc_t_oracle']}")
     if args.assistant_only and assistant_mask_missing_examples > 0:
         print(
             f"[!] assistant_only requested, but assistant masks were missing for "
@@ -748,6 +777,7 @@ def main() -> None:
     if confident_count > 0:
         print(f"AUROC H | confident:      {auroc_entropy_confident}")
         print(f"AUROC -Pmax | confident:  {auroc_neg_pmax_confident}")
+        print(f"AUROC T_oracle | confident: {auroc_t_oracle_confident}")
         if used_temp_head:
             print(f"AUROC T_pred | confident: {auroc_tpred_confident}")
         if confident_count < args.min_confident_tokens:
