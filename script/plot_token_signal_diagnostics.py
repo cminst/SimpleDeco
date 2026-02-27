@@ -304,6 +304,31 @@ def _roc_auc_score(y_true: np.ndarray, y_score: np.ndarray) -> float | None:
         return None
 
 
+def _regression_metrics(y_pred: np.ndarray, y_true: np.ndarray) -> Dict[str, float | None]:
+    if y_pred.size == 0 or y_true.size == 0 or y_pred.shape != y_true.shape:
+        return {"mae": None, "rmse": None, "pearson_r": None, "r2": None}
+
+    diff = y_pred.astype(np.float64) - y_true.astype(np.float64)
+    mae = float(np.mean(np.abs(diff)))
+    rmse = float(np.sqrt(np.mean(diff * diff)))
+
+    y_pred_centered = y_pred - y_pred.mean()
+    y_true_centered = y_true - y_true.mean()
+    denom = float(np.sqrt(np.sum(y_pred_centered * y_pred_centered) * np.sum(y_true_centered * y_true_centered)))
+    pearson_r = float(np.sum(y_pred_centered * y_true_centered) / denom) if denom > 0.0 else None
+
+    ss_res = float(np.sum(diff * diff))
+    ss_tot = float(np.sum(y_true_centered * y_true_centered))
+    r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 0.0 else None
+
+    return {
+        "mae": mae,
+        "rmse": rmse,
+        "pearson_r": pearson_r,
+        "r2": r2,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run token-level signal diagnostics for a merged AutoDeco model.",
@@ -712,8 +737,17 @@ def main() -> None:
     if used_temp_head and t_pred_arr is not None:
         auroc_tpred = _roc_auc_score(incorrect_arr, t_pred_arr)
         results["auroc_t_pred"] = auroc_tpred
+        tpred_vs_toracle = _regression_metrics(t_pred_arr, t_oracle_arr)
+        results["t_pred_vs_t_oracle_mae"] = tpred_vs_toracle["mae"]
+        results["t_pred_vs_t_oracle_rmse"] = tpred_vs_toracle["rmse"]
+        results["t_pred_vs_t_oracle_pearson_r"] = tpred_vs_toracle["pearson_r"]
+        results["t_pred_vs_t_oracle_r2"] = tpred_vs_toracle["r2"]
     else:
         results["auroc_t_pred"] = None
+        results["t_pred_vs_t_oracle_mae"] = None
+        results["t_pred_vs_t_oracle_rmse"] = None
+        results["t_pred_vs_t_oracle_pearson_r"] = None
+        results["t_pred_vs_t_oracle_r2"] = None
 
     if args.confidence_quantile is not None:
         threshold = float(np.quantile(p_max_arr, args.confidence_quantile))
@@ -759,11 +793,30 @@ def main() -> None:
     results["auroc_neg_pmax_confident"] = auroc_neg_pmax_confident
     results["auroc_t_oracle_confident"] = auroc_t_oracle_confident
     results["auroc_t_pred_confident"] = auroc_tpred_confident
+    if confident_count > 0 and used_temp_head and t_pred_arr is not None:
+        tpred_vs_toracle_conf = _regression_metrics(t_pred_arr[confident_mask], t_oracle_arr[confident_mask])
+        results["t_pred_vs_t_oracle_mae_confident"] = tpred_vs_toracle_conf["mae"]
+        results["t_pred_vs_t_oracle_rmse_confident"] = tpred_vs_toracle_conf["rmse"]
+        results["t_pred_vs_t_oracle_pearson_r_confident"] = tpred_vs_toracle_conf["pearson_r"]
+        results["t_pred_vs_t_oracle_r2_confident"] = tpred_vs_toracle_conf["r2"]
+    else:
+        results["t_pred_vs_t_oracle_mae_confident"] = None
+        results["t_pred_vs_t_oracle_rmse_confident"] = None
+        results["t_pred_vs_t_oracle_pearson_r_confident"] = None
+        results["t_pred_vs_t_oracle_r2_confident"] = None
 
     print(f"AUROC T_pred: {results['auroc_t_pred']}")
     print(f"AUROC H:      {results['auroc_entropy']}")
     print(f"AUROC -Pmax:  {results['auroc_neg_pmax']}")
     print(f"AUROC T_oracle: {results['auroc_t_oracle']}")
+    if used_temp_head:
+        print(
+            "T_pred vs T_oracle (all): "
+            f"MAE={results['t_pred_vs_t_oracle_mae']}, "
+            f"RMSE={results['t_pred_vs_t_oracle_rmse']}, "
+            f"PearsonR={results['t_pred_vs_t_oracle_pearson_r']}, "
+            f"R2={results['t_pred_vs_t_oracle_r2']}"
+        )
     if args.assistant_only and assistant_mask_missing_examples > 0:
         print(
             f"[!] assistant_only requested, but assistant masks were missing for "
@@ -780,6 +833,13 @@ def main() -> None:
         print(f"AUROC T_oracle | confident: {auroc_t_oracle_confident}")
         if used_temp_head:
             print(f"AUROC T_pred | confident: {auroc_tpred_confident}")
+            print(
+                "T_pred vs T_oracle | confident: "
+                f"MAE={results['t_pred_vs_t_oracle_mae_confident']}, "
+                f"RMSE={results['t_pred_vs_t_oracle_rmse_confident']}, "
+                f"PearsonR={results['t_pred_vs_t_oracle_pearson_r_confident']}, "
+                f"R2={results['t_pred_vs_t_oracle_r2_confident']}"
+            )
         if confident_count < args.min_confident_tokens:
             print(
                 f"[!] confident token count ({confident_count}) is below --min_confident_tokens "
