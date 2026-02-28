@@ -26,4 +26,9 @@ uv run accelerate launch trl_train.py \
   --torch_dtype bfloat16 \
   --gradient_checkpointing \
   --assistant_only_loss true \
-  --report_to wandb
+  --temp_diag_enabled true \
+  --temp_diag_steps 100 \
+  --temp_diag_examples 3 \
+  --temp_diag_topk 10 \
+  --report_to wandb \
+  --num_proc 16
