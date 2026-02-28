@@ -1,7 +1,7 @@
 export WANDB_PROJECT="ESAD"
 TS=$(date +%Y%m%d%H%M%S)
 
-export WANDB_RUN_ID="ESAD-Thinking-$TS"
+export WANDB_RUN_ID="SimpleDeco-NewV1-$TS"
 
 accelerate launch trl_train.py \
   --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
