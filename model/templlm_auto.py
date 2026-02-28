@@ -399,6 +399,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
         goldilocks_temp_cap: float = 2.0,
+        temp_target_smooth_window: int = 0,
         easy_token_drop_prob: float = 0.6,
         goldilocks_filter: bool = False,
         goldilocks_easy_frac: float = 0.1,
@@ -439,13 +440,11 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                     return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
 
             selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
-            logits_selected = logits_valid_all[selected_indices]
-            labels_selected = labels_valid_all[selected_indices]
-            temp_selected = temp_valid_all[selected_indices]
 
-            gt_logits = logits_selected.gather(1, labels_selected.unsqueeze(-1)).squeeze(-1)
-            max_logits = logits_selected.max(dim=-1).values
-            delta = torch.relu(max_logits - gt_logits)
+            safe_labels = shift_labels.clamp_min(0)
+            gt_logits_full = unscaled_shift.gather(2, safe_labels.unsqueeze(-1)).squeeze(-1)
+            max_logits_full = unscaled_shift.max(dim=-1).values
+            delta_full = torch.relu(max_logits_full - gt_logits_full)
 
             min_p_tensor = torch.as_tensor(
                 min_p_ratio,
@@ -453,7 +452,50 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 dtype=unscaled_logits.dtype,
             ).clamp(1e-6, 1.0 - 1e-6)
             denom = -torch.log(min_p_tensor)
-            temp_lower_bound = delta / denom
+            temp_lower_full = delta_full / denom
+
+            def _smooth_required_temp(
+                values: torch.Tensor,
+                mask: torch.Tensor,
+                window: int,
+            ) -> torch.Tensor:
+                if window <= 1:
+                    return values
+                smooth = values.clone()
+                for batch_idx in range(values.size(0)):
+                    valid = mask[batch_idx]
+                    if not valid.any():
+                        continue
+                    seq_vals = values[batch_idx][valid]
+                    if seq_vals.numel() < 2:
+                        smooth[batch_idx][valid] = seq_vals
+                        continue
+                    effective_window = min(int(window), int(seq_vals.numel()))
+                    if effective_window < 2:
+                        smooth[batch_idx][valid] = seq_vals
+                        continue
+                    effective_pad = effective_window // 2
+                    padded = F.pad(
+                        seq_vals.view(1, 1, -1),
+                        (effective_pad, effective_pad),
+                        mode="reflect",
+                    )
+                    avg = F.avg_pool1d(
+                        padded,
+                        kernel_size=effective_window,
+                        stride=1,
+                    ).view(-1)
+                    if avg.numel() > seq_vals.numel():
+                        avg = avg[:seq_vals.numel()]
+                    smooth[batch_idx][valid] = avg
+                return smooth
+
+            smooth_window = int(temp_target_smooth_window)
+            if smooth_window > 1:
+                temp_lower_full = _smooth_required_temp(temp_lower_full, valid_mask, smooth_window)
+
+            temp_lower_valid_all = temp_lower_full[valid_mask]
+            temp_selected = temp_valid_all[selected_indices]
 
             cap_value = float(goldilocks_temp_cap)
             if cap_value >= 0.0:
@@ -463,7 +505,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                     dtype=unscaled_logits.dtype,
                 ).clamp_min(1e-6)
                 if goldilocks_filter:
-                    within_cap = temp_lower_bound <= temp_cap
+                    within_cap = temp_lower_valid_all[selected_indices] <= temp_cap
                     if not within_cap.all():
                         selected_indices = selected_indices[within_cap]
                         if selected_indices.numel() == 0:
@@ -474,12 +516,16 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                             )
                         selected_mask = torch.zeros_like(selected_mask)
                         selected_mask[selected_indices] = True
-                    temp_lower_bound = temp_lower_bound[within_cap]
-                    temp_selected = temp_selected[within_cap]
-                temp_lower_bound = torch.minimum(temp_lower_bound, temp_cap)
+                        temp_selected = temp_selected[within_cap]
+                    temp_lower_valid_all = temp_lower_valid_all[selected_indices]
+                else:
+                    temp_lower_valid_all = temp_lower_valid_all[selected_indices]
+                temp_lower_valid_all = torch.minimum(temp_lower_valid_all, temp_cap)
+            else:
+                temp_lower_valid_all = temp_lower_valid_all[selected_indices]
 
             # Temp head outputs in [0, 2], so drop analytically infeasible targets.
-            feasible_mask = temp_lower_bound <= 2.0
+            feasible_mask = temp_lower_valid_all <= 2.0
             if not feasible_mask.all():
                 selected_indices = selected_indices[feasible_mask]
                 selected_mask = torch.zeros_like(selected_mask)
@@ -488,7 +534,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             if selected_indices.numel() == 0:
                 return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
 
-            temp_lower_bound = temp_lower_bound[feasible_mask]
+            temp_lower_bound = temp_lower_valid_all[feasible_mask]
             temp_selected = temp_selected[feasible_mask]
 
             token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_selected)
@@ -596,6 +642,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
         goldilocks_temp_cap: float = 2.0,
+        temp_target_smooth_window: int = 0,
         easy_token_drop_prob: float = 0.6,
         goldilocks_filter: bool = False,
         goldilocks_easy_frac: float = 0.1,
@@ -697,6 +744,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                         temp_hinge_weight=temp_hinge_weight,
                         temp_reg_weight=temp_reg_weight,
                         goldilocks_temp_cap=goldilocks_temp_cap,
+                        temp_target_smooth_window=temp_target_smooth_window,
                         easy_token_drop_prob=easy_token_drop_prob,
                         goldilocks_filter=goldilocks_filter,
                         goldilocks_easy_frac=goldilocks_easy_frac,

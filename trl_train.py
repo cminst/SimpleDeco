@@ -45,6 +45,7 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     temp_hinge_weight: float = 1.0
     temp_reg_weight: float = 0.0
     goldilocks_temp_cap: float = 2.0
+    temp_target_smooth_window: int = 0
     easy_token_drop_prob: float = 0.6
     goldilocks_filter: bool = False
     goldilocks_easy_frac: float = 0.1
@@ -671,6 +672,11 @@ def main(script_args, training_args, model_args):
             "goldilocks_temp_cap must be -1 (no cap) or in (0, 2], "
             f"got {script_args.goldilocks_temp_cap}"
         )
+    if script_args.temp_target_smooth_window < 0:
+        raise ValueError(
+            "temp_target_smooth_window must be >= 0, "
+            f"got {script_args.temp_target_smooth_window}"
+        )
     if not (0.0 <= script_args.easy_token_drop_prob <= 1.0):
         raise ValueError(
             f"easy_token_drop_prob must be in [0, 1], got {script_args.easy_token_drop_prob}"
@@ -714,6 +720,7 @@ def main(script_args, training_args, model_args):
                 f"temp_hinge_weight={script_args.temp_hinge_weight}, "
                 f"temp_reg_weight={script_args.temp_reg_weight}, "
                 f"goldilocks_temp_cap={script_args.goldilocks_temp_cap}, "
+                f"temp_target_smooth_window={script_args.temp_target_smooth_window}, "
                 f"easy_token_drop_prob={script_args.easy_token_drop_prob}, "
                 f"goldilocks_filter={script_args.goldilocks_filter}, "
                 f"goldilocks_easy_frac={script_args.goldilocks_easy_frac}, "
@@ -813,6 +820,7 @@ def main(script_args, training_args, model_args):
             temp_hinge_weight=script_args.temp_hinge_weight,
             temp_reg_weight=script_args.temp_reg_weight,
             goldilocks_temp_cap=script_args.goldilocks_temp_cap,
+            temp_target_smooth_window=script_args.temp_target_smooth_window,
             easy_token_drop_prob=script_args.easy_token_drop_prob,
             goldilocks_filter=script_args.goldilocks_filter,
             goldilocks_easy_frac=script_args.goldilocks_easy_frac,

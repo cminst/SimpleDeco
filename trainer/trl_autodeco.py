@@ -53,6 +53,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
         goldilocks_temp_cap: float = 2.0,
+        temp_target_smooth_window: int = 0,
         easy_token_drop_prob: float = 0.6,
         goldilocks_filter: bool = False,
         goldilocks_easy_frac: float = 0.1,
@@ -73,6 +74,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
         self.temp_hinge_weight = temp_hinge_weight
         self.temp_reg_weight = temp_reg_weight
         self.goldilocks_temp_cap = goldilocks_temp_cap
+        self.temp_target_smooth_window = max(0, int(temp_target_smooth_window))
         self.easy_token_drop_prob = easy_token_drop_prob
         self.goldilocks_filter = goldilocks_filter
         self.goldilocks_easy_frac = goldilocks_easy_frac
@@ -647,9 +649,48 @@ class AutoDecoLLMTrainer(SFTTrainer):
             perm = torch.randperm(selected_indices.numel(), device=selected_indices.device)
             sampled_indices = selected_indices[perm[:sample_count]].sort().values
 
-            gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
-            max_logits = logits_valid.max(dim=-1).values
-            required_temp = torch.relu(max_logits - gt_logits) / denom
+            safe_labels = shift_labels.clamp_min(0)
+            gt_logits_full = shift_logits.gather(2, safe_labels.unsqueeze(-1)).squeeze(-1)
+            max_logits_full = shift_logits.max(dim=-1).values
+            required_full = torch.relu(max_logits_full - gt_logits_full) / denom
+
+            def _smooth_required_temp(values: torch.Tensor, mask: torch.Tensor, window: int) -> torch.Tensor:
+                if window <= 1:
+                    return values
+                smooth = values.clone()
+                for batch_idx in range(values.size(0)):
+                    valid = mask[batch_idx]
+                    if not valid.any():
+                        continue
+                    seq_vals = values[batch_idx][valid]
+                    if seq_vals.numel() < 2:
+                        smooth[batch_idx][valid] = seq_vals
+                        continue
+                    effective_window = min(int(window), int(seq_vals.numel()))
+                    if effective_window < 2:
+                        smooth[batch_idx][valid] = seq_vals
+                        continue
+                    effective_pad = effective_window // 2
+                    padded = F.pad(
+                        seq_vals.view(1, 1, -1),
+                        (effective_pad, effective_pad),
+                        mode="reflect",
+                    )
+                    avg = F.avg_pool1d(
+                        padded,
+                        kernel_size=effective_window,
+                        stride=1,
+                    ).view(-1)
+                    if avg.numel() > seq_vals.numel():
+                        avg = avg[:seq_vals.numel()]
+                    smooth[batch_idx][valid] = avg
+                return smooth
+
+            smooth_window = int(self.temp_target_smooth_window)
+            if smooth_window > 1:
+                required_full = _smooth_required_temp(required_full, valid_mask, smooth_window)
+
+            required_temp = required_full[valid_mask]
             cap_value = float(self.goldilocks_temp_cap)
             if cap_value >= 0.0:
                 temp_cap = torch.as_tensor(
@@ -733,6 +774,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 "temp_hinge_weight": float(self.temp_hinge_weight),
                 "temp_reg_weight": float(self.temp_reg_weight),
                 "goldilocks_temp_cap": float(self.goldilocks_temp_cap),
+                "temp_target_smooth_window": int(self.temp_target_smooth_window),
                 "valid_token_count": int(valid_indices.size(0)),
                 "selected_token_count_for_temp_loss": int(selected_indices.numel()),
                 "examples": examples,
@@ -771,6 +813,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
         inputs["temp_hinge_weight"] = self.temp_hinge_weight
         inputs["temp_reg_weight"] = self.temp_reg_weight
         inputs["goldilocks_temp_cap"] = self.goldilocks_temp_cap
+        inputs["temp_target_smooth_window"] = self.temp_target_smooth_window
         inputs["easy_token_drop_prob"] = self.easy_token_drop_prob
         inputs["goldilocks_filter"] = self.goldilocks_filter
         inputs["goldilocks_easy_frac"] = self.goldilocks_easy_frac
