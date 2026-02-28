@@ -4,16 +4,16 @@ TS=$(date +%Y%m%d%H%M%S)
 export WANDB_RUN_ID="ESAD-Thinking-$TS"
 
 accelerate launch trl_train.py \
-  --model_name_or_path ckpt/autodeco-qwen3-4b-thinking \
+  --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-  --output_dir ./run_reasoning_high_contrast \
+  --output_dir ./ckpt/trained-simpledeco-qwen3-4b-thinking \
   --train_temp true \
   --train_top_p false \
   --temp_objective analytic_min_p_hinge \
   --min_p_ratio 0.05 \
   --temp_hinge_weight 5.0 \
   --temp_reg_weight 1.1 \
-  --temp_target_cap 0.8 \
+  --temp_target_cap 0.9 \
   --goldilocks_filter true \
   --goldilocks_easy_frac -1 \
   --goldilocks_topk 10 \
