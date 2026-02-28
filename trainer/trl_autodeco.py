@@ -52,7 +52,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
         min_p_ratio: float = 0.1,
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
-        temp_target_cap: float = 2.0,
+        goldilocks_temp_cap: float = 2.0,
         easy_token_drop_prob: float = 0.6,
         goldilocks_filter: bool = False,
         goldilocks_easy_frac: float = 0.1,
@@ -72,7 +72,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
         self.min_p_ratio = min_p_ratio
         self.temp_hinge_weight = temp_hinge_weight
         self.temp_reg_weight = temp_reg_weight
-        self.temp_target_cap = temp_target_cap
+        self.goldilocks_temp_cap = goldilocks_temp_cap
         self.easy_token_drop_prob = easy_token_drop_prob
         self.goldilocks_filter = goldilocks_filter
         self.goldilocks_easy_frac = goldilocks_easy_frac
@@ -650,7 +650,19 @@ class AutoDecoLLMTrainer(SFTTrainer):
             gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
             max_logits = logits_valid.max(dim=-1).values
             required_temp = torch.relu(max_logits - gt_logits) / denom
-            required_temp = torch.clamp(required_temp, max=float(self.temp_target_cap))
+            cap_value = float(self.goldilocks_temp_cap)
+            if cap_value >= 0.0:
+                temp_cap = torch.as_tensor(
+                    self.goldilocks_temp_cap,
+                    device=required_temp.device,
+                    dtype=required_temp.dtype,
+                ).clamp_min(1e-6)
+                if self.goldilocks_filter:
+                    within_cap = required_temp <= temp_cap
+                    selected_mask = selected_mask & within_cap
+                    if not selected_mask.any():
+                        return None
+                required_temp = torch.minimum(required_temp, temp_cap)
             hinge_gap = required_temp - temp_valid
             examples = []
 
@@ -720,7 +732,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 "goldilocks_topk": int(self.goldilocks_topk),
                 "temp_hinge_weight": float(self.temp_hinge_weight),
                 "temp_reg_weight": float(self.temp_reg_weight),
-                "temp_target_cap": float(self.temp_target_cap),
+                "goldilocks_temp_cap": float(self.goldilocks_temp_cap),
                 "valid_token_count": int(valid_indices.size(0)),
                 "selected_token_count_for_temp_loss": int(selected_indices.numel()),
                 "examples": examples,
@@ -758,7 +770,7 @@ class AutoDecoLLMTrainer(SFTTrainer):
         inputs["min_p_ratio"] = self.min_p_ratio
         inputs["temp_hinge_weight"] = self.temp_hinge_weight
         inputs["temp_reg_weight"] = self.temp_reg_weight
-        inputs["temp_target_cap"] = self.temp_target_cap
+        inputs["goldilocks_temp_cap"] = self.goldilocks_temp_cap
         inputs["easy_token_drop_prob"] = self.easy_token_drop_prob
         inputs["goldilocks_filter"] = self.goldilocks_filter
         inputs["goldilocks_easy_frac"] = self.goldilocks_easy_frac

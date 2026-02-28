@@ -44,7 +44,7 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     min_p_ratio: float = 0.1
     temp_hinge_weight: float = 1.0
     temp_reg_weight: float = 0.0
-    temp_target_cap: float = 2.0
+    goldilocks_temp_cap: float = 2.0
     easy_token_drop_prob: float = 0.6
     goldilocks_filter: bool = False
     goldilocks_easy_frac: float = 0.1
@@ -666,9 +666,10 @@ def main(script_args, training_args, model_args):
         )
     if not (0.0 < script_args.min_p_ratio < 1.0):
         raise ValueError(f"min_p_ratio must be in (0, 1), got {script_args.min_p_ratio}")
-    if not (0.0 < script_args.temp_target_cap <= 2.0):
+    if not (script_args.goldilocks_temp_cap == -1.0 or 0.0 < script_args.goldilocks_temp_cap <= 2.0):
         raise ValueError(
-            f"temp_target_cap must be in (0, 2], got {script_args.temp_target_cap}"
+            "goldilocks_temp_cap must be -1 (no cap) or in (0, 2], "
+            f"got {script_args.goldilocks_temp_cap}"
         )
     if not (0.0 <= script_args.easy_token_drop_prob <= 1.0):
         raise ValueError(
@@ -712,7 +713,7 @@ def main(script_args, training_args, model_args):
                 f"(min_p_ratio={script_args.min_p_ratio}, "
                 f"temp_hinge_weight={script_args.temp_hinge_weight}, "
                 f"temp_reg_weight={script_args.temp_reg_weight}, "
-                f"temp_target_cap={script_args.temp_target_cap}, "
+                f"goldilocks_temp_cap={script_args.goldilocks_temp_cap}, "
                 f"easy_token_drop_prob={script_args.easy_token_drop_prob}, "
                 f"goldilocks_filter={script_args.goldilocks_filter}, "
                 f"goldilocks_easy_frac={script_args.goldilocks_easy_frac}, "
@@ -811,7 +812,7 @@ def main(script_args, training_args, model_args):
             min_p_ratio=script_args.min_p_ratio,
             temp_hinge_weight=script_args.temp_hinge_weight,
             temp_reg_weight=script_args.temp_reg_weight,
-            temp_target_cap=script_args.temp_target_cap,
+            goldilocks_temp_cap=script_args.goldilocks_temp_cap,
             easy_token_drop_prob=script_args.easy_token_drop_prob,
             goldilocks_filter=script_args.goldilocks_filter,
             goldilocks_easy_frac=script_args.goldilocks_easy_frac,
