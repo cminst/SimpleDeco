@@ -25,9 +25,7 @@ accelerate launch trl_train.py \
   --min_p_ratio 0.1 \
   --temp_hinge_weight 1.0 \
   --temp_reg_weight 0.1 \
-  --goldilocks_filter true \
-  --goldilocks_easy_frac 0.1 \
-  --goldilocks_topk 10 \
+  --goldilocks_temp_cap 0.9 \
   --max_steps 50 \
   --logging_steps 1 \
   --per_device_train_batch_size 4 \
@@ -52,17 +50,13 @@ accelerate launch trl_train.py \
 
 If the sanity check finds too many malformed rows, training stops with an error.
 
-## 4) Goldilocks filtering (analytic Min-P objective)
+## 4) Temperature cap filtering (analytic Min-P objective)
 
-- `--goldilocks_filter true` enables token-level filtering for `analytic_min_p_hinge`.
-- Token mix target is controlled by:
-  - `--goldilocks_easy_frac` (default `0.1`): target fraction of selected Goldilocks tokens where GT is top-1.
-  - `--goldilocks_easy_frac -1`: disable balancing and keep the natural easy/top-k-non-easy ratio from the batch.
-  - `--goldilocks_topk` (default `10`): the `k` for top-k membership.
-- Filtering is strict to Goldilocks candidates only:
-  - `easy`: GT rank = 1
-  - `top-k non-easy`: GT rank in `[2, k]`
-- Tokens outside top-k are not included by this filter.
+- `--goldilocks_temp_cap` sets the maximum target temperature to include in the temp loss.
+- Any token with required temperature above the cap is discarded.
+- Use `--goldilocks_temp_cap -1` to disable the cap (use all valid tokens).
+- `--goldilocks_uniform` rebalances the selected tokens to an (approximately) uniform distribution from 0 to the cap.
+- `--goldilocks_uniform_bins` controls the number of bins used for uniform sampling (default: 20).
 
 ## 5) Temperature diagnostics JSON dumps (during training)
 

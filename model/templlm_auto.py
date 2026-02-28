@@ -301,94 +301,6 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             return self.llm.get_decoder()
         return self.llm.model if hasattr(self.llm, 'model') else self.llm
 
-    @staticmethod
-    def _sample_indices(mask: torch.Tensor, target_count: int) -> torch.Tensor:
-        if target_count <= 0:
-            return torch.empty(0, dtype=torch.long, device=mask.device)
-        indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
-        if indices.numel() <= target_count:
-            return indices
-        perm = torch.randperm(indices.numel(), device=mask.device)
-        return indices[perm[:target_count]]
-
-    def _build_goldilocks_mask(
-        self,
-        logits_valid: torch.Tensor,
-        labels_valid: torch.Tensor,
-        easy_frac: float,
-        topk: int,
-    ) -> torch.Tensor:
-        token_count = labels_valid.numel()
-        if token_count == 0:
-            return torch.zeros(0, dtype=torch.bool, device=labels_valid.device)
-
-        k = max(1, min(int(topk), logits_valid.size(-1)))
-        gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
-        gt_rank = (logits_valid > gt_logits.unsqueeze(-1)).sum(dim=-1) + 1
-
-        easy_mask = gt_rank == 1
-        topk_non_easy_mask = (gt_rank <= k) & (~easy_mask)
-
-        easy_count = int(easy_mask.sum().item())
-        topk_count = int(topk_non_easy_mask.sum().item())
-        available_total = easy_count + topk_count
-        if available_total == 0:
-            # No Goldilocks tokens in this batch (all tokens are outside top-k).
-            return torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-
-        easy_target = float(easy_frac)
-        if easy_target < 0.0:
-            # -1 means "natural distribution": keep all Goldilocks-eligible tokens.
-            selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-            selected[easy_mask | topk_non_easy_mask] = True
-            return selected
-
-        easy_weight = max(0.0, min(1.0, easy_target))
-        topk_weight = 1.0 - easy_weight
-
-        if easy_count > 0 and topk_count > 0 and easy_weight > 0.0 and topk_weight > 0.0:
-            max_total_from_easy = easy_count / easy_weight
-            max_total_from_topk = topk_count / topk_weight
-            target_total = int(min(max_total_from_easy, max_total_from_topk))
-            target_total = max(1, min(available_total, target_total))
-            target_easy = int(round(target_total * easy_weight))
-            target_easy = max(0, min(easy_count, target_easy))
-            target_topk = target_total - target_easy
-            target_topk = max(0, min(topk_count, target_topk))
-
-            # Fill any rounding remainder from available Goldilocks buckets only.
-            remainder = target_total - (target_easy + target_topk)
-            if remainder > 0:
-                easy_spare = easy_count - target_easy
-                take_easy = min(remainder, easy_spare)
-                target_easy += take_easy
-                remainder -= take_easy
-            if remainder > 0:
-                topk_spare = topk_count - target_topk
-                take_topk = min(remainder, topk_spare)
-                target_topk += take_topk
-        elif easy_weight <= 0.0 and topk_count > 0:
-            target_easy = 0
-            target_topk = topk_count
-        elif topk_weight <= 0.0 and easy_count > 0:
-            target_easy = easy_count
-            target_topk = 0
-        elif topk_count > 0:
-            target_easy = 0
-            target_topk = topk_count
-        else:
-            target_easy = easy_count
-            target_topk = 0
-
-        selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-        if target_easy > 0:
-            easy_idx = self._sample_indices(easy_mask, target_easy)
-            selected[easy_idx] = True
-        if target_topk > 0:
-            topk_idx = self._sample_indices(topk_non_easy_mask, target_topk)
-            selected[topk_idx] = True
-        return selected
-
     def _compute_temp_loss(
         self,
         unscaled_logits,
@@ -399,11 +311,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
         goldilocks_temp_cap: float = 2.0,
+        goldilocks_uniform: bool = False,
+        goldilocks_uniform_bins: int = 20,
         temp_target_smooth_window: int = 0,
         easy_token_drop_prob: float = 0.6,
-        goldilocks_filter: bool = False,
-        goldilocks_easy_frac: float = 0.1,
-        goldilocks_topk: int = 10,
         return_selection: bool = False,
     ):
         """Compute temperature loss."""
@@ -426,20 +337,8 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 empty_selected = torch.zeros(0, dtype=torch.bool, device=unscaled_logits.device)
                 return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, empty_selected)
 
-            logits_valid_all = unscaled_shift[valid_mask]
             temp_valid_all = temp_shift[valid_mask].squeeze(-1)
             selected_mask = torch.ones(labels_valid_all.shape, dtype=torch.bool, device=labels_valid_all.device)
-            if goldilocks_filter:
-                selected_mask = self._build_goldilocks_mask(
-                    logits_valid=logits_valid_all,
-                    labels_valid=labels_valid_all,
-                    easy_frac=goldilocks_easy_frac,
-                    topk=goldilocks_topk,
-                )
-                if not selected_mask.any():
-                    return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
-
-            selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
 
             safe_labels = shift_labels.clamp_min(0)
             gt_logits_full = unscaled_shift.gather(2, safe_labels.unsqueeze(-1)).squeeze(-1)
@@ -494,9 +393,55 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             if smooth_window > 1:
                 temp_lower_full = _smooth_required_temp(temp_lower_full, valid_mask, smooth_window)
 
-            temp_lower_valid_all = temp_lower_full[valid_mask]
-            temp_selected = temp_valid_all[selected_indices]
+            def _apply_uniform_selection(
+                values: torch.Tensor,
+                mask: torch.Tensor,
+                cap_value: float,
+                bins: int,
+            ) -> torch.Tensor:
+                if bins < 2:
+                    return mask
+                selected_indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
+                if selected_indices.numel() == 0:
+                    return mask
+                selected_values = values[selected_indices]
+                if selected_values.numel() == 0:
+                    return mask
+                if cap_value < 0.0:
+                    cap = float(selected_values.max().item())
+                else:
+                    cap = float(cap_value)
+                cap = max(cap, 1e-6)
+                edges = torch.linspace(
+                    0.0,
+                    cap,
+                    steps=int(bins) + 1,
+                    device=selected_values.device,
+                    dtype=selected_values.dtype,
+                )
+                bin_ids = torch.bucketize(selected_values, edges, right=False) - 1
+                bin_ids = bin_ids.clamp(0, int(bins) - 1)
+                counts = torch.bincount(bin_ids, minlength=int(bins))
+                nonzero_bins = counts > 0
+                if not nonzero_bins.any():
+                    return mask
+                target = int(counts[nonzero_bins].min().item())
+                if target <= 0:
+                    return mask
+                new_mask = torch.zeros_like(mask)
+                for bin_idx in range(int(bins)):
+                    count = int(counts[bin_idx].item())
+                    if count == 0:
+                        continue
+                    idx_in_bin = torch.nonzero(bin_ids == bin_idx, as_tuple=False).squeeze(-1)
+                    if idx_in_bin.numel() > target:
+                        perm = torch.randperm(idx_in_bin.numel(), device=idx_in_bin.device)
+                        idx_in_bin = idx_in_bin[perm[:target]]
+                    chosen = selected_indices[idx_in_bin]
+                    new_mask[chosen] = True
+                return new_mask
 
+            temp_lower_valid_all = temp_lower_full[valid_mask]
             cap_value = float(goldilocks_temp_cap)
             if cap_value >= 0.0:
                 temp_cap = torch.as_tensor(
@@ -504,38 +449,29 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                     device=unscaled_logits.device,
                     dtype=unscaled_logits.dtype,
                 ).clamp_min(1e-6)
-                if goldilocks_filter:
-                    within_cap = temp_lower_valid_all[selected_indices] <= temp_cap
-                    if not within_cap.all():
-                        selected_indices = selected_indices[within_cap]
-                        if selected_indices.numel() == 0:
-                            return _pack_result(
-                                torch.tensor(0.0, device=unscaled_logits.device),
-                                valid_mask,
-                                torch.zeros_like(selected_mask),
-                            )
-                        selected_mask = torch.zeros_like(selected_mask)
-                        selected_mask[selected_indices] = True
-                        temp_selected = temp_selected[within_cap]
-                    temp_lower_valid_all = temp_lower_valid_all[selected_indices]
-                else:
-                    temp_lower_valid_all = temp_lower_valid_all[selected_indices]
-                temp_lower_valid_all = torch.minimum(temp_lower_valid_all, temp_cap)
-            else:
-                temp_lower_valid_all = temp_lower_valid_all[selected_indices]
-
+                within_cap = temp_lower_valid_all <= temp_cap
+                if not within_cap.any():
+                    return _pack_result(
+                        torch.tensor(0.0, device=unscaled_logits.device),
+                        valid_mask,
+                        torch.zeros_like(selected_mask),
+                    )
+                selected_mask = selected_mask & within_cap
             # Temp head outputs in [0, 2], so drop analytically infeasible targets.
-            feasible_mask = temp_lower_valid_all <= 2.0
-            if not feasible_mask.all():
-                selected_indices = selected_indices[feasible_mask]
-                selected_mask = torch.zeros_like(selected_mask)
-                selected_mask[selected_indices] = True
-
+            selected_mask = selected_mask & (temp_lower_valid_all <= 2.0)
+            if goldilocks_uniform:
+                selected_mask = _apply_uniform_selection(
+                    temp_lower_valid_all,
+                    selected_mask,
+                    cap_value,
+                    int(goldilocks_uniform_bins),
+                )
+            selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
             if selected_indices.numel() == 0:
                 return _pack_result(torch.tensor(0.0, device=unscaled_logits.device), valid_mask, selected_mask)
 
-            temp_lower_bound = temp_lower_valid_all[feasible_mask]
-            temp_selected = temp_selected[feasible_mask]
+            temp_lower_bound = temp_lower_valid_all[selected_indices]
+            temp_selected = temp_valid_all[selected_indices]
 
             token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_selected)
             if temp_reg_weight != 0.0:
@@ -642,11 +578,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
         goldilocks_temp_cap: float = 2.0,
+        goldilocks_uniform: bool = False,
+        goldilocks_uniform_bins: int = 20,
         temp_target_smooth_window: int = 0,
         easy_token_drop_prob: float = 0.6,
-        goldilocks_filter: bool = False,
-        goldilocks_easy_frac: float = 0.1,
-        goldilocks_topk: int = 10,
         temp_loss_weight: float = 1.0,
         **kwargs,
     ) -> AutoDecoOutputWithPast:
@@ -744,11 +679,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                         temp_hinge_weight=temp_hinge_weight,
                         temp_reg_weight=temp_reg_weight,
                         goldilocks_temp_cap=goldilocks_temp_cap,
+                        goldilocks_uniform=goldilocks_uniform,
+                        goldilocks_uniform_bins=goldilocks_uniform_bins,
                         temp_target_smooth_window=temp_target_smooth_window,
                         easy_token_drop_prob=easy_token_drop_prob,
-                        goldilocks_filter=goldilocks_filter,
-                        goldilocks_easy_frac=goldilocks_easy_frac,
-                        goldilocks_topk=goldilocks_topk,
                         return_selection=True,
                     )
                     if isinstance(temp_out, tuple):

@@ -45,11 +45,10 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     temp_hinge_weight: float = 1.0
     temp_reg_weight: float = 0.0
     goldilocks_temp_cap: float = 2.0
+    goldilocks_uniform: bool = False
+    goldilocks_uniform_bins: int = 20
     temp_target_smooth_window: int = 0
     easy_token_drop_prob: float = 0.6
-    goldilocks_filter: bool = False
-    goldilocks_easy_frac: float = 0.1
-    goldilocks_topk: int = 10
     temp_diag_enabled: bool = False
     temp_diag_steps: int = 100
     temp_diag_examples: int = 3
@@ -672,6 +671,11 @@ def main(script_args, training_args, model_args):
             "goldilocks_temp_cap must be -1 (no cap) or in (0, 2], "
             f"got {script_args.goldilocks_temp_cap}"
         )
+    if script_args.goldilocks_uniform and script_args.goldilocks_uniform_bins < 2:
+        raise ValueError(
+            "goldilocks_uniform_bins must be >= 2 when goldilocks_uniform is enabled, "
+            f"got {script_args.goldilocks_uniform_bins}"
+        )
     if script_args.temp_target_smooth_window < 0:
         raise ValueError(
             "temp_target_smooth_window must be >= 0, "
@@ -681,16 +685,6 @@ def main(script_args, training_args, model_args):
         raise ValueError(
             f"easy_token_drop_prob must be in [0, 1], got {script_args.easy_token_drop_prob}"
         )
-    if not (
-        script_args.goldilocks_easy_frac == -1.0
-        or 0.0 <= script_args.goldilocks_easy_frac <= 1.0
-    ):
-        raise ValueError(
-            "goldilocks_easy_frac must be -1 (natural distribution) or in [0, 1], "
-            f"got {script_args.goldilocks_easy_frac}"
-        )
-    if script_args.goldilocks_topk < 1:
-        raise ValueError(f"goldilocks_topk must be >= 1, got {script_args.goldilocks_topk}")
     if script_args.temp_diag_steps < 1:
         raise ValueError(f"temp_diag_steps must be >= 1, got {script_args.temp_diag_steps}")
     if script_args.temp_diag_examples < 1:
@@ -720,11 +714,10 @@ def main(script_args, training_args, model_args):
                 f"temp_hinge_weight={script_args.temp_hinge_weight}, "
                 f"temp_reg_weight={script_args.temp_reg_weight}, "
                 f"goldilocks_temp_cap={script_args.goldilocks_temp_cap}, "
+                f"goldilocks_uniform={script_args.goldilocks_uniform}, "
+                f"goldilocks_uniform_bins={script_args.goldilocks_uniform_bins}, "
                 f"temp_target_smooth_window={script_args.temp_target_smooth_window}, "
-                f"easy_token_drop_prob={script_args.easy_token_drop_prob}, "
-                f"goldilocks_filter={script_args.goldilocks_filter}, "
-                f"goldilocks_easy_frac={script_args.goldilocks_easy_frac}, "
-                f"goldilocks_topk={script_args.goldilocks_topk})"
+                f"easy_token_drop_prob={script_args.easy_token_drop_prob})"
             )
             if script_args.temp_diag_enabled:
                 print(
@@ -820,11 +813,10 @@ def main(script_args, training_args, model_args):
             temp_hinge_weight=script_args.temp_hinge_weight,
             temp_reg_weight=script_args.temp_reg_weight,
             goldilocks_temp_cap=script_args.goldilocks_temp_cap,
+            goldilocks_uniform=script_args.goldilocks_uniform,
+            goldilocks_uniform_bins=script_args.goldilocks_uniform_bins,
             temp_target_smooth_window=script_args.temp_target_smooth_window,
             easy_token_drop_prob=script_args.easy_token_drop_prob,
-            goldilocks_filter=script_args.goldilocks_filter,
-            goldilocks_easy_frac=script_args.goldilocks_easy_frac,
-            goldilocks_topk=script_args.goldilocks_topk,
             temp_diag_enabled=script_args.temp_diag_enabled,
             temp_diag_steps=script_args.temp_diag_steps,
             temp_diag_examples=script_args.temp_diag_examples,

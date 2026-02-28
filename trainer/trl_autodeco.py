@@ -53,11 +53,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
         goldilocks_temp_cap: float = 2.0,
+        goldilocks_uniform: bool = False,
+        goldilocks_uniform_bins: int = 20,
         temp_target_smooth_window: int = 0,
         easy_token_drop_prob: float = 0.6,
-        goldilocks_filter: bool = False,
-        goldilocks_easy_frac: float = 0.1,
-        goldilocks_topk: int = 10,
         top_p_loss_method: str = "soft",
         temp_diag_enabled: bool = False,
         temp_diag_steps: int = 100,
@@ -74,11 +73,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
         self.temp_hinge_weight = temp_hinge_weight
         self.temp_reg_weight = temp_reg_weight
         self.goldilocks_temp_cap = goldilocks_temp_cap
+        self.goldilocks_uniform = bool(goldilocks_uniform)
+        self.goldilocks_uniform_bins = max(1, int(goldilocks_uniform_bins))
         self.temp_target_smooth_window = max(0, int(temp_target_smooth_window))
         self.easy_token_drop_prob = easy_token_drop_prob
-        self.goldilocks_filter = goldilocks_filter
-        self.goldilocks_easy_frac = goldilocks_easy_frac
-        self.goldilocks_topk = goldilocks_topk
         self.top_p_loss_method = top_p_loss_method
         self.temp_diag_enabled = temp_diag_enabled
         self.temp_diag_steps = max(1, int(temp_diag_steps))
@@ -493,91 +491,6 @@ class AutoDecoLLMTrainer(SFTTrainer):
             })
         return result
 
-    @staticmethod
-    def _sample_indices(mask: torch.Tensor, target_count: int) -> torch.Tensor:
-        if target_count <= 0:
-            return torch.empty(0, dtype=torch.long, device=mask.device)
-        indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
-        if indices.numel() <= target_count:
-            return indices
-        perm = torch.randperm(indices.numel(), device=mask.device)
-        return indices[perm[:target_count]]
-
-    def _build_goldilocks_mask(
-        self,
-        logits_valid: torch.Tensor,
-        labels_valid: torch.Tensor,
-        easy_frac: float,
-        topk: int,
-    ) -> torch.Tensor:
-        token_count = labels_valid.numel()
-        if token_count == 0:
-            return torch.zeros(0, dtype=torch.bool, device=labels_valid.device)
-
-        k = max(1, min(int(topk), logits_valid.size(-1)))
-        gt_logits = logits_valid.gather(1, labels_valid.unsqueeze(-1)).squeeze(-1)
-        gt_rank = (logits_valid > gt_logits.unsqueeze(-1)).sum(dim=-1) + 1
-
-        easy_mask = gt_rank == 1
-        topk_non_easy_mask = (gt_rank <= k) & (~easy_mask)
-
-        easy_count = int(easy_mask.sum().item())
-        topk_count = int(topk_non_easy_mask.sum().item())
-        available_total = easy_count + topk_count
-        if available_total == 0:
-            return torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-
-        easy_target = float(easy_frac)
-        if easy_target < 0.0:
-            selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-            selected[easy_mask | topk_non_easy_mask] = True
-            return selected
-
-        easy_weight = max(0.0, min(1.0, easy_target))
-        topk_weight = 1.0 - easy_weight
-
-        if easy_count > 0 and topk_count > 0 and easy_weight > 0.0 and topk_weight > 0.0:
-            max_total_from_easy = easy_count / easy_weight
-            max_total_from_topk = topk_count / topk_weight
-            target_total = int(min(max_total_from_easy, max_total_from_topk))
-            target_total = max(1, min(available_total, target_total))
-            target_easy = int(round(target_total * easy_weight))
-            target_easy = max(0, min(easy_count, target_easy))
-            target_topk = target_total - target_easy
-            target_topk = max(0, min(topk_count, target_topk))
-
-            remainder = target_total - (target_easy + target_topk)
-            if remainder > 0:
-                easy_spare = easy_count - target_easy
-                take_easy = min(remainder, easy_spare)
-                target_easy += take_easy
-                remainder -= take_easy
-            if remainder > 0:
-                topk_spare = topk_count - target_topk
-                take_topk = min(remainder, topk_spare)
-                target_topk += take_topk
-        elif easy_weight <= 0.0 and topk_count > 0:
-            target_easy = 0
-            target_topk = topk_count
-        elif topk_weight <= 0.0 and easy_count > 0:
-            target_easy = easy_count
-            target_topk = 0
-        elif topk_count > 0:
-            target_easy = 0
-            target_topk = topk_count
-        else:
-            target_easy = easy_count
-            target_topk = 0
-
-        selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
-        if target_easy > 0:
-            easy_idx = self._sample_indices(easy_mask, target_easy)
-            selected[easy_idx] = True
-        if target_topk > 0:
-            topk_idx = self._sample_indices(topk_non_easy_mask, target_topk)
-            selected[topk_idx] = True
-        return selected
-
     def _build_temp_diag_payload(
         self,
         outputs,
@@ -637,13 +550,6 @@ class AutoDecoLLMTrainer(SFTTrainer):
 
             if selected_mask is None:
                 selected_mask = torch.ones_like(labels_valid, dtype=torch.bool)
-                if self.temp_objective == "analytic_min_p_hinge" and self.goldilocks_filter:
-                    selected_mask = self._build_goldilocks_mask(
-                        logits_valid=logits_valid,
-                        labels_valid=labels_valid,
-                        easy_frac=self.goldilocks_easy_frac,
-                        topk=self.goldilocks_topk,
-                    )
 
             safe_labels = shift_labels.clamp_min(0)
             gt_logits_full = shift_logits.gather(2, safe_labels.unsqueeze(-1)).squeeze(-1)
@@ -694,12 +600,15 @@ class AutoDecoLLMTrainer(SFTTrainer):
                     device=required_temp.device,
                     dtype=required_temp.dtype,
                 ).clamp_min(1e-6)
-                if self.goldilocks_filter:
-                    within_cap = required_temp <= temp_cap
-                    selected_mask = selected_mask & within_cap
-                    if not selected_mask.any():
-                        return None
+                within_cap = required_temp <= temp_cap
+                selected_mask = selected_mask & within_cap
+                if not selected_mask.any():
+                    return None
                 required_temp = torch.minimum(required_temp, temp_cap)
+            feasible_mask = required_temp <= 2.0
+            selected_mask = selected_mask & feasible_mask
+            if not selected_mask.any():
+                return None
             selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
             if selected_indices.numel() == 0:
                 return None
@@ -783,18 +692,19 @@ class AutoDecoLLMTrainer(SFTTrainer):
                     "p90": float(torch.quantile(target_cpu, 0.9).item()),
                     "max": float(target_cpu.max().item()),
                     "goldilocks_temp_cap": float(self.goldilocks_temp_cap),
+                    "goldilocks_uniform": bool(self.goldilocks_uniform),
+                    "goldilocks_uniform_bins": int(self.goldilocks_uniform_bins),
                     "temp_target_smooth_window": int(self.temp_target_smooth_window),
                 }
 
             payload = {
                 "global_step": int(self.state.global_step),
                 "temp_objective": self.temp_objective,
-                "goldilocks_filter": bool(self.goldilocks_filter),
-                "goldilocks_easy_frac": float(self.goldilocks_easy_frac),
-                "goldilocks_topk": int(self.goldilocks_topk),
                 "temp_hinge_weight": float(self.temp_hinge_weight),
                 "temp_reg_weight": float(self.temp_reg_weight),
                 "goldilocks_temp_cap": float(self.goldilocks_temp_cap),
+                "goldilocks_uniform": bool(self.goldilocks_uniform),
+                "goldilocks_uniform_bins": int(self.goldilocks_uniform_bins),
                 "temp_target_smooth_window": int(self.temp_target_smooth_window),
                 "valid_token_count": int(valid_indices.size(0)),
                 "selected_token_count_for_temp_loss": int(selected_indices.numel()),
@@ -882,11 +792,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
         inputs["temp_hinge_weight"] = self.temp_hinge_weight
         inputs["temp_reg_weight"] = self.temp_reg_weight
         inputs["goldilocks_temp_cap"] = self.goldilocks_temp_cap
+        inputs["goldilocks_uniform"] = self.goldilocks_uniform
+        inputs["goldilocks_uniform_bins"] = self.goldilocks_uniform_bins
         inputs["temp_target_smooth_window"] = self.temp_target_smooth_window
         inputs["easy_token_drop_prob"] = self.easy_token_drop_prob
-        inputs["goldilocks_filter"] = self.goldilocks_filter
-        inputs["goldilocks_easy_frac"] = self.goldilocks_easy_frac
-        inputs["goldilocks_topk"] = self.goldilocks_topk
         inputs["top_p_loss_method"] = self.top_p_loss_method
         outputs = model(**inputs)
         self._maybe_write_temp_diag(outputs, inputs)

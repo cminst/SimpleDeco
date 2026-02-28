@@ -12,7 +12,6 @@ accelerate launch trl_train.py \
   --temp_objective legacy_ce \
   --easy_token_drop_prob 0.6 \
   --top_p_loss_method soft \
-  --goldilocks_filter false \
   --max_steps 3000 \
   --logging_steps 25 \
   --per_device_train_batch_size 16 \

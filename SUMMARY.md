@@ -54,9 +54,10 @@ You extended original AutoDeco with a **simplified temperature-first training pa
   - `--train_temp true --train_top_p false`
   - Aligns with your “single-head simplification” idea.
 
-- Goldilocks filtering added
-  - Focuses training on selected easy/top-k tokens and ignores less useful regions.
-  - Exposed via `--goldilocks_filter`, `--goldilocks_easy_frac`, `--goldilocks_topk`.
+- Temperature cap filtering added
+  - Drops tokens whose required temperature exceeds `--goldilocks_temp_cap`.
+  - Keeps the temp-loss selection controlled by a single numeric cap (use `-1` for no cap).
+  - Optional `--goldilocks_uniform` can rebalance selected tokens into uniform bins (default 20).
 
 - Diagnostic tooling added
   - Optional per-step JSON dumps for predicted temp vs required temp and Min-P condition checks.

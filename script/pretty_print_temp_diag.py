@@ -100,15 +100,24 @@ def print_diag(path: Path, payload: dict[str, Any], topk: int, max_context_chars
     print(f"File: {path}")
     print(f"Step: {step} | Objective: {objective}")
     print(
-        "Goldilocks: "
-        f"enabled={payload.get('goldilocks_filter')} "
-        f"easy_frac={payload.get('goldilocks_easy_frac')} "
-        f"topk={payload.get('goldilocks_topk')}"
+        "Temp targets: "
+        f"cap={payload.get('goldilocks_temp_cap')} "
+        f"uniform={payload.get('goldilocks_uniform')} "
+        f"bins={payload.get('goldilocks_uniform_bins')} "
+        f"smooth_window={payload.get('temp_target_smooth_window')}"
     )
     print(
         "Temp weights: "
         f"hinge={payload.get('temp_hinge_weight')} reg={payload.get('temp_reg_weight')}"
     )
+    summary = payload.get("target_distribution_summary") or {}
+    if summary:
+        print(
+            "Target dist: "
+            f"n={summary.get('count')} mean={summary.get('mean'):.3f} "
+            f"std={summary.get('std'):.3f} p10={summary.get('p10'):.3f} "
+            f"p50={summary.get('p50'):.3f} p90={summary.get('p90'):.3f}"
+        )
 
     examples = payload.get("examples", [])
     if not isinstance(examples, list) or len(examples) == 0:
