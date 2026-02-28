@@ -316,7 +316,6 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         logits_valid: torch.Tensor,
         labels_valid: torch.Tensor,
         easy_frac: float,
-        topk_frac: float,
         topk: int,
     ) -> torch.Tensor:
         token_count = labels_valid.numel()
@@ -337,17 +336,15 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             # No Goldilocks tokens in this batch (all tokens are outside top-k).
             return torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
 
-        easy_raw = max(0.0, float(easy_frac))
-        topk_raw = max(0.0, float(topk_frac))
-        weight_sum = easy_raw + topk_raw
-        if weight_sum <= 0.0:
-            # If weights are disabled, keep all Goldilocks-eligible tokens.
+        easy_target = float(easy_frac)
+        if easy_target < 0.0:
+            # -1 means "natural distribution": keep all Goldilocks-eligible tokens.
             selected = torch.zeros(token_count, dtype=torch.bool, device=labels_valid.device)
             selected[easy_mask | topk_non_easy_mask] = True
             return selected
 
-        easy_weight = easy_raw / weight_sum
-        topk_weight = topk_raw / weight_sum
+        easy_weight = max(0.0, min(1.0, easy_target))
+        topk_weight = 1.0 - easy_weight
 
         if easy_count > 0 and topk_count > 0 and easy_weight > 0.0 and topk_weight > 0.0:
             max_total_from_easy = easy_count / easy_weight
@@ -370,6 +367,12 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 topk_spare = topk_count - target_topk
                 take_topk = min(remainder, topk_spare)
                 target_topk += take_topk
+        elif easy_weight <= 0.0 and topk_count > 0:
+            target_easy = 0
+            target_topk = topk_count
+        elif topk_weight <= 0.0 and easy_count > 0:
+            target_easy = easy_count
+            target_topk = 0
         elif topk_count > 0:
             target_easy = 0
             target_topk = topk_count
@@ -395,10 +398,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         min_p_ratio: float = 0.1,
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
+        temp_target_cap: float = 2.0,
         easy_token_drop_prob: float = 0.6,
         goldilocks_filter: bool = False,
         goldilocks_easy_frac: float = 0.1,
-        goldilocks_topk_frac: float = 0.9,
         goldilocks_topk: int = 10,
         return_selection: bool = False,
     ):
@@ -430,7 +433,6 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                     logits_valid=logits_valid_all,
                     labels_valid=labels_valid_all,
                     easy_frac=goldilocks_easy_frac,
-                    topk_frac=goldilocks_topk_frac,
                     topk=goldilocks_topk,
                 )
                 if not selected_mask.any():
@@ -452,6 +454,12 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             ).clamp(1e-6, 1.0 - 1e-6)
             denom = -torch.log(min_p_tensor)
             temp_lower_bound = delta / denom
+            temp_cap = torch.as_tensor(
+                temp_target_cap,
+                device=unscaled_logits.device,
+                dtype=unscaled_logits.dtype,
+            ).clamp_min(1e-6)
+            temp_lower_bound = torch.minimum(temp_lower_bound, temp_cap)
 
             # Temp head outputs in [0, 2], so drop analytically infeasible targets.
             feasible_mask = temp_lower_bound <= 2.0
@@ -570,10 +578,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         min_p_ratio: float = 0.1,
         temp_hinge_weight: float = 1.0,
         temp_reg_weight: float = 0.0,
+        temp_target_cap: float = 2.0,
         easy_token_drop_prob: float = 0.6,
         goldilocks_filter: bool = False,
         goldilocks_easy_frac: float = 0.1,
-        goldilocks_topk_frac: float = 0.9,
         goldilocks_topk: int = 10,
         temp_loss_weight: float = 1.0,
         **kwargs,
@@ -671,10 +679,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                         min_p_ratio=min_p_ratio,
                         temp_hinge_weight=temp_hinge_weight,
                         temp_reg_weight=temp_reg_weight,
+                        temp_target_cap=temp_target_cap,
                         easy_token_drop_prob=easy_token_drop_prob,
                         goldilocks_filter=goldilocks_filter,
                         goldilocks_easy_frac=goldilocks_easy_frac,
-                        goldilocks_topk_frac=goldilocks_topk_frac,
                         goldilocks_topk=goldilocks_topk,
                         return_selection=True,
                     )

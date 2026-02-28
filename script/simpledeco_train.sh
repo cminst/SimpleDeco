@@ -13,9 +13,9 @@ accelerate launch trl_train.py \
   --min_p_ratio 0.05 \
   --temp_hinge_weight 5.0 \
   --temp_reg_weight 1.1 \
-  --goldilocks_filter true \
-  --goldilocks_easy_frac 1.0 \
-  --goldilocks_topk_frac 1.0 \
+  --temp_target_cap 0.8 \
+  --goldilocks_filter false \
+  --goldilocks_easy_frac 0.5 \
   --goldilocks_topk 15 \
   --max_steps 3000 \
   --logging_steps 25 \

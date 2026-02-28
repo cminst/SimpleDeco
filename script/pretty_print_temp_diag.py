@@ -103,7 +103,6 @@ def print_diag(path: Path, payload: dict[str, Any], topk: int, max_context_chars
         "Goldilocks: "
         f"enabled={payload.get('goldilocks_filter')} "
         f"easy_frac={payload.get('goldilocks_easy_frac')} "
-        f"topk_frac={payload.get('goldilocks_topk_frac')} "
         f"topk={payload.get('goldilocks_topk')}"
     )
     print(

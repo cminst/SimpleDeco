@@ -27,7 +27,6 @@ accelerate launch trl_train.py \
   --temp_reg_weight 0.1 \
   --goldilocks_filter true \
   --goldilocks_easy_frac 0.1 \
-  --goldilocks_topk_frac 0.9 \
   --goldilocks_topk 10 \
   --max_steps 50 \
   --logging_steps 1 \
@@ -57,8 +56,8 @@ If the sanity check finds too many malformed rows, training stops with an error.
 
 - `--goldilocks_filter true` enables token-level filtering for `analytic_min_p_hinge`.
 - Token mix target is controlled by:
-  - `--goldilocks_easy_frac` (default `0.1`): fraction of tokens where GT is top-1.
-  - `--goldilocks_topk_frac` (default `0.9`): fraction of tokens where GT is in top-k.
+  - `--goldilocks_easy_frac` (default `0.1`): target fraction of selected Goldilocks tokens where GT is top-1.
+  - `--goldilocks_easy_frac -1`: disable balancing and keep the natural easy/top-k-non-easy ratio from the batch.
   - `--goldilocks_topk` (default `10`): the `k` for top-k membership.
 - Filtering is strict to Goldilocks candidates only:
   - `easy`: GT rank = 1

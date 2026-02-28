@@ -56,7 +56,7 @@ You extended original AutoDeco with a **simplified temperature-first training pa
 
 - Goldilocks filtering added
   - Focuses training on selected easy/top-k tokens and ignores less useful regions.
-  - Exposed via `--goldilocks_filter`, `--goldilocks_easy_frac`, `--goldilocks_topk_frac`, `--goldilocks_topk`.
+  - Exposed via `--goldilocks_filter`, `--goldilocks_easy_frac`, `--goldilocks_topk`.
 
 - Diagnostic tooling added
   - Optional per-step JSON dumps for predicted temp vs required temp and Min-P condition checks.
@@ -71,4 +71,3 @@ You extended original AutoDeco with a **simplified temperature-first training pa
 - One important implementation note:
   - `model/templlm_auto.py` currently routes `generate()` to the base model directly.
   - So fully integrated dynamic decoding at generation time is expected to rely on the custom inference path (e.g., merge/runtime tooling), not the default HF `generate()` call in this wrapper.
-
