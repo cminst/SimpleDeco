@@ -653,11 +653,13 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
                 unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
 
         temp_logits = self.temp_head(hidden_states[:, slice_indices, :])
-        top_p_logits = self.top_p_head(
-            hidden_states[:, slice_indices, :],
-            temp_logits.detach(),
-            unscaled_logits=unscaled_logits,
-        )
+        top_p_logits = None
+        if self.train_top_p:
+            top_p_logits = self.top_p_head(
+                hidden_states[:, slice_indices, :],
+                temp_logits.detach(),
+                unscaled_logits=unscaled_logits,
+            )
 
         # Compute losses
         loss, lm_loss, temp_loss, top_p_loss = None, None, None, None
