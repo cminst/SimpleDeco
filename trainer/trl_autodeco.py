@@ -578,7 +578,11 @@ class AutoDecoLLMTrainer(SFTTrainer):
             selected[topk_idx] = True
         return selected
 
-    def _build_temp_diag_payload(self, outputs, inputs) -> Optional[dict[str, Any]]:
+    def _build_temp_diag_payload(
+        self,
+        outputs,
+        inputs,
+    ) -> Optional[tuple[dict[str, Any], Optional[torch.Tensor]]]:
         labels = inputs.get("labels")
         input_ids = inputs.get("input_ids")
         if labels is None or input_ids is None:
@@ -641,14 +645,6 @@ class AutoDecoLLMTrainer(SFTTrainer):
                         topk=self.goldilocks_topk,
                     )
 
-            selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
-            if selected_indices.numel() == 0:
-                return None
-
-            sample_count = min(self.temp_diag_examples, int(selected_indices.numel()))
-            perm = torch.randperm(selected_indices.numel(), device=selected_indices.device)
-            sampled_indices = selected_indices[perm[:sample_count]].sort().values
-
             safe_labels = shift_labels.clamp_min(0)
             gt_logits_full = shift_logits.gather(2, safe_labels.unsqueeze(-1)).squeeze(-1)
             max_logits_full = shift_logits.max(dim=-1).values
@@ -704,6 +700,15 @@ class AutoDecoLLMTrainer(SFTTrainer):
                     if not selected_mask.any():
                         return None
                 required_temp = torch.minimum(required_temp, temp_cap)
+            selected_indices = torch.nonzero(selected_mask, as_tuple=False).squeeze(-1)
+            if selected_indices.numel() == 0:
+                return None
+
+            sample_count = min(self.temp_diag_examples, int(selected_indices.numel()))
+            perm = torch.randperm(selected_indices.numel(), device=selected_indices.device)
+            sampled_indices = selected_indices[perm[:sample_count]].sort().values
+
+            target_values = required_temp[selected_mask] if selected_mask is not None else required_temp
             hinge_gap = required_temp - temp_valid
             examples = []
 
@@ -765,6 +770,22 @@ class AutoDecoLLMTrainer(SFTTrainer):
             if not examples:
                 return None
 
+            target_summary = None
+            if target_values is not None and target_values.numel() > 0:
+                target_cpu = target_values.detach().float().cpu()
+                target_summary = {
+                    "count": int(target_cpu.numel()),
+                    "mean": float(target_cpu.mean().item()),
+                    "std": float(target_cpu.std(unbiased=False).item()),
+                    "min": float(target_cpu.min().item()),
+                    "p10": float(torch.quantile(target_cpu, 0.1).item()),
+                    "p50": float(torch.quantile(target_cpu, 0.5).item()),
+                    "p90": float(torch.quantile(target_cpu, 0.9).item()),
+                    "max": float(target_cpu.max().item()),
+                    "goldilocks_temp_cap": float(self.goldilocks_temp_cap),
+                    "temp_target_smooth_window": int(self.temp_target_smooth_window),
+                }
+
             payload = {
                 "global_step": int(self.state.global_step),
                 "temp_objective": self.temp_objective,
@@ -777,9 +798,10 @@ class AutoDecoLLMTrainer(SFTTrainer):
                 "temp_target_smooth_window": int(self.temp_target_smooth_window),
                 "valid_token_count": int(valid_indices.size(0)),
                 "selected_token_count_for_temp_loss": int(selected_indices.numel()),
+                "target_distribution_summary": target_summary,
                 "examples": examples,
             }
-            return payload
+            return payload, target_values
 
     def _maybe_write_temp_diag(self, outputs, inputs) -> None:
         if not self.temp_diag_enabled:
@@ -795,16 +817,63 @@ class AutoDecoLLMTrainer(SFTTrainer):
         if step % self.temp_diag_steps != 0:
             return
 
-        payload = self._build_temp_diag_payload(outputs, inputs)
+        result = self._build_temp_diag_payload(outputs, inputs)
         self._last_temp_diag_step = step
-        if payload is None:
+        if result is None:
             return
+        payload, target_values = result
 
         os.makedirs(self._temp_diag_output_dir, exist_ok=True)
         out_path = os.path.join(self._temp_diag_output_dir, f"step_{step:07d}.json")
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        self._write_temp_target_plot(step, target_values)
         print(f"[!] Wrote temp diagnostics: {out_path} ({len(payload['examples'])} examples)")
+
+    def _write_temp_target_plot(self, step: int, target_values: Optional[torch.Tensor]) -> None:
+        if target_values is None or target_values.numel() == 0:
+            return
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import numpy as np
+        except Exception:
+            return
+
+        values = target_values.detach().float().cpu().numpy()
+        if values.size < 2:
+            return
+
+        mean_val = float(np.mean(values))
+        median_val = float(np.median(values))
+        cap_val = float(self.goldilocks_temp_cap)
+
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(7.2, 4.2), dpi=160)
+        ax.hist(
+            values,
+            bins=60,
+            density=True,
+            color="#4C72B0",
+            alpha=0.85,
+            edgecolor="white",
+            linewidth=0.6,
+        )
+        ax.axvline(mean_val, color="#DD8452", linewidth=1.6, label=f"mean {mean_val:.3f}")
+        ax.axvline(median_val, color="#55A868", linewidth=1.6, label=f"median {median_val:.3f}")
+        if cap_val >= 0.0:
+            ax.axvline(cap_val, color="#C44E52", linewidth=1.4, linestyle="--", label=f"cap {cap_val:.2f}")
+
+        ax.set_title(f"Target Temperature Distribution (step {step})")
+        ax.set_xlabel("Target temperature used for loss")
+        ax.set_ylabel("Density")
+        ax.legend(frameon=False, fontsize=9)
+        fig.tight_layout()
+
+        out_path = os.path.join(self._temp_diag_output_dir, f"step_{step:07d}_target_dist.png")
+        fig.savefig(out_path, bbox_inches="tight")
+        plt.close(fig)
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         inputs['temp_loss_weight'] = self.temp_loss_weight
