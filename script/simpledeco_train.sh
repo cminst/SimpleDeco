@@ -15,6 +15,7 @@ uv run accelerate launch trl_train.py \
   --temp_reg_weight 1.0 \
   --goldilocks_temp_cap 0.9 \
   --goldilocks_filter true \
+  --temp_target_smooth_window 8 \
   --goldilocks_easy_frac 0.05 \
   --goldilocks_topk 15 \
   --max_steps 3000 \
