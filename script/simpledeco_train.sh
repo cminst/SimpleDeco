@@ -6,17 +6,17 @@ export WANDB_RUN_ID="SimpleDeco-NewV2-$TS"
 uv run accelerate launch trl_train.py \
   --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-  --output_dir ./ckpt/trained-simpledeco-qwen3-4b-thinking \
+  --output_dir ./ckpt/simpledeco-bimodal \
   --train_temp true \
   --train_top_p false \
   --temp_objective analytic_min_p_hinge \
   --min_p_ratio 0.05 \
   --temp_hinge_weight 3.0 \
-  --temp_reg_weight 1.0 \
-  --goldilocks_temp_cap 0.9 \
+  --temp_reg_weight 1.5 \
+  --temp_target_cap 0.9 \
+  --temp_target_smooth_window 32 \
   --goldilocks_filter true \
-  --temp_target_smooth_window 8 \
-  --goldilocks_easy_frac 0.05 \
+  --goldilocks_easy_frac 0.4 \
   --goldilocks_topk 15 \
   --max_steps 3000 \
   --logging_steps 25 \
@@ -26,9 +26,4 @@ uv run accelerate launch trl_train.py \
   --torch_dtype bfloat16 \
   --gradient_checkpointing \
   --assistant_only_loss true \
-  --temp_diag_enabled true \
-  --temp_diag_steps 100 \
-  --temp_diag_examples 3 \
-  --temp_diag_topk 10 \
-  --report_to wandb \
-  --num_proc 16
+  --report_to wandb
