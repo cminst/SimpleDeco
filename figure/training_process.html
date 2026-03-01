@@ -264,7 +264,7 @@ For each selected token:
   denom = -log(min_p_ratio)
   temp_lower_bound = delta / denom
   hinge = relu(temp_lower_bound - temp_valid)
-  token_loss = temp_hinge_weight * hinge + temp_reg_weight * (temp_valid - temp_lower_bound)
+  token_loss = temp_hinge_weight * hinge + temp_reg_weight * relu(temp_valid - temp_lower_bound)^2
 
 temp_loss = mean(token_loss)
 loss = temp_loss * temp_loss_weight

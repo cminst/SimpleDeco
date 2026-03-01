@@ -43,7 +43,7 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     temp_objective: str = "legacy_ce"
     min_p_ratio: float = 0.1
     temp_hinge_weight: float = 1.0
-    temp_reg_weight: float = 0.0  # applied to (temp_pred - temp_lower) for analytic_min_p_hinge
+    temp_reg_weight: float = 1.0  # applied to relu(temp_pred - temp_lower)^2 for analytic_min_p_hinge
     goldilocks_temp_cap: float = 2.0
     goldilocks_uniform: bool = False
     goldilocks_uniform_bins: int = 20

@@ -341,7 +341,7 @@
           <div class="num" id="hingeTerm">0.00</div>
         </div>
         <div class="stat">
-          <div class="label">Reg Term (temp - temp_lower)</div>
+        <div class="label">Reg Term (relu(temp - temp_lower)^2)</div>
           <div class="num" id="regTerm">0.00</div>
         </div>
         <div class="stat">
@@ -351,7 +351,7 @@
       </div>
 
       <div class="formula" id="equationLine">
-loss = temp_hinge_weight * max(0, temp_lower - temp_pred) + temp_reg_weight * (temp_pred - temp_lower) = token_loss
+loss = temp_hinge_weight * max(0, temp_lower - temp_pred) + temp_reg_weight * relu(temp_pred - temp_lower)^2 = token_loss
       </div>
       <div class="formula" id="formulaBlock"></div>
     </section>
@@ -501,7 +501,8 @@ loss = temp_hinge_weight * max(0, temp_lower - temp_pred) + temp_reg_weight * (t
       const gapVal = tempLower - temp;
       const hinge = Math.max(0, gapVal);
       const hingeLoss = hingeW * hinge;
-      const regLoss = regW * (temp - tempLower);
+      const regGap = Math.max(0, temp - tempLower);
+      const regLoss = regW * Math.pow(regGap, 2);
       const loss = hingeLoss + regLoss;
 
       minPValue.textContent = minPVal.toFixed(3);
@@ -541,11 +542,11 @@ loss = temp_hinge_weight * max(0, temp_lower - temp_pred) + temp_reg_weight * (t
         fmt(temp, 2) +
         ") + " +
         fmt(regW, 2) +
-        " * (" +
+        " * relu(" +
         fmt(temp, 2) +
         " - " +
         fmt(tempLower) +
-        ") = " +
+        ")^2 = " +
         fmt(loss);
 
       formulaBlock.textContent =
@@ -579,14 +580,21 @@ loss = temp_hinge_weight * max(0, temp_lower - temp_pred) + temp_reg_weight * (t
         ") = " +
         fmt(hingeLoss) +
         "\n\n" +
-        "reg_loss = temp_reg_weight * (temp_pred - temp_lower)\n" +
-        "reg_loss = " +
-        fmt(regW, 2) +
-        " * (" +
+        "reg_gap = temp_pred - temp_lower = " +
         fmt(temp, 2) +
         " - " +
         fmt(tempLower) +
-        ")" +
+        " = " +
+        fmt(temp - tempLower, 3) +
+        "\n" +
+        "reg_loss = temp_reg_weight * relu(reg_gap)^2\n" +
+        "reg_loss = " +
+        fmt(regW, 2) +
+        " * relu(" +
+        fmt(temp, 2) +
+        " - " +
+        fmt(tempLower) +
+        ")^2" +
         " = " +
         fmt(regLoss) +
         "\n\n" +
