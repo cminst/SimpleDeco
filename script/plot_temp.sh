@@ -3,7 +3,7 @@ python3 script/plot_temp_curve.py \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
   --dataset_split train \
   --dataset_text_field messages \
-  --row_index 10 \
+  --row_index 304 \
   --add_generation_prompt \
   --enable_thinking \
   --strip_assistant \
@@ -11,5 +11,5 @@ python3 script/plot_temp_curve.py \
   --do_sample \
   --temperature 0.7 \
   --top_p 0.95 \
-  --output_dir figure/autodeco_temp_trace_10 \
+  --output_dir figure/autodeco_temp_trace_304 \
   --smooth_window 50
