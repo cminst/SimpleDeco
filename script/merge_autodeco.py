@@ -47,6 +47,13 @@ def write_json(fp: str, obj: Any):
     with open(fp, 'w', encoding='utf-8') as f:
         f.write(json.dumps(obj, ensure_ascii=False, indent=4))
 
+def copy_glob(src_dir: str, pattern: str, dst_dir: Path) -> int:
+    matched = list(Path(src_dir).glob(pattern))
+    for src_path in matched:
+        if src_path.is_file():
+            shutil.copy2(src_path, dst_dir / src_path.name)
+    return len(matched)
+
 
 def load_state_dict(dir_path: str) -> List[Tuple[str, Dict[str, torch.Tensor]]]:
     return [
@@ -111,12 +118,17 @@ def merge_autodeco(
             c_base_state_dicts[-1][1][k] = v
             c_weight_index["weight_map"][k] = c_base_state_dicts[-1][0] # fine name
 
-    os.system(f"mkdir -p {output_dir}")
-    os.system(f"cp -r {os.path.join(base_model_path, '*.jinja')} {output_dir}")
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    jinja_copied = copy_glob(base_model_path, "*.jinja", output_path)
+    if jinja_copied == 0:
+        copy_glob(autodeco_path, "*.jinja", output_path)
+
     # Copy all json files from base_model_path (including config.json)
-    os.system(f"cp -r {os.path.join(base_model_path, '*.json')} {output_dir}")
+    copy_glob(base_model_path, "*.json", output_path)
     # Overwrite config.json with autodeco_path's config.json
-    os.system(f"cp -r {os.path.join(autodeco_path, 'config.json')} {output_dir}")
+    shutil.copy2(Path(autodeco_path) / "config.json", output_path / "config.json")
 
     write_json(fp=os.path.join(output_dir, "model.safetensors.index.json"), obj=c_weight_index)
     for name, state_dict in c_base_state_dicts:
