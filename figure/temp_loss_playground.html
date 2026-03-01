@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analytic Min‑P Hinge Loss Playground</title>
+  <style>
+    :root {
+      --bg: #0d1116;
+      --panel: #121923;
+      --panel-2: #1a2432;
+      --ink: #eef3ff;
+      --muted: #9fb0c4;
+      --accent: #ffb703;
+      --accent-2: #00b4d8;
+      --accent-3: #f07167;
+      --line: #2a394a;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Futura", "Gill Sans", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 700px at 5% 10%, rgba(0, 180, 216, 0.18), transparent 60%),
+        radial-gradient(900px 600px at 90% 10%, rgba(240, 113, 103, 0.14), transparent 55%),
+        linear-gradient(140deg, #0b0f14 0%, #101620 45%, #0d1116 100%);
+      min-height: 100vh;
+    }
+    header {
+      padding: 36px 28px 12px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      letter-spacing: 0.4px;
+    }
+    .subtitle {
+      color: var(--muted);
+      max-width: 900px;
+      line-height: 1.5;
+    }
+    main {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(280px, 420px) 1fr;
+      padding: 18px 28px 48px;
+    }
+    .card {
+      background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .controls {
+      display: grid;
+      gap: 14px;
+    }
+    .control {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 12px 10px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .control label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--ink);
+    }
+    .control small {
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .value {
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .results {
+      display: grid;
+      gap: 14px;
+    }
+    .pill {
+      display: inline-flex;
+      gap: 8px;
+      align-items: baseline;
+      background: rgba(0, 180, 216, 0.18);
+      border: 1px solid rgba(0, 180, 216, 0.4);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-weight: 600;
+    }
+    .pill span {
+      color: var(--accent-2);
+      font-variant-numeric: tabular-nums;
+    }
+    .formula {
+      font-family: "IBM Plex Mono", "Menlo", "Consolas", monospace;
+      background: #0b111a;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 14px;
+      color: #d7e2f5;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .stat .label {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .stat .num {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent-3);
+      font-variant-numeric: tabular-nums;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-weight: 700;
+      background: linear-gradient(120deg, var(--accent-2), var(--accent));
+      color: #071018;
+      cursor: pointer;
+    }
+    .token-panel {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      display: grid;
+      gap: 10px;
+    }
+    .token-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 700;
+    }
+    .token-controls {
+      display: grid;
+      gap: 8px;
+    }
+    .token-controls .mini {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .token-controls .mini input[type="range"] {
+      grid-column: 1 / -1;
+    }
+    .token-legend {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .token-table {
+      display: grid;
+      gap: 8px;
+    }
+    .token-row {
+      display: grid;
+      grid-template-columns: 22px 26px 1fr 68px 68px 1fr;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 6px 6px 2px;
+      border-radius: 10px;
+    }
+    .token-row.header {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .token-row.selected {
+      background: rgba(255, 183, 3, 0.12);
+      border: 1px solid rgba(255, 183, 3, 0.3);
+    }
+    .token-label {
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .token-num {
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      font-size: 12px;
+      text-align: right;
+    }
+    .token-prob {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent-2);
+      font-size: 12px;
+      text-align: right;
+    }
+    .token-bar {
+      height: 8px;
+      background: #0b111a;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+    .token-bar span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Analytic Min‑P Hinge Loss Playground</h1>
+    <div class="subtitle">
+      Interactive single‑token view of the <code>analytic_min_p_hinge</code> temperature head loss in
+      <code>model/templlm_auto.py</code>. This ignores goldilocks filtering, uniform selection, and smoothing.
+    </div>
+  </header>
+
+  <main>
+    <section class="card controls" aria-label="controls">
+      <div class="control">
+        <label>
+          min_p_ratio
+          <span class="value" id="minPValue">0.050</span>
+        </label>
+        <input id="minP" type="range" min="0.001" max="0.990" step="0.001" value="0.050" />
+        <small>Used as denom = -ln(min_p_ratio).</small>
+      </div>
+      <div class="control">
+        <label>
+          temp_hinge_weight
+          <span class="value" id="hingeValue">3.00</span>
+        </label>
+        <input id="hingeWeight" type="range" min="0" max="10" step="0.1" value="3.0" />
+        <small>Scales the hinge penalty.</small>
+      </div>
+      <div class="control">
+        <label>
+          temp_reg_weight
+          <span class="value" id="regValue">1.50</span>
+        </label>
+        <input id="regWeight" type="range" min="0" max="5" step="0.05" value="1.5" />
+        <small>Linear penalty on predicted temperature.</small>
+      </div>
+      <div class="control">
+        <label>
+          temp head output (predicted temp)
+          <span class="value" id="tempValue">0.90</span>
+        </label>
+        <input id="tempPred" type="range" min="0.0" max="2.0" step="0.01" value="0.90" />
+        <small>Model output is clamped ≥ 1e‑2 in training.</small>
+      </div>
+      <div class="token-panel">
+        <div class="token-header">
+          Token distribution (logits)
+          <button id="regen">Generate realistic distribution</button>
+        </div>
+        <div class="token-controls">
+          <div class="mini">
+            <div>Spread (logit std dev)</div>
+            <span class="value" id="spreadValue">1.6</span>
+            <input id="spread" type="range" min="0.3" max="3.5" step="0.1" value="1.6" />
+          </div>
+          <div class="mini">
+            <div>Winner boost</div>
+            <span class="value" id="boostValue">2.5</span>
+            <input id="boost" type="range" min="0.0" max="6.0" step="0.1" value="2.5" />
+          </div>
+        </div>
+        <div class="token-legend">Pick the ground‑truth token with the radio button, then tweak logits.</div>
+        <div class="token-table" id="tokenTable">
+          <div class="token-row header">
+            <div></div>
+            <div>Tok</div>
+            <div>Logit</div>
+            <div>logit</div>
+            <div>p</div>
+            <div>softmax</div>
+          </div>
+        </div>
+      </div>
+      <div class="note">
+        The actual training loss averages across selected tokens. This page shows a single‑token loss for intuition.
+      </div>
+    </section>
+
+    <section class="card results" aria-label="results">
+      <div class="pill">Required temp lower bound: <span id="requiredTemp">0.00</span></div>
+      <div class="grid">
+        <div class="stat">
+          <div class="label">Max Logit</div>
+          <div class="num" id="maxLogit">0.00</div>
+        </div>
+        <div class="stat">
+          <div class="label">GT Logit</div>
+          <div class="num" id="gtLogit">0.00</div>
+        </div>
+        <div class="stat">
+          <div class="label">Δ Logit</div>
+          <div class="num" id="deltaLogit">0.00</div>
+        </div>
+        <div class="stat">
+          <div class="label">Hinge Gap</div>
+          <div class="num" id="hingeGap">0.00</div>
+        </div>
+        <div class="stat">
+          <div class="label">Hinge Term</div>
+          <div class="num" id="hingeTerm">0.00</div>
+        </div>
+        <div class="stat">
+          <div class="label">Reg Term (temp - temp_lower)</div>
+          <div class="num" id="regTerm">0.00</div>
+        </div>
+        <div class="stat">
+          <div class="label">Total Loss</div>
+          <div class="num" id="totalLoss">0.00</div>
+        </div>
+      </div>
+
+      <div class="formula" id="equationLine">
+loss = temp_hinge_weight * max(0, temp_lower - temp_pred) + temp_reg_weight * (temp_pred - temp_lower) = token_loss
+      </div>
+      <div class="formula" id="formulaBlock"></div>
+    </section>
+  </main>
+
+  <script>
+    const minP = document.getElementById("minP");
+    const hingeWeight = document.getElementById("hingeWeight");
+    const regWeight = document.getElementById("regWeight");
+    const tempPred = document.getElementById("tempPred");
+    const spread = document.getElementById("spread");
+    const boost = document.getElementById("boost");
+    const regen = document.getElementById("regen");
+    const tokenTable = document.getElementById("tokenTable");
+
+    const minPValue = document.getElementById("minPValue");
+    const hingeValue = document.getElementById("hingeValue");
+    const regValue = document.getElementById("regValue");
+    const tempValue = document.getElementById("tempValue");
+    const spreadValue = document.getElementById("spreadValue");
+    const boostValue = document.getElementById("boostValue");
+
+    const requiredTemp = document.getElementById("requiredTemp");
+    const maxLogit = document.getElementById("maxLogit");
+    const gtLogit = document.getElementById("gtLogit");
+    const deltaLogit = document.getElementById("deltaLogit");
+    const hingeGap = document.getElementById("hingeGap");
+    const hingeTerm = document.getElementById("hingeTerm");
+    const regTerm = document.getElementById("regTerm");
+    const totalLoss = document.getElementById("totalLoss");
+    const equationLine = document.getElementById("equationLine");
+    const formulaBlock = document.getElementById("formulaBlock");
+
+    const tokenCount = 8;
+    const tokens = [];
+    let gtIndex = 0;
+
+    function clamp(val, min, max) {
+      return Math.min(Math.max(val, min), max);
+    }
+
+    function fmt(num, digits = 4) {
+      return Number(num).toFixed(digits);
+    }
+
+    function randn() {
+      let u = 0;
+      let v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+
+    function softmax(logits) {
+      const maxVal = Math.max(...logits);
+      const exps = logits.map((v) => Math.exp(v - maxVal));
+      const sum = exps.reduce((a, b) => a + b, 0);
+      return exps.map((v) => v / sum);
+    }
+
+    function buildTokenRows() {
+      for (let i = 0; i < tokenCount; i += 1) {
+        const row = document.createElement("div");
+        row.className = "token-row";
+
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "gtToken";
+        radio.checked = i === gtIndex;
+        radio.addEventListener("change", () => {
+          gtIndex = i;
+          update();
+        });
+
+        const label = document.createElement("div");
+        label.className = "token-label";
+        label.textContent = String.fromCharCode(65 + i);
+
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "-8";
+        slider.max = "8";
+        slider.step = "0.1";
+        slider.value = "0";
+        slider.addEventListener("input", () => {
+          tokens[i].logit = parseFloat(slider.value);
+          update();
+        });
+
+        const logitVal = document.createElement("div");
+        logitVal.className = "token-num";
+
+        const probVal = document.createElement("div");
+        probVal.className = "token-prob";
+
+        const bar = document.createElement("div");
+        bar.className = "token-bar";
+        const barFill = document.createElement("span");
+        bar.appendChild(barFill);
+
+        row.appendChild(radio);
+        row.appendChild(label);
+        row.appendChild(slider);
+        row.appendChild(logitVal);
+        row.appendChild(probVal);
+        row.appendChild(bar);
+
+        tokenTable.appendChild(row);
+        tokens.push({ row, slider, logitVal, probVal, barFill, logit: 0 });
+      }
+    }
+
+    function generateDistribution() {
+      const spreadVal = parseFloat(spread.value);
+      const boostVal = parseFloat(boost.value);
+      const winner = Math.floor(Math.random() * tokenCount);
+      for (let i = 0; i < tokenCount; i += 1) {
+        let val = randn() * spreadVal;
+        if (i === winner) {
+          val += boostVal;
+        }
+        tokens[i].logit = val;
+        tokens[i].slider.value = val.toFixed(2);
+      }
+      gtIndex = winner;
+      const radios = tokenTable.querySelectorAll("input[type='radio']");
+      if (radios[winner]) {
+        radios[winner].checked = true;
+      }
+      update();
+    }
+
+    function update() {
+      const minPVal = clamp(parseFloat(minP.value), 1e-6, 1 - 1e-6);
+      const hingeW = parseFloat(hingeWeight.value);
+      const regW = parseFloat(regWeight.value);
+      const temp = parseFloat(tempPred.value);
+      const logits = tokens.map((t) => t.logit);
+      const probs = softmax(logits);
+
+      const maxLogitVal = Math.max(...logits);
+      const gtLogitVal = logits[gtIndex];
+      const delta = Math.max(0, maxLogitVal - gtLogitVal);
+
+      const denom = -Math.log(minPVal);
+      const tempLower = delta / denom;
+      const gapVal = tempLower - temp;
+      const hinge = Math.max(0, gapVal);
+      const hingeLoss = hingeW * hinge;
+      const regLoss = regW * (temp - tempLower);
+      const loss = hingeLoss + regLoss;
+
+      minPValue.textContent = minPVal.toFixed(3);
+      hingeValue.textContent = hingeW.toFixed(2);
+      regValue.textContent = regW.toFixed(2);
+      tempValue.textContent = temp.toFixed(2);
+      spreadValue.textContent = parseFloat(spread.value).toFixed(1);
+      boostValue.textContent = parseFloat(boost.value).toFixed(1);
+
+      maxLogit.textContent = fmt(maxLogitVal, 3);
+      gtLogit.textContent = fmt(gtLogitVal, 3);
+      deltaLogit.textContent = fmt(delta, 3);
+
+      requiredTemp.textContent = fmt(tempLower);
+      hingeGap.textContent = fmt(gapVal);
+      hingeTerm.textContent = fmt(hingeLoss);
+      regTerm.textContent = fmt(regLoss);
+      totalLoss.textContent = fmt(loss);
+
+      tokens.forEach((token, idx) => {
+        token.logitVal.textContent = fmt(token.logit, 2);
+        token.probVal.textContent = fmt(probs[idx], 3);
+        token.barFill.style.width = `${(probs[idx] * 100).toFixed(1)}%`;
+        if (idx === gtIndex) {
+          token.row.classList.add("selected");
+        } else {
+          token.row.classList.remove("selected");
+        }
+      });
+
+      equationLine.textContent =
+        "loss = " +
+        fmt(hingeW, 2) +
+        " * max(0, " +
+        fmt(tempLower) +
+        " - " +
+        fmt(temp, 2) +
+        ") + " +
+        fmt(regW, 2) +
+        " * (" +
+        fmt(temp, 2) +
+        " - " +
+        fmt(tempLower) +
+        ") = " +
+        fmt(loss);
+
+      formulaBlock.textContent =
+        "temp_lower = relu(max_logit - gt_logit) / -ln(min_p_ratio)\n" +
+        "max_logit = " +
+        fmt(maxLogitVal, 3) +
+        ", gt_logit = " +
+        fmt(gtLogitVal, 3) +
+        ", delta = " +
+        fmt(delta, 3) +
+        "\n" +
+        "temp_lower = " +
+        fmt(delta, 3) +
+        " / -ln(" +
+        fmt(minPVal, 3) +
+        ") = " +
+        fmt(tempLower) +
+        "\n\n" +
+        "hinge_gap = temp_lower - temp_pred = " +
+        fmt(tempLower) +
+        " - " +
+        fmt(temp, 2) +
+        " = " +
+        fmt(gapVal) +
+        "\n" +
+        "hinge_loss = temp_hinge_weight * relu(hinge_gap)\n" +
+        "hinge_loss = " +
+        fmt(hingeW, 2) +
+        " * max(0, " +
+        fmt(gapVal) +
+        ") = " +
+        fmt(hingeLoss) +
+        "\n\n" +
+        "reg_loss = temp_reg_weight * (temp_pred - temp_lower)\n" +
+        "reg_loss = " +
+        fmt(regW, 2) +
+        " * (" +
+        fmt(temp, 2) +
+        " - " +
+        fmt(tempLower) +
+        ")" +
+        " = " +
+        fmt(regLoss) +
+        "\n\n" +
+        "token_loss = hinge_loss + reg_loss = " +
+        fmt(hingeLoss) +
+        " + " +
+        fmt(regLoss) +
+        " = " +
+        fmt(loss);
+    }
+
+    [minP, hingeWeight, regWeight, tempPred, spread, boost].forEach((el) => {
+      el.addEventListener("input", update);
+    });
+    regen.addEventListener("click", generateDistribution);
+
+    buildTokenRows();
+    generateDistribution();
+    update();
+  </script>
+</body>
+</html>

@@ -475,7 +475,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
 
             token_loss = temp_hinge_weight * torch.relu(temp_lower_bound - temp_selected)
             if temp_reg_weight != 0.0:
-                token_loss = token_loss + temp_reg_weight * temp_selected
+                token_loss = token_loss + temp_reg_weight * (temp_selected - temp_lower_bound)
             return _pack_result(token_loss.mean(), valid_mask, selected_mask)
 
         if objective != "legacy_ce":
