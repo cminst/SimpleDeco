@@ -8,3 +8,5 @@ __pycache__/
 .generation_log/
 .swanlog/
 local_run.sh
+**/__pycache__/
+**/.ipynb_checkpoints/
