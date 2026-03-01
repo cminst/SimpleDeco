@@ -14,6 +14,10 @@ import json
 import os
 from typing import Any, List, Tuple
 
+import base64
+import io
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
@@ -323,10 +327,19 @@ def plot_request_output_temps(
     ax.legend(handles, labels, loc="upper right")
 
     fig.tight_layout()
+    img_data_uri = None
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
         output_png_path = os.path.join(output_dir, "temp_trace.png")
-        fig.savefig(output_png_path, dpi=160)
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=160)
+        buf.seek(0)
+        img_data_uri = "data:image/png;base64," + base64.b64encode(buf.read()).decode('utf-8')
+        buf.close()
+
+        with open(output_png_path, 'wb') as f:
+            f.write(base64.b64decode(img_data_uri.split(',')[1]))
 
         gen_temps = [t for t in aligned_temps[prompt_len:] if t is not None]
         if gen_temps:
@@ -414,7 +427,7 @@ def plot_request_output_temps(
                 "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks. "
                 "Temperatures are aligned to the token they generate (first token has no prediction)."
                 f"{smoothing_note}</p>\n"
-                f"<img src='temp_trace.png' style='max-width: 100%; height: auto;' />\n"
+                f"<img src='{img_data_uri}' style='max-width: 100%; height: auto;' />\n"
                 f"<p>Prompt length: {prompt_len_display} tokens, total length: {len(token_ids)} tokens.</p>\n"
                 "<h3>Generated Tokens (colored by predicted temperature)</h3>\n"
                 f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
