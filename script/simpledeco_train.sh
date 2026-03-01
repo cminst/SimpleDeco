@@ -12,15 +12,15 @@ uv run accelerate launch trl_train.py \
   --temp_objective analytic_min_p_hinge \
   --min_p_ratio 0.05 \
   --temp_hinge_weight 1.0 \
-  --temp_reg_weight 0.2 \
+  --temp_reg_weight 1.0 \
   --goldilocks_temp_cap 1.0 \
   --temp_target_smooth_window 2 \
   --goldilocks_uniform \
-  --max_steps 3000 \
+  --max_steps 1500 \
   --logging_steps 25 \
   --per_device_train_batch_size 16 \
   --gradient_accumulation_steps 4 \
-  --learning_rate 1e-4 \
+  --learning_rate 2e-4 \
   --torch_dtype bfloat16 \
   --gradient_checkpointing \
   --assistant_only_loss true \
