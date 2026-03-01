@@ -9,9 +9,13 @@ code fences in the rendered token text.
 
 from __future__ import annotations
 
+import html
+import json
+import os
 from typing import Any, List, Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 
 def _find_ranges(text: str, start_tag: str, end_tag: str) -> List[Tuple[int, int]]:
@@ -86,6 +90,46 @@ def _moving_average(values: List[float], window: int) -> List[float]:
     return smoothed
 
 
+def _empty_float_series(length: int) -> List[float | None]:
+    """Create a None-initialized float-or-None sequence."""
+    return [None for _ in range(length)]
+
+
+def _temp_to_hex(value: float, vmin: float, vmax: float) -> str:
+    """Map a scalar value to a blue-to-red color hex string."""
+    if vmax <= vmin:
+        t = 0.0
+    else:
+        t = (value - vmin) / (vmax - vmin)
+        t = max(0.0, min(1.0, t))
+
+    hue = 210.0 * (1.0 - t)
+    saturation = 0.85
+    lightness = 0.75
+
+    c = (1.0 - abs(2.0 * lightness - 1.0)) * saturation
+    h_prime = hue / 60.0
+    x = c * (1.0 - abs(h_prime % 2.0 - 1.0))
+    r1 = g1 = b1 = 0.0
+    if 0.0 <= h_prime < 1.0:
+        r1, g1, b1 = c, x, 0.0
+    elif 1.0 <= h_prime < 2.0:
+        r1, g1, b1 = x, c, 0.0
+    elif 2.0 <= h_prime < 3.0:
+        r1, g1, b1 = 0.0, c, x
+    elif 3.0 <= h_prime < 4.0:
+        r1, g1, b1 = 0.0, x, c
+    elif 4.0 <= h_prime < 5.0:
+        r1, g1, b1 = x, 0.0, c
+    elif 5.0 <= h_prime <= 6.0:
+        r1, g1, b1 = c, 0.0, x
+    m = lightness - c / 2.0
+    r = int(round((r1 + m) * 255))
+    g = int(round((g1 + m) * 255))
+    b = int(round((b1 + m) * 255))
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 def plot_request_output_temps(
     request_output: Any,
     tokenizer: Any,
@@ -95,8 +139,8 @@ def plot_request_output_temps(
     show_top_p: bool = True,
     title: str | None = None,
     figsize: Tuple[float, float] = (14.0, 4.0),
-    output_path: str | None = None,
-) -> plt.Figure:
+    output_dir: str | None = None,
+) -> Figure:
     """Plot token-level temperature (and optional top-p) trajectories.
 
     This function aligns generation metrics (`temperatures`, `top_ps`) with token
@@ -120,8 +164,9 @@ def plot_request_output_temps(
         Optional title for the generated figure.
     figsize:
         Figure size passed to `plt.subplots`.
-    output_path:
-        Optional path to save the figure.
+    output_dir:
+        Optional directory where figure and HTML are saved.
+        Uses `temp_trace.png` and `temp_trace.html` as filenames.
 
     Returns
     -------
@@ -166,19 +211,24 @@ def plot_request_output_temps(
     aligned_temps: List[float | None] = [None] * len(token_ids)
     aligned_smoothed: List[float | None] | None = None
     if smooth_window > 1:
-        smoothed = _moving_average([float(t) for t in temperatures], smooth_window)
-        aligned_smoothed = [None] * len(token_ids)
+        aligned_smoothed_values = _moving_average(
+            [float(t) for t in temperatures],
+            smooth_window,
+        )
+        aligned_smoothed = _empty_float_series(len(token_ids))
+    else:
+        aligned_smoothed_values = None
     aligned_top_p: List[float | None] | None = None
     if show_top_p and top_ps is not None:
-        aligned_top_p = [None] * len(token_ids)
+        aligned_top_p = _empty_float_series(len(token_ids))
 
     for idx, temp in enumerate(temperatures):
         pos = prompt_len + idx
         if pos >= len(token_ids):
             break
         aligned_temps[pos] = float(temp)
-        if aligned_smoothed is not None:
-            aligned_smoothed[pos] = smoothed[idx]
+        if aligned_smoothed is not None and aligned_smoothed_values is not None:
+            aligned_smoothed[pos] = aligned_smoothed_values[idx]
         if aligned_top_p is not None and top_ps is not None:
             aligned_top_p[pos] = float(top_ps[idx])
 
@@ -273,6 +323,103 @@ def plot_request_output_temps(
     ax.legend(handles, labels, loc="upper right")
 
     fig.tight_layout()
-    if output_path:
-        fig.savefig(output_path, dpi=160)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        output_png_path = os.path.join(output_dir, "temp_trace.png")
+        fig.savefig(output_png_path, dpi=160)
+
+        gen_temps = [t for t in aligned_temps[prompt_len:] if t is not None]
+        if gen_temps:
+            gen_min = min(gen_temps)
+            gen_max = max(gen_temps)
+        else:
+            gen_min, gen_max = 0.0, 1.0
+
+        output_text_path = os.path.join(output_dir, "temp_trace.txt")
+        with open(output_text_path, "w", encoding="utf-8") as f:
+            f.write(decoded)
+
+        output_json_path = os.path.join(output_dir, "temp_trace.jsonl")
+        with open(output_json_path, "w", encoding="utf-8") as f:
+            for idx, (token_id, (start, end)) in enumerate(zip(token_ids, spans)):
+                entry = {
+                    "index": idx,
+                    "token_id": token_id,
+                    "token_text": decoded[start:end],
+                    "temperature": aligned_temps[idx],
+                    "in_think": bool(think_mask[idx]),
+                    "in_code": bool(code_mask[idx]),
+                }
+                if smooth_window > 1:
+                    entry["temperature_smoothed"] = aligned_smoothed[idx] if aligned_smoothed is not None else None
+                if show_top_p and aligned_top_p is not None:
+                    entry["top_p"] = aligned_top_p[idx]
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+        token_spans_html: List[str] = []
+        for idx in range(prompt_len, len(token_ids)):
+            token_text = decoded[spans[idx][0]:spans[idx][1]]
+            escaped = html.escape(token_text)
+            temp_value = aligned_temps[idx]
+            top_p_value = aligned_top_p[idx] if aligned_top_p is not None else None
+            if temp_value is None:
+                color = "#E0E0E0"
+                tip_lines = ["temp=n/a (no previous token)"]
+            else:
+                color = _temp_to_hex(temp_value, gen_min, gen_max)
+                tip_lines = [f"temp={temp_value:.4f}"]
+                if smooth_window > 1 and aligned_smoothed is not None:
+                    smoothed_value = aligned_smoothed[idx]
+                    if smoothed_value is not None:
+                        tip_lines.append(f"smooth={smoothed_value:.4f}")
+                if show_top_p and top_p_value is not None:
+                    tip_lines.append(f"top_p={top_p_value:.4f}")
+            title_text = "&#10;".join(html.escape(line, quote=True) for line in tip_lines)
+            token_display = escaped
+            token_spans_html.append(
+                f"<span class='tok' style='background-color: {color};' data-tip=\"{title_text}\">"
+                f"{token_display}</span>"
+            )
+
+        generation_html = "".join(token_spans_html)
+        output_html_path = os.path.join(output_dir, "temp_trace.html")
+        prompt_len_display = max(prompt_len, 0)
+        with open(output_html_path, "w", encoding="utf-8") as f:
+            smoothing_note = ""
+            if smooth_window > 1:
+                smoothing_note = f" Smoothed with window={smooth_window}."
+            f.write(
+                "<!doctype html>\n"
+                "<html><head><meta charset='utf-8'><title>Temp Trace</title>\n"
+                "<style>\n"
+                "body { font-family: Arial, sans-serif; }\n"
+                ".token-box { white-space: pre-wrap; word-break: break-word; "
+                "border: 1px solid #DDD; padding: 12px; border-radius: 8px; "
+                "background: #FAFAFA; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }\n"
+                ".tok { padding: 0 1px; border-radius: 3px; position: relative; }\n"
+                ".tok:hover::after { "
+                "content: attr(data-tip); "
+                "position: absolute; "
+                "left: 0; top: 1.2em; "
+                "background: #1F2937; color: #F9FAFB; "
+                "padding: 8px 10px; border-radius: 8px; "
+                "font-size: 12px; line-height: 1.3; "
+                "white-space: pre; "
+                "box-shadow: 0 6px 18px rgba(0,0,0,0.25); "
+                "z-index: 5; min-width: 200px; }\n"
+                ".legend { font-size: 12px; color: #444; }\n"
+                "</style></head>\n"
+                "<body>\n"
+                f"<h2>Temperature Trace (request_id={getattr(request_output, 'request_id', 'unknown')})</h2>\n"
+                "<p>Blue shading: &lt;think&gt; spans. Yellow shading: code blocks. "
+                "Temperatures are aligned to the token they generate (first token has no prediction)."
+                f"{smoothing_note}</p>\n"
+                f"<img src='temp_trace.png' style='max-width: 100%; height: auto;' />\n"
+                f"<p>Prompt length: {prompt_len_display} tokens, total length: {len(token_ids)} tokens.</p>\n"
+                "<h3>Generated Tokens (colored by predicted temperature)</h3>\n"
+                f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
+                "&nbsp; (hover a token for exact value)</div>\n"
+                f"<div class='token-box'>{generation_html}</div>\n"
+                "</body></html>\n"
+            )
     return fig
