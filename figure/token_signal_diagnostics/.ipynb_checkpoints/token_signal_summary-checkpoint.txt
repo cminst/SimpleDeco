@@ -1,0 +1,21 @@
+{
+  "dataset": "qingy2024/Dolci-Think-SFT-ctx8k",
+  "split": "val_balanced",
+  "text_field": "messages",
+  "examples_processed": 11112,
+  "tokens_processed": 29515205,
+  "assistant_only": true,
+  "completion_only": false,
+  "assistant_mask_used_examples": 11112,
+  "assistant_mask_missing_examples": 0,
+  "used_temp_head": true,
+  "auroc_entropy": 0.867689662219338,
+  "auroc_neg_pmax": 0.866184873693905,
+  "auroc_t_pred": 0.8263205347486065,
+  "confidence_threshold": 0.8,
+  "confidence_threshold_mode": "threshold=0.8",
+  "confident_token_count": 18837433,
+  "confident_incorrect_count": 1977637,
+  "confident_incorrect_rate": 0.10498442117883047,
+  "auroc_t_pred_confident": 0.8386130988920492
+}

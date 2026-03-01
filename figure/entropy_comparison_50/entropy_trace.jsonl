@@ -1,0 +1,631 @@
+{"index": 0, "token_id": 151644, "token_text": "<|im_start|>", "entropy": null, "in_think": false, "in_code": false, "entropy_smoothed": null}
+{"index": 1, "token_id": 872, "token_text": "user", "entropy": 11.47314453125, "in_think": false, "in_code": false, "entropy_smoothed": 11.47314453125}
+{"index": 2, "token_id": 198, "token_text": "\n", "entropy": 0.0018029515631496906, "in_think": false, "in_code": false, "entropy_smoothed": 5.737473741406575}
+{"index": 3, "token_id": 2610, "token_text": "You", "entropy": 3.229405641555786, "in_think": false, "in_code": false, "entropy_smoothed": 4.901451041456312}
+{"index": 4, "token_id": 525, "token_text": " are", "entropy": 0.28296059370040894, "in_think": false, "in_code": false, "entropy_smoothed": 3.746828429517336}
+{"index": 5, "token_id": 50820, "token_text": " tasked", "entropy": 1.4787452220916748, "in_think": false, "in_code": false, "entropy_smoothed": 3.293211788032204}
+{"index": 6, "token_id": 448, "token_text": " with", "entropy": 0.2715032696723938, "in_think": false, "in_code": false, "entropy_smoothed": 2.789593701638902}
+{"index": 7, "token_id": 24931, "token_text": " implementing", "entropy": 3.1215567588806152, "in_think": false, "in_code": false, "entropy_smoothed": 2.8370169955305755}
+{"index": 8, "token_id": 264, "token_text": " a", "entropy": 0.7141485810279846, "in_think": false, "in_code": false, "entropy_smoothed": 2.5716584437177517}
+{"index": 9, "token_id": 729, "token_text": " function", "entropy": 5.40317964553833, "in_think": false, "in_code": false, "entropy_smoothed": 2.886271910586705}
+{"index": 10, "token_id": 429, "token_text": " that", "entropy": 1.5873050689697266, "in_think": false, "in_code": false, "entropy_smoothed": 2.756375226425007}
+{"index": 11, "token_id": 14043, "token_text": " maps", "entropy": 3.2853612899780273, "in_think": false, "in_code": false, "entropy_smoothed": 2.804464868566191}
+{"index": 12, "token_id": 8392, "token_text": " logging", "entropy": 2.3695268630981445, "in_think": false, "in_code": false, "entropy_smoothed": 2.768220034777187}
+{"index": 13, "token_id": 5866, "token_text": " levels", "entropy": 3.688551187515259, "in_think": false, "in_code": false, "entropy_smoothed": 2.8390147388339617}
+{"index": 14, "token_id": 311, "token_text": " to", "entropy": 0.8961137533187866, "in_think": false, "in_code": false, "entropy_smoothed": 2.700236097011449}
+{"index": 15, "token_id": 862, "token_text": " their", "entropy": 2.6993026733398438, "in_think": false, "in_code": false, "entropy_smoothed": 2.7001738687666754}
+{"index": 16, "token_id": 12159, "token_text": " corresponding", "entropy": 0.884598433971405, "in_think": false, "in_code": false, "entropy_smoothed": 2.586700404091971}
+{"index": 17, "token_id": 7546, "token_text": " integer", "entropy": 4.416567802429199, "in_think": false, "in_code": false, "entropy_smoothed": 2.6943396628176903}
+{"index": 18, "token_id": 2750, "token_text": " values", "entropy": 0.7276545763015747, "in_think": false, "in_code": false, "entropy_smoothed": 2.5850793802334615}
+{"index": 19, "token_id": 13, "token_text": ".", "entropy": 1.7127633094787598, "in_think": false, "in_code": false, "entropy_smoothed": 2.5391680080884775}
+{"index": 20, "token_id": 1446, "token_text": " You", "entropy": 1.192849040031433, "in_think": false, "in_code": false, "entropy_smoothed": 2.471852059685625}
+{"index": 21, "token_id": 686, "token_text": " will", "entropy": 2.0068368911743164, "in_think": false, "in_code": false, "entropy_smoothed": 2.449708480232706}
+{"index": 22, "token_id": 387, "token_text": " be", "entropy": 1.8927886486053467, "in_think": false, "in_code": false, "entropy_smoothed": 2.424393942431462}
+{"index": 23, "token_id": 2661, "token_text": " given", "entropy": 0.585142195224762, "in_think": false, "in_code": false, "entropy_smoothed": 2.3444264751616055}
+{"index": 24, "token_id": 264, "token_text": " a", "entropy": 0.6923891305923462, "in_think": false, "in_code": false, "entropy_smoothed": 2.2755915858045532}
+{"index": 25, "token_id": 10997, "token_text": " dictionary", "entropy": 1.7013826370239258, "in_think": false, "in_code": false, "entropy_smoothed": 2.252623227853328}
+{"index": 26, "token_id": 429, "token_text": " that", "entropy": 1.9407522678375244, "in_think": false, "in_code": false, "entropy_smoothed": 2.2406281909296433}
+{"index": 27, "token_id": 5610, "token_text": " contains", "entropy": 1.643153190612793, "in_think": false, "in_code": false, "entropy_smoothed": 2.2184994872142045}
+{"index": 28, "token_id": 2155, "token_text": " different", "entropy": 1.562648892402649, "in_think": false, "in_code": false, "entropy_smoothed": 2.19507625168522}
+{"index": 29, "token_id": 8392, "token_text": " logging", "entropy": 0.7384801506996155, "in_think": false, "in_code": false, "entropy_smoothed": 2.1448487999270958}
+{"index": 30, "token_id": 5866, "token_text": " levels", "entropy": 0.09717285633087158, "in_think": false, "in_code": false, "entropy_smoothed": 2.076592935140555}
+{"index": 31, "token_id": 320, "token_text": " (", "entropy": 1.273329257965088, "in_think": false, "in_code": false, "entropy_smoothed": 2.050681203618766}
+{"index": 32, "token_id": 68, "token_text": "e", "entropy": 1.6323322057724, "in_think": false, "in_code": false, "entropy_smoothed": 2.037607797436067}
+{"index": 33, "token_id": 1302, "token_text": ".g", "entropy": 1.8870221538236365e-05, "in_think": false, "in_code": false, "entropy_smoothed": 1.975862678429566}
+{"index": 34, "token_id": 2572, "token_text": ".,", "entropy": 0.05597619712352753, "in_think": false, "in_code": false, "entropy_smoothed": 1.9193954289793884}
+{"index": 35, "token_id": 364, "token_text": " '", "entropy": 0.916595458984375, "in_think": false, "in_code": false, "entropy_smoothed": 1.8907440012652452}
+{"index": 36, "token_id": 6637, "token_text": "INFO", "entropy": 1.573763370513916, "in_think": false, "in_code": false, "entropy_smoothed": 1.881938983744375}
+{"index": 37, "token_id": 516, "token_text": "',", "entropy": 0.015503652393817902, "in_think": false, "in_code": false, "entropy_smoothed": 1.8314947855997652}
+{"index": 38, "token_id": 364, "token_text": " '", "entropy": 0.00015510074445046484, "in_think": false, "in_code": false, "entropy_smoothed": 1.7833016359983096}
+{"index": 39, "token_id": 5150, "token_text": "DEBUG", "entropy": 0.6462239027023315, "in_think": false, "in_code": false, "entropy_smoothed": 1.754145796683028}
+{"index": 40, "token_id": 516, "token_text": "',", "entropy": 0.1283443421125412, "in_think": false, "in_code": false, "entropy_smoothed": 1.713500760318766}
+{"index": 41, "token_id": 364, "token_text": " '", "entropy": 0.0018417921382933855, "in_think": false, "in_code": false, "entropy_smoothed": 1.671752980607047}
+{"index": 42, "token_id": 3682, "token_text": "ERROR", "entropy": 1.0313715934753418, "in_think": false, "in_code": false, "entropy_smoothed": 1.6565058047229588}
+{"index": 43, "token_id": 516, "token_text": "',", "entropy": 0.809138298034668, "in_think": false, "in_code": false, "entropy_smoothed": 1.6367995836371847}
+{"index": 44, "token_id": 364, "token_text": " '", "entropy": 0.7026177644729614, "in_think": false, "in_code": false, "entropy_smoothed": 1.6155681786561795}
+{"index": 45, "token_id": 74858, "token_text": "WARN", "entropy": 0.9810206890106201, "in_think": false, "in_code": false, "entropy_smoothed": 1.6014671233307227}
+{"index": 46, "token_id": 863, "token_text": "')", "entropy": 0.6640712022781372, "in_think": false, "in_code": false, "entropy_smoothed": 1.5810889511339274}
+{"index": 47, "token_id": 438, "token_text": " as", "entropy": 1.0240912437438965, "in_think": false, "in_code": false, "entropy_smoothed": 1.5692379360830757}
+{"index": 48, "token_id": 6894, "token_text": " keys", "entropy": 0.09075886011123657, "in_think": false, "in_code": false, "entropy_smoothed": 1.5384362886669958}
+{"index": 49, "token_id": 11, "token_text": ",", "entropy": 0.42272070050239563, "in_think": false, "in_code": false, "entropy_smoothed": 1.5156665827860856}
+{"index": 50, "token_id": 323, "token_text": " and", "entropy": 0.13891080021858215, "in_think": false, "in_code": false, "entropy_smoothed": 1.4881314671347354}
+{"index": 51, "token_id": 862, "token_text": " their", "entropy": 1.6642297506332397, "in_think": false, "in_code": false, "entropy_smoothed": 1.2919531715224002}
+{"index": 52, "token_id": 7546, "token_text": " integer", "entropy": 1.0439212322235107, "in_think": false, "in_code": false, "entropy_smoothed": 1.3127955371356075}
+{"index": 53, "token_id": 2750, "token_text": " values", "entropy": 0.3615729510784149, "in_think": false, "in_code": false, "entropy_smoothed": 1.2554388833260601}
+{"index": 54, "token_id": 438, "token_text": " as", "entropy": 0.9059517979621887, "in_think": false, "in_code": false, "entropy_smoothed": 1.2678987074112955}
+{"index": 55, "token_id": 279, "token_text": " the", "entropy": 0.0892472043633461, "in_think": false, "in_code": false, "entropy_smoothed": 1.2401087470567291}
+{"index": 56, "token_id": 2750, "token_text": " values", "entropy": 0.2524327039718628, "in_think": false, "in_code": false, "entropy_smoothed": 1.2397273357427183}
+{"index": 57, "token_id": 13, "token_text": ".", "entropy": 0.34763264656066895, "in_think": false, "in_code": false, "entropy_smoothed": 1.1842488534963196}
+{"index": 58, "token_id": 4615, "token_text": " Your", "entropy": 1.6000099182128906, "in_think": false, "in_code": false, "entropy_smoothed": 1.2019660802400176}
+{"index": 59, "token_id": 5795, "token_text": " goal", "entropy": 0.6681340932846069, "in_think": false, "in_code": false, "entropy_smoothed": 1.107265169194943}
+{"index": 60, "token_id": 374, "token_text": " is", "entropy": 0.0006965827778913081, "in_think": false, "in_code": false, "entropy_smoothed": 1.0755329994711065}
+{"index": 61, "token_id": 311, "token_text": " to", "entropy": 0.0008853584877215326, "in_think": false, "in_code": false, "entropy_smoothed": 1.0098434808413004}
+{"index": 62, "token_id": 4211, "token_text": " implement", "entropy": 1.3482775688171387, "in_think": false, "in_code": false, "entropy_smoothed": 0.9894184949556802}
+{"index": 63, "token_id": 264, "token_text": " a", "entropy": 0.4112795889377594, "in_think": false, "in_code": false, "entropy_smoothed": 0.9238730629841302}
+{"index": 64, "token_id": 729, "token_text": " function", "entropy": 0.2873087525367737, "in_think": false, "in_code": false, "entropy_smoothed": 0.91169696296849}
+{"index": 65, "token_id": 1565, "token_text": " `", "entropy": 0.924099862575531, "in_think": false, "in_code": false, "entropy_smoothed": 0.8761929067532037}
+{"index": 66, "token_id": 455, "token_text": "get", "entropy": 1.669952392578125, "in_think": false, "in_code": false, "entropy_smoothed": 0.8918999859253381}
+{"index": 67, "token_id": 59982, "token_text": "_logging", "entropy": 1.0324232578277588, "in_think": false, "in_code": false, "entropy_smoothed": 0.8242170950333093}
+{"index": 68, "token_id": 8274, "token_text": "_level", "entropy": 0.055060505867004395, "in_think": false, "in_code": false, "entropy_smoothed": 0.810765213624618}
+{"index": 69, "token_id": 3142, "token_text": "_value", "entropy": 0.8641762137413025, "in_think": false, "in_code": false, "entropy_smoothed": 0.7937934717098688}
+{"index": 70, "token_id": 81057, "token_text": "(mapping", "entropy": 0.7579985857009888, "in_think": false, "in_code": false, "entropy_smoothed": 0.7850964626232598}
+{"index": 71, "token_id": 11, "token_text": ",", "entropy": 1.1187880039215088, "in_think": false, "in_code": false, "entropy_smoothed": 0.7673354848782037}
+{"index": 72, "token_id": 2188, "token_text": " level", "entropy": 0.22878605127334595, "in_think": false, "in_code": false, "entropy_smoothed": 0.7340554329315637}
+{"index": 73, "token_id": 46186, "token_text": ")`", "entropy": 1.1616050004959106, "in_think": false, "in_code": false, "entropy_smoothed": 0.7455846890369867}
+{"index": 74, "token_id": 429, "token_text": " that", "entropy": 0.19887542724609375, "in_think": false, "in_code": false, "entropy_smoothed": 0.7357144149700616}
+{"index": 75, "token_id": 4990, "token_text": " takes", "entropy": 0.9734570980072021, "in_think": false, "in_code": false, "entropy_smoothed": 0.7211559041897272}
+{"index": 76, "token_id": 304, "token_text": " in", "entropy": 1.137460470199585, "in_think": false, "in_code": false, "entropy_smoothed": 0.7050900682369684}
+{"index": 77, "token_id": 264, "token_text": " a", "entropy": 0.6884272694587708, "in_think": false, "in_code": false, "entropy_smoothed": 0.6859955498138879}
+{"index": 78, "token_id": 8392, "token_text": " logging", "entropy": 0.8640968799591064, "in_think": false, "in_code": false, "entropy_smoothed": 0.672024509565017}
+{"index": 79, "token_id": 2188, "token_text": " level", "entropy": 0.2402716428041458, "in_think": false, "in_code": false, "entropy_smoothed": 0.6620603394071076}
+{"index": 80, "token_id": 323, "token_text": " and", "entropy": 1.1174789667129517, "in_think": false, "in_code": false, "entropy_smoothed": 0.6824664616147493}
+{"index": 81, "token_id": 4675, "token_text": " returns", "entropy": 0.354030042886734, "in_think": false, "in_code": false, "entropy_smoothed": 0.6640804773131822}
+{"index": 82, "token_id": 1181, "token_text": " its", "entropy": 0.6021155714988708, "in_think": false, "in_code": false, "entropy_smoothed": 0.6434761446277116}
+{"index": 83, "token_id": 12159, "token_text": " corresponding", "entropy": 0.8020718693733215, "in_think": false, "in_code": false, "entropy_smoothed": 0.6595172046107473}
+{"index": 84, "token_id": 7546, "token_text": " integer", "entropy": 0.13342289626598358, "in_think": false, "in_code": false, "entropy_smoothed": 0.6610661385935964}
+{"index": 85, "token_id": 897, "token_text": " value", "entropy": 0.034812986850738525, "in_think": false, "in_code": false, "entropy_smoothed": 0.6434304891509237}
+{"index": 86, "token_id": 3118, "token_text": " based", "entropy": 1.3780375719070435, "in_think": false, "in_code": false, "entropy_smoothed": 0.6395159731787863}
+{"index": 87, "token_id": 389, "token_text": " on", "entropy": 0.0006392564391717315, "in_think": false, "in_code": false, "entropy_smoothed": 0.6392186852596933}
+{"index": 88, "token_id": 279, "token_text": " the", "entropy": 0.016094405204057693, "in_think": false, "in_code": false, "entropy_smoothed": 0.6395374713488855}
+{"index": 89, "token_id": 3897, "token_text": " provided", "entropy": 1.0218496322631836, "in_think": false, "in_code": false, "entropy_smoothed": 0.6470499859401024}
+{"index": 90, "token_id": 12731, "token_text": " mapping", "entropy": 0.6061419248580933, "in_think": false, "in_code": false, "entropy_smoothed": 0.6566059375950135}
+{"index": 91, "token_id": 13, "token_text": ".", "entropy": 1.1142950057983398, "in_think": false, "in_code": false, "entropy_smoothed": 0.6788550018682145}
+{"index": 92, "token_id": 1416, "token_text": " If", "entropy": 2.0615878105163574, "in_think": false, "in_code": false, "entropy_smoothed": 0.6994593262090347}
+{"index": 93, "token_id": 279, "token_text": " the", "entropy": 0.15941686928272247, "in_think": false, "in_code": false, "entropy_smoothed": 0.6864648976339959}
+{"index": 94, "token_id": 3897, "token_text": " provided", "entropy": 1.1130380630493164, "in_think": false, "in_code": false, "entropy_smoothed": 0.6946733036055229}
+{"index": 95, "token_id": 8392, "token_text": " logging", "entropy": 0.8927819728851318, "in_think": false, "in_code": false, "entropy_smoothed": 0.6929085292830132}
+{"index": 96, "token_id": 2188, "token_text": " level", "entropy": 0.0011931610060855746, "in_think": false, "in_code": false, "entropy_smoothed": 0.6796509684575721}
+{"index": 97, "token_id": 374, "token_text": " is", "entropy": 0.37056323885917664, "in_think": false, "in_code": false, "entropy_smoothed": 0.6665804083598778}
+{"index": 98, "token_id": 537, "token_text": " not", "entropy": 0.010918238200247288, "in_think": false, "in_code": false, "entropy_smoothed": 0.664983595921658}
+{"index": 99, "token_id": 1730, "token_text": " found", "entropy": 0.9822289347648621, "in_think": false, "in_code": false, "entropy_smoothed": 0.6761737606069073}
+{"index": 100, "token_id": 304, "token_text": " in", "entropy": 0.06750906258821487, "in_think": false, "in_code": false, "entropy_smoothed": 0.6747457258542999}
+{"index": 101, "token_id": 279, "token_text": " the", "entropy": 0.003960915841162205, "in_think": false, "in_code": false, "entropy_smoothed": 0.6415403491584584}
+{"index": 102, "token_id": 12731, "token_text": " mapping", "entropy": 0.14079424738883972, "in_think": false, "in_code": false, "entropy_smoothed": 0.623477809461765}
+{"index": 103, "token_id": 11, "token_text": ",", "entropy": 0.049061134457588196, "in_think": false, "in_code": false, "entropy_smoothed": 0.6172275731293485}
+{"index": 104, "token_id": 279, "token_text": " the", "entropy": 1.308904767036438, "in_think": false, "in_code": false, "entropy_smoothed": 0.6252866325108335}
+{"index": 105, "token_id": 729, "token_text": " function", "entropy": 0.0010979786748066545, "in_think": false, "in_code": false, "entropy_smoothed": 0.6235236479970626}
+{"index": 106, "token_id": 1265, "token_text": " should", "entropy": 0.01224551536142826, "in_think": false, "in_code": false, "entropy_smoothed": 0.618719904224854}
+{"index": 107, "token_id": 470, "token_text": " return", "entropy": 0.3791140913963318, "in_think": false, "in_code": false, "entropy_smoothed": 0.6193495331215673}
+{"index": 108, "token_id": 481, "token_text": " -", "entropy": 1.4471075534820557, "in_think": false, "in_code": false, "entropy_smoothed": 0.6162914858269505}
+{"index": 109, "token_id": 16, "token_text": "1", "entropy": 0.00609054509550333, "in_think": false, "in_code": false, "entropy_smoothed": 0.6030506148631685}
+{"index": 110, "token_id": 13, "token_text": ".", "entropy": 0.3749302923679352, "in_think": false, "in_code": false, "entropy_smoothed": 0.6105352890549693}
+{"index": 111, "token_id": 151645, "token_text": "<|im_end|>", "entropy": 2.1045453548431396, "in_think": false, "in_code": false, "entropy_smoothed": 0.6526084889820777}
+{"index": 112, "token_id": 198, "token_text": "\n", "entropy": 0.3604552745819092, "in_think": false, "in_code": false, "entropy_smoothed": 0.6328520430973731}
+{"index": 113, "token_id": 151644, "token_text": "<|im_start|>", "entropy": 0.38623562455177307, "in_think": false, "in_code": false, "entropy_smoothed": 0.6323511638096534}
+{"index": 114, "token_id": 77091, "token_text": "assistant", "entropy": 4.997944355010986, "in_think": false, "in_code": false, "entropy_smoothed": 0.7265638758591376}
+{"index": 115, "token_id": 198, "token_text": "\n", "entropy": 0.00288179237395525, "in_think": false, "in_code": false, "entropy_smoothed": 0.7081395144551061}
+{"index": 116, "token_id": 151667, "token_text": "<think>", "entropy": 0.00013275016681291163, "in_think": false, "in_code": false, "entropy_smoothed": 0.6747431216068799}
+{"index": 117, "token_id": 198, "token_text": "\n", "entropy": 1.1321770898575778e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.6540946790938665}
+{"index": 118, "token_id": 1654, "token_text": "We", "entropy": 0.010198010131716728, "in_think": true, "in_code": false, "entropy_smoothed": 0.6531974291791607}
+{"index": 119, "token_id": 525, "token_text": " are", "entropy": 8.288686331070494e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.6359140706780613}
+{"index": 120, "token_id": 2661, "token_text": " given", "entropy": 0.00998276099562645, "in_think": true, "in_code": false, "entropy_smoothed": 0.620953754183954}
+{"index": 121, "token_id": 264, "token_text": " a", "entropy": 0.01751301810145378, "in_think": true, "in_code": false, "entropy_smoothed": 0.5989282544675529}
+{"index": 122, "token_id": 10997, "token_text": " dictionary", "entropy": 0.47639673948287964, "in_think": true, "in_code": false, "entropy_smoothed": 0.6038804682317437}
+{"index": 123, "token_id": 1565, "token_text": " `", "entropy": 0.007936554960906506, "in_think": true, "in_code": false, "entropy_smoothed": 0.5808070993210436}
+{"index": 124, "token_id": 40792, "token_text": "mapping", "entropy": 4.232624633004889e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.5768296754286143}
+{"index": 125, "token_id": 63, "token_text": "`", "entropy": 3.7240241113067896e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.5573605409165185}
+{"index": 126, "token_id": 429, "token_text": " that", "entropy": 0.16969168186187744, "in_think": true, "in_code": false, "entropy_smoothed": 0.5380051651497644}
+{"index": 127, "token_id": 14043, "token_text": " maps", "entropy": 0.13250215351581573, "in_think": true, "in_code": false, "entropy_smoothed": 0.5268866628309052}
+{"index": 128, "token_id": 8392, "token_text": " logging", "entropy": 0.2243175208568573, "in_think": true, "in_code": false, "entropy_smoothed": 0.5140910756488603}
+{"index": 129, "token_id": 5866, "token_text": " levels", "entropy": 0.5303107500076294, "in_think": true, "in_code": false, "entropy_smoothed": 0.5198918577929299}
+{"index": 130, "token_id": 320, "token_text": " (", "entropy": 0.10947060585021973, "in_think": true, "in_code": false, "entropy_smoothed": 0.4997316905756753}
+{"index": 131, "token_id": 18594, "token_text": "strings", "entropy": 0.41205960512161255, "in_think": true, "in_code": false, "entropy_smoothed": 0.5008922818203729}
+{"index": 132, "token_id": 8, "token_text": ")", "entropy": 0.00012824074656236917, "in_think": true, "in_code": false, "entropy_smoothed": 0.48885253520532673}
+{"index": 133, "token_id": 311, "token_text": " to", "entropy": 3.1345839257568286e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.472811097880552}
+{"index": 134, "token_id": 25780, "token_text": " integers", "entropy": 0.47624045610427856, "in_think": true, "in_code": false, "entropy_smoothed": 0.47966744907731784}
+{"index": 135, "token_id": 624, "token_text": ".\n", "entropy": 0.0003991771081928164, "in_think": true, "in_code": false, "entropy_smoothed": 0.47897917288246694}
+{"index": 136, "token_id": 576, "token_text": " The", "entropy": 0.23164385557174683, "in_think": true, "in_code": false, "entropy_smoothed": 0.45605129855576104}
+{"index": 137, "token_id": 729, "token_text": " function", "entropy": 1.745014378684573e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.4560388624298533}
+{"index": 138, "token_id": 1565, "token_text": " `", "entropy": 0.011822916567325592, "in_think": true, "in_code": false, "entropy_smoothed": 0.4559534326571187}
+{"index": 139, "token_id": 455, "token_text": "get", "entropy": 6.061512181076978e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.43551644122415745}
+{"index": 140, "token_id": 59982, "token_text": "_logging", "entropy": 0.0003713996266014874, "in_think": true, "in_code": false, "entropy_smoothed": 0.4234010307195276}
+{"index": 141, "token_id": 8274, "token_text": "_level", "entropy": 1.324302502325736e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.4011153954640613}
+{"index": 142, "token_id": 3142, "token_text": "_value", "entropy": 3.6384403756528627e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.35988371202254166}
+{"index": 143, "token_id": 81057, "token_text": "(mapping", "entropy": 0.4194295406341553, "in_think": true, "in_code": false, "entropy_smoothed": 0.3650839654495703}
+{"index": 144, "token_id": 11, "token_text": ",", "entropy": 1.7675367303127132e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.34282320772365743}
+{"index": 145, "token_id": 2188, "token_text": " level", "entropy": 3.290888912488299e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.32496757484773264}
+{"index": 146, "token_id": 46186, "token_text": ")`", "entropy": 0.00028464215574786067, "in_think": true, "in_code": false, "entropy_smoothed": 0.32494940447072584}
+{"index": 147, "token_id": 1265, "token_text": " should", "entropy": 0.06694042682647705, "in_think": true, "in_code": false, "entropy_smoothed": 0.3188769482300719}
+{"index": 148, "token_id": 510, "token_text": ":\n", "entropy": 0.16008079051971436, "in_think": true, "in_code": false, "entropy_smoothed": 0.3218601992764612}
+{"index": 149, "token_id": 256, "token_text": "  ", "entropy": 9.662633965490386e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.30221755310795706}
+{"index": 150, "token_id": 481, "token_text": " -", "entropy": 1.771295501384884e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.3008673753987838}
+{"index": 151, "token_id": 3411, "token_text": " Return", "entropy": 0.7467926740646362, "in_think": true, "in_code": false, "entropy_smoothed": 0.3157240105632533}
+{"index": 152, "token_id": 279, "token_text": " the", "entropy": 4.306342393789464e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.3129081257016033}
+{"index": 153, "token_id": 7546, "token_text": " integer", "entropy": 0.0009862654842436314, "in_think": true, "in_code": false, "entropy_smoothed": 0.31194662832213643}
+{"index": 154, "token_id": 897, "token_text": " value", "entropy": 0.00012898918066639453, "in_think": true, "in_code": false, "entropy_smoothed": 0.285771112765021}
+{"index": 155, "token_id": 369, "token_text": " for", "entropy": 0.7664921283721924, "in_think": true, "in_code": false, "entropy_smoothed": 0.3010789957589687}
+{"index": 156, "token_id": 279, "token_text": " the", "entropy": 0.028384091332554817, "in_think": true, "in_code": false, "entropy_smoothed": 0.30140176727839124}
+{"index": 157, "token_id": 2661, "token_text": " given", "entropy": 0.0009027148480527103, "in_think": true, "in_code": false, "entropy_smoothed": 0.29383753974742566}
+{"index": 158, "token_id": 1565, "token_text": " `", "entropy": 0.008859137073159218, "in_think": true, "in_code": false, "entropy_smoothed": 0.2650725714192477}
+{"index": 159, "token_id": 3294, "token_text": "level", "entropy": 8.817252137305331e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.2649507781518419}
+{"index": 160, "token_id": 63, "token_text": "`", "entropy": 2.288165212860349e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.25745217276211624}
+{"index": 161, "token_id": 421, "token_text": " if", "entropy": 0.019732477143406868, "in_think": true, "in_code": false, "entropy_smoothed": 0.2157559152081216}
+{"index": 162, "token_id": 432, "token_text": " it", "entropy": 0.016831297427415848, "in_think": true, "in_code": false, "entropy_smoothed": 0.20888343566503173}
+{"index": 163, "token_id": 6724, "token_text": " exists", "entropy": 0.05830080807209015, "in_think": true, "in_code": false, "entropy_smoothed": 0.20232473933543807}
+{"index": 164, "token_id": 304, "token_text": " in", "entropy": 1.0310156994819408e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.10236587285553235}
+{"index": 165, "token_id": 279, "token_text": " the", "entropy": 0.5303060412406921, "in_think": true, "in_code": false, "entropy_smoothed": 0.11291435783286709}
+{"index": 166, "token_id": 12731, "token_text": " mapping", "entropy": 0.02802738919854164, "in_think": true, "in_code": false, "entropy_smoothed": 0.11347225061350166}
+{"index": 167, "token_id": 624, "token_text": ".\n", "entropy": 0.0010463123908266425, "in_think": true, "in_code": false, "entropy_smoothed": 0.11349315421777639}
+{"index": 168, "token_id": 256, "token_text": "  ", "entropy": 1.1746233985476806e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.11328919403863452}
+{"index": 169, "token_id": 481, "token_text": " -", "entropy": 1.8751718400267237e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.11328902863994227}
+{"index": 170, "token_id": 3411, "token_text": " Return", "entropy": 0.5043147802352905, "in_think": true, "in_code": false, "entropy_smoothed": 0.12317566902473555}
+{"index": 171, "token_id": 481, "token_text": " -", "entropy": 1.738710153631473e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.12282541214012678}
+{"index": 172, "token_id": 16, "token_text": "1", "entropy": 7.090313225432965e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.11329747749227545}
+{"index": 173, "token_id": 421, "token_text": " if", "entropy": 0.00241447938606143, "in_think": true, "in_code": false, "entropy_smoothed": 0.11318703598077855}
+{"index": 174, "token_id": 279, "token_text": " the", "entropy": 0.02142401784658432, "in_think": true, "in_code": false, "entropy_smoothed": 0.11361543168521758}
+{"index": 175, "token_id": 1565, "token_text": " `", "entropy": 0.08118937164545059, "in_think": true, "in_code": false, "entropy_smoothed": 0.11523921167007836}
+{"index": 176, "token_id": 3294, "token_text": "level", "entropy": 4.127218176108727e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.11184538628727717}
+{"index": 177, "token_id": 63, "token_text": "`", "entropy": 1.5076444537243106e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.10919534324711375}
+{"index": 178, "token_id": 374, "token_text": " is", "entropy": 2.5474257199675776e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.10470950231512059}
+{"index": 179, "token_id": 537, "token_text": " not", "entropy": 2.592493899555848e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.0941032924999558}
+{"index": 180, "token_id": 1730, "token_text": " found", "entropy": 0.0904853567481041, "in_think": true, "in_code": false, "entropy_smoothed": 0.09372358751791349}
+{"index": 181, "token_id": 382, "token_text": ".\n\n", "entropy": 0.6628475189208984, "in_think": true, "in_code": false, "entropy_smoothed": 0.09873934579389922}
+{"index": 182, "token_id": 39861, "token_text": " Steps", "entropy": 0.053368449211120605, "in_think": true, "in_code": false, "entropy_smoothed": 0.09980414996319037}
+{"index": 183, "token_id": 510, "token_text": ":\n", "entropy": 0.00376912672072649, "in_think": true, "in_code": false, "entropy_smoothed": 0.09987953243491322}
+{"index": 184, "token_id": 256, "token_text": "  ", "entropy": 0.47505608201026917, "in_think": true, "in_code": false, "entropy_smoothed": 0.09985584495303304}
+{"index": 185, "token_id": 220, "token_text": " ", "entropy": 0.021323062479496002, "in_think": true, "in_code": false, "entropy_smoothed": 0.1002743226604591}
+{"index": 186, "token_id": 16, "token_text": "1", "entropy": 6.537825811392395e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.09564157630554039}
+{"index": 187, "token_id": 13, "token_text": ".", "entropy": 3.44845830113627e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.09564123419958126}
+{"index": 188, "token_id": 4248, "token_text": " Check", "entropy": 0.03324756771326065, "in_think": true, "in_code": false, "entropy_smoothed": 0.09606972722249996}
+{"index": 189, "token_id": 421, "token_text": " if", "entropy": 2.3713632799626794e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.09606977343746312}
+{"index": 190, "token_id": 279, "token_text": " the", "entropy": 0.26853394508361816, "in_think": true, "in_code": false, "entropy_smoothed": 0.10143302434660345}
+{"index": 191, "token_id": 1565, "token_text": " `", "entropy": 0.2454703152179718, "in_think": true, "in_code": false, "entropy_smoothed": 0.10634216579046242}
+{"index": 192, "token_id": 3294, "token_text": "level", "entropy": 3.4073582355631515e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.10634209983637138}
+{"index": 193, "token_id": 63, "token_text": "`", "entropy": 5.822142323808066e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.09795350914013114}
+{"index": 194, "token_id": 374, "token_text": " is", "entropy": 0.5678771138191223, "in_think": true, "in_code": false, "entropy_smoothed": 0.10931104788144012}
+{"index": 195, "token_id": 264, "token_text": " a", "entropy": 0.6333861947059631, "in_think": true, "in_code": false, "entropy_smoothed": 0.12197876519378155}
+{"index": 196, "token_id": 1376, "token_text": " key", "entropy": 5.787116606370546e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.12197318809299873}
+{"index": 197, "token_id": 304, "token_text": " in", "entropy": 1.023323861204517e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.1206343816031169}
+{"index": 198, "token_id": 279, "token_text": " the", "entropy": 0.0019313121447339654, "in_think": true, "in_code": false, "entropy_smoothed": 0.1174713920356173}
+{"index": 199, "token_id": 1565, "token_text": " `", "entropy": 0.9436079263687134, "in_think": true, "in_code": false, "entropy_smoothed": 0.13634161803619846}
+{"index": 200, "token_id": 40792, "token_text": "mapping", "entropy": 1.0042606845672708e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.13634181534574438}
+{"index": 201, "token_id": 63, "token_text": "`", "entropy": 0.00025346799520775676, "in_think": true, "in_code": false, "entropy_smoothed": 0.12141103122435581}
+{"index": 202, "token_id": 10997, "token_text": " dictionary", "entropy": 5.6185308494605124e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.12141215484439886}
+{"index": 203, "token_id": 624, "token_text": ".\n", "entropy": 4.517447905527661e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.1213925198836721}
+{"index": 204, "token_id": 256, "token_text": "  ", "entropy": 1.8088639990310185e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.12139030187285858}
+{"index": 205, "token_id": 220, "token_text": " ", "entropy": 9.988981020114807e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.10606046130321094}
+{"index": 206, "token_id": 17, "token_text": "2", "entropy": 5.5381164543177874e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.10549278058418313}
+{"index": 207, "token_id": 13, "token_text": ".", "entropy": 6.381614525707846e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.10547472756354498}
+{"index": 208, "token_id": 1416, "token_text": " If", "entropy": 4.171943146502599e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.10529755316596809}
+{"index": 209, "token_id": 432, "token_text": " it", "entropy": 0.23057372868061066, "in_think": true, "in_code": false, "entropy_smoothed": 0.10990901010507603}
+{"index": 210, "token_id": 374, "token_text": " is", "entropy": 0.004699063487350941, "in_think": true, "in_code": false, "entropy_smoothed": 0.11000299091719}
+{"index": 211, "token_id": 11, "token_text": ",", "entropy": 1.7761809431249276e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.1096086966105105}
+{"index": 212, "token_id": 470, "token_text": " return", "entropy": 3.564540293155005e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.10927214195276803}
+{"index": 213, "token_id": 279, "token_text": " the", "entropy": 0.08153454959392548, "in_think": true, "in_code": false, "entropy_smoothed": 0.10973681678320474}
+{"index": 214, "token_id": 12159, "token_text": " corresponding", "entropy": 0.09167998284101486, "in_think": true, "in_code": false, "entropy_smoothed": 0.11157039581971105}
+{"index": 215, "token_id": 897, "token_text": " value", "entropy": 0.19086550176143646, "in_think": true, "in_code": false, "entropy_smoothed": 0.10478158503012594}
+{"index": 216, "token_id": 624, "token_text": ".\n", "entropy": 0.032649870961904526, "in_think": true, "in_code": false, "entropy_smoothed": 0.10487403466539319}
+{"index": 217, "token_id": 256, "token_text": "  ", "entropy": 1.2233944968187416e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.10485310844204455}
+{"index": 218, "token_id": 220, "token_text": " ", "entropy": 4.5213877086780485e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.10485310850897984}
+{"index": 219, "token_id": 18, "token_text": "3", "entropy": 2.213350001056824e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.10485311256064549}
+{"index": 220, "token_id": 13, "token_text": ".", "entropy": 6.040302196197445e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.09476682903654407}
+{"index": 221, "token_id": 18214, "token_text": " Otherwise", "entropy": 0.6103135943412781, "in_think": true, "in_code": false, "entropy_smoothed": 0.10697309744594932}
+{"index": 222, "token_id": 11, "token_text": ",", "entropy": 5.977578876326106e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.10697309742369464}
+{"index": 223, "token_id": 470, "token_text": " return", "entropy": 2.6207482051177067e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.10692481307746983}
+{"index": 224, "token_id": 481, "token_text": " -", "entropy": 2.048277769617357e-09, "in_think": true, "in_code": false, "entropy_smoothed": 0.10649633276150369}
+{"index": 225, "token_id": 16, "token_text": "1", "entropy": 6.888850601072249e-10, "in_think": true, "in_code": false, "entropy_smoothed": 0.10487254534237239}
+{"index": 226, "token_id": 382, "token_text": ".\n\n", "entropy": 5.095902815810405e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.1048735562684992}
+{"index": 227, "token_id": 13383, "token_text": " Example", "entropy": 0.4793579578399658, "in_think": true, "in_code": false, "entropy_smoothed": 0.11446071539514563}
+{"index": 228, "token_id": 510, "token_text": ":\n", "entropy": 0.6553587913513184, "in_think": true, "in_code": false, "entropy_smoothed": 0.127567381737028}
+{"index": 229, "token_id": 256, "token_text": "  ", "entropy": 0.0003310980973765254, "in_think": true, "in_code": false, "entropy_smoothed": 0.12757399851398774}
+{"index": 230, "token_id": 12731, "token_text": " mapping", "entropy": 0.8472856879234314, "in_think": true, "in_code": false, "entropy_smoothed": 0.14271000513749427}
+{"index": 231, "token_id": 284, "token_text": " =", "entropy": 2.2564347091247328e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.12945350604601813}
+{"index": 232, "token_id": 5360, "token_text": " {'", "entropy": 0.05764316767454147, "in_think": true, "in_code": false, "entropy_smoothed": 0.12953900041528654}
+{"index": 233, "token_id": 6637, "token_text": "INFO", "entropy": 0.008506620302796364, "in_think": true, "in_code": false, "entropy_smoothed": 0.12963375028692795}
+{"index": 234, "token_id": 1210, "token_text": "':", "entropy": 5.280933237372665e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.12013263920858903}
+{"index": 235, "token_id": 220, "token_text": " ", "entropy": 0.0003971153637394309, "in_think": true, "in_code": false, "entropy_smoothed": 0.11971412026627391}
+{"index": 236, "token_id": 16, "token_text": "1", "entropy": 0.009121887385845184, "in_think": true, "in_code": false, "entropy_smoothed": 0.11989642725747458}
+{"index": 237, "token_id": 11, "token_text": ",", "entropy": 0.22721698880195618, "in_think": true, "in_code": false, "entropy_smoothed": 0.1244407601365971}
+{"index": 238, "token_id": 364, "token_text": " '", "entropy": 7.48424966445782e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.12377581027918183}
+{"index": 239, "token_id": 5150, "token_text": "DEBUG", "entropy": 0.00028111031861044466, "in_think": true, "in_code": false, "entropy_smoothed": 0.12378138505828844}
+{"index": 240, "token_id": 1210, "token_text": "':", "entropy": 3.1934153099655305e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.11841070679529914}
+{"index": 241, "token_id": 220, "token_text": " ", "entropy": 9.462052730668802e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.11350148973199431}
+{"index": 242, "token_id": 17, "token_text": "2", "entropy": 0.0020724069327116013, "in_think": true, "in_code": false, "entropy_smoothed": 0.11354293105593208}
+{"index": 243, "token_id": 11, "token_text": ",", "entropy": 7.951810516715341e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.11354294684311025}
+{"index": 244, "token_id": 364, "token_text": " '", "entropy": 1.8550013919593766e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.1021857755670062}
+{"index": 245, "token_id": 3682, "token_text": "ERROR", "entropy": 0.0015229593263939023, "in_think": true, "in_code": false, "entropy_smoothed": 0.08954851085941481}
+{"index": 246, "token_id": 1210, "token_text": "':", "entropy": 3.307745544134377e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.08954839577863179}
+{"index": 247, "token_id": 220, "token_text": " ", "entropy": 7.32483249521465e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.08954854022863397}
+{"index": 248, "token_id": 18, "token_text": "3", "entropy": 0.002513319719582796, "in_think": true, "in_code": false, "entropy_smoothed": 0.08956018038013096}
+{"index": 249, "token_id": 11, "token_text": ",", "entropy": 7.369911145360675e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.0706881692509796}
+{"index": 250, "token_id": 364, "token_text": " '", "entropy": 1.9954542906930328e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.07068796879793354}
+{"index": 251, "token_id": 74858, "token_text": "WARN", "entropy": 0.00019725371384993196, "in_think": true, "in_code": false, "entropy_smoothed": 0.07068684451230638}
+{"index": 252, "token_id": 1210, "token_text": "':", "entropy": 8.156465014508285e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.07068572243742949}
+{"index": 253, "token_id": 220, "token_text": " ", "entropy": 9.034492541104555e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.0706874389869796}
+{"index": 254, "token_id": 19, "token_text": "4", "entropy": 0.001324968645349145, "in_think": true, "in_code": false, "entropy_smoothed": 0.07071357658708678}
+{"index": 255, "token_id": 532, "token_text": "}\n", "entropy": 0.0019397897413000464, "in_think": true, "in_code": false, "entropy_smoothed": 0.07075237038411658}
+{"index": 256, "token_id": 256, "token_text": "  ", "entropy": 6.201160829277796e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.07075237051672545}
+{"index": 257, "token_id": 633, "token_text": " get", "entropy": 0.00522945262491703, "in_think": true, "in_code": false, "entropy_smoothed": 0.07085695829290088}
+{"index": 258, "token_id": 59982, "token_text": "_logging", "entropy": 0.0003990759723819792, "in_think": true, "in_code": false, "entropy_smoothed": 0.07086493146846223}
+{"index": 259, "token_id": 8274, "token_text": "_level", "entropy": 1.3633694834425114e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.0662537295687467}
+{"index": 260, "token_id": 3142, "token_text": "_value", "entropy": 8.802697266219184e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.06615992435294502}
+{"index": 261, "token_id": 81057, "token_text": "(mapping", "entropy": 6.966871751501458e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.06615970845419142}
+{"index": 262, "token_id": 11, "token_text": ",", "entropy": 4.313517598664163e-11, "in_think": true, "in_code": false, "entropy_smoothed": 0.06615963716424826}
+{"index": 263, "token_id": 364, "token_text": " '", "entropy": 1.8508937500882894e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.06452931635111976}
+{"index": 264, "token_id": 6637, "token_text": "INFO", "entropy": 0.06133904680609703, "in_think": true, "in_code": false, "entropy_smoothed": 0.0639224976304214}
+{"index": 265, "token_id": 863, "token_text": "')", "entropy": 2.1839346686647332e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.06010519196306202}
+{"index": 266, "token_id": 1464, "token_text": " ->", "entropy": 0.39650851488113403, "in_think": true, "in_code": false, "entropy_smoothed": 0.06738236484144661}
+{"index": 267, "token_id": 220, "token_text": " ", "entropy": 0.009075883775949478, "in_think": true, "in_code": false, "entropy_smoothed": 0.0675638824924977}
+{"index": 268, "token_id": 16, "token_text": "1", "entropy": 3.322705879327259e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.06756388904748171}
+{"index": 269, "token_id": 198, "token_text": "\n", "entropy": 2.2844931208965136e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.06756393031064413}
+{"index": 270, "token_id": 256, "token_text": "  ", "entropy": 1.249132047798085e-10, "in_think": true, "in_code": false, "entropy_smoothed": 0.067563918232538}
+{"index": 271, "token_id": 633, "token_text": " get", "entropy": 5.987504181348413e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.055357647543213276}
+{"index": 272, "token_id": 59982, "token_text": "_logging", "entropy": 0.00015931886446196586, "in_think": true, "in_code": false, "entropy_smoothed": 0.055360833800950936}
+{"index": 273, "token_id": 8274, "token_text": "_level", "entropy": 5.577492629527114e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.055360940109307116}
+{"index": 274, "token_id": 3142, "token_text": "_value", "entropy": 2.706718532863306e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.055360994202712226}
+{"index": 275, "token_id": 81057, "token_text": "(mapping", "entropy": 3.0290239010355435e-06, "in_think": true, "in_code": false, "entropy_smoothed": 0.05536105476941255}
+{"index": 276, "token_id": 11, "token_text": ",", "entropy": 3.0362299480168886e-11, "in_think": true, "in_code": false, "entropy_smoothed": 0.05536003558945663}
+{"index": 277, "token_id": 364, "token_text": " '", "entropy": 2.4944696974671388e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.04577287693155126}
+{"index": 278, "token_id": 37, "token_text": "F", "entropy": 1.1878974437713623, "in_think": true, "in_code": false, "entropy_smoothed": 0.05642364997995213}
+{"index": 279, "token_id": 30074, "token_text": "ATAL", "entropy": 0.0009072604589164257, "in_think": true, "in_code": false, "entropy_smoothed": 0.05643517322718293}
+{"index": 280, "token_id": 863, "token_text": "')", "entropy": 3.648867448191595e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.0394894667664492}
+{"index": 281, "token_id": 1464, "token_text": " ->", "entropy": 3.198965146111732e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.03948902187743766}
+{"index": 282, "token_id": 481, "token_text": " -", "entropy": 5.491298793458554e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.03833616950654442}
+{"index": 283, "token_id": 16, "token_text": "1", "entropy": 1.6326863416793458e-08, "in_think": true, "in_code": false, "entropy_smoothed": 0.03816603742702576}
+{"index": 284, "token_id": 271, "token_text": "\n\n", "entropy": 0.0013112437445670366, "in_think": true, "in_code": false, "entropy_smoothed": 0.03819225174005063}
+{"index": 285, "token_id": 6771, "token_text": " Let", "entropy": 0.2631811797618866, "in_think": true, "in_code": false, "entropy_smoothed": 0.04344793302801357}
+{"index": 286, "token_id": 594, "token_text": "'s", "entropy": 3.621961752742209e-07, "in_think": true, "in_code": false, "entropy_smoothed": 0.04326550252422018}
+{"index": 287, "token_id": 3270, "token_text": " write", "entropy": 0.33446547389030457, "in_think": true, "in_code": false, "entropy_smoothed": 0.045410472225987146}
+{"index": 288, "token_id": 279, "token_text": " the", "entropy": 4.0951490518637e-05, "in_think": true, "in_code": false, "entropy_smoothed": 0.045411289758947586}
+{"index": 289, "token_id": 729, "token_text": " function", "entropy": 0.10941217094659805, "in_think": true, "in_code": false, "entropy_smoothed": 0.047593910971507336}
+{"index": 290, "token_id": 27079, "token_text": " accordingly", "entropy": 0.00028159862267784774, "in_think": true, "in_code": false, "entropy_smoothed": 0.04759954230527783}
+{"index": 291, "token_id": 624, "token_text": ".\n", "entropy": 0.00015828451432753354, "in_think": true, "in_code": false, "entropy_smoothed": 0.04760251875450977}
+{"index": 292, "token_id": 151668, "token_text": "</think>", "entropy": 0.00010856035078177229, "in_think": false, "in_code": false, "entropy_smoothed": 0.04756324182287117}
+{"index": 293, "token_id": 271, "token_text": "\n\n", "entropy": 5.569120276049944e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.047563226030632545}
+{"index": 294, "token_id": 1249, "token_text": "To", "entropy": 4.981378879165277e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.047562954657931734}
+{"index": 295, "token_id": 11625, "token_text": " solve", "entropy": 0.003020534524694085, "in_think": false, "in_code": false, "entropy_smoothed": 0.047592906161897736}
+{"index": 296, "token_id": 419, "token_text": " this", "entropy": 1.5288148915715283e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.04759293607664646}
+{"index": 297, "token_id": 3491, "token_text": " problem", "entropy": 0.0009847283363342285, "in_think": false, "in_code": false, "entropy_smoothed": 0.04761248414672324}
+{"index": 298, "token_id": 11, "token_text": ",", "entropy": 3.219585309466311e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.04756221839624865}
+{"index": 299, "token_id": 582, "token_text": " we", "entropy": 3.948069206671789e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.047562149959409876}
+{"index": 300, "token_id": 1184, "token_text": " need", "entropy": 4.584569069265854e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.0475622412517004}
+{"index": 301, "token_id": 311, "token_text": " to", "entropy": 9.659321342780913e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.04755829637060983}
+{"index": 302, "token_id": 4211, "token_text": " implement", "entropy": 0.0010432976996526122, "in_think": false, "in_code": false, "entropy_smoothed": 0.04757916069330988}
+{"index": 303, "token_id": 264, "token_text": " a", "entropy": 2.3532564785710974e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.04757735379950817}
+{"index": 304, "token_id": 729, "token_text": " function", "entropy": 7.528648211518885e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.04755086948389761}
+{"index": 305, "token_id": 429, "token_text": " that", "entropy": 5.710146069759503e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.047512187891993005}
+{"index": 306, "token_id": 14043, "token_text": " maps", "entropy": 0.05349681153893471, "in_think": false, "in_code": false, "entropy_smoothed": 0.04858212288253953}
+{"index": 307, "token_id": 264, "token_text": " a", "entropy": 0.20142602920532227, "in_think": false, "in_code": false, "entropy_smoothed": 0.052506054414147636}
+{"index": 308, "token_id": 2661, "token_text": " given", "entropy": 0.009189398027956486, "in_think": false, "in_code": false, "entropy_smoothed": 0.052681860855259124}
+{"index": 309, "token_id": 8392, "token_text": " logging", "entropy": 1.1275054703219212e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.052681610731471845}
+{"index": 310, "token_id": 2188, "token_text": " level", "entropy": 1.51661424752092e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.052681437710755015}
+{"index": 311, "token_id": 320, "token_text": " (", "entropy": 0.7353720664978027, "in_think": false, "in_code": false, "entropy_smoothed": 0.06738873970327604}
+{"index": 312, "token_id": 300, "token_text": "as", "entropy": 0.6324161291122437, "in_think": false, "in_code": false, "entropy_smoothed": 0.08003706228465819}
+{"index": 313, "token_id": 264, "token_text": " a", "entropy": 7.819056691005244e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.08003669366971952}
+{"index": 314, "token_id": 914, "token_text": " string", "entropy": 9.760014108906034e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.07881010793387976}
+{"index": 315, "token_id": 8, "token_text": ")", "entropy": 6.512329946417594e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.07881023381260935}
+{"index": 316, "token_id": 311, "token_text": " to", "entropy": 1.1890284312698896e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.07088006375279235}
+{"index": 317, "token_id": 1181, "token_text": " its", "entropy": 8.626240344256075e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.07069854780252144}
+{"index": 318, "token_id": 12159, "token_text": " corresponding", "entropy": 1.13580756533338e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.07069856387326098}
+{"index": 319, "token_id": 7546, "token_text": " integer", "entropy": 1.6381736145376635e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.0706985214597458}
+{"index": 320, "token_id": 897, "token_text": " value", "entropy": 1.0752864909591153e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.07069854296297734}
+{"index": 321, "token_id": 3118, "token_text": " based", "entropy": 0.04989835247397423, "in_think": false, "in_code": false, "entropy_smoothed": 0.07169650881495598}
+{"index": 322, "token_id": 389, "token_text": " on", "entropy": 2.281493038935878e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.07169332289396536}
+{"index": 323, "token_id": 264, "token_text": " a", "entropy": 4.236328095430508e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.07169329607067468}
+{"index": 324, "token_id": 3897, "token_text": " provided", "entropy": 0.19216784834861755, "in_think": false, "in_code": false, "entropy_smoothed": 0.07553659890327637}
+{"index": 325, "token_id": 10997, "token_text": " dictionary", "entropy": 0.007291162386536598, "in_think": false, "in_code": false, "entropy_smoothed": 0.07568236157052909}
+{"index": 326, "token_id": 13, "token_text": ".", "entropy": 0.04503953456878662, "in_think": false, "in_code": false, "entropy_smoothed": 0.07658315226129757}
+{"index": 327, "token_id": 1416, "token_text": " If", "entropy": 0.2685345709323883, "in_think": false, "in_code": false, "entropy_smoothed": 0.0819538431810514}
+{"index": 328, "token_id": 279, "token_text": " the", "entropy": 1.1145828010539205e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.05819589430785332}
+{"index": 329, "token_id": 8392, "token_text": " logging", "entropy": 2.5721441488713026e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.05817826352750476}
+{"index": 330, "token_id": 2188, "token_text": " level", "entropy": 3.514035062934795e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.05817825630005057}
+{"index": 331, "token_id": 374, "token_text": " is", "entropy": 0.001151720411144197, "in_think": false, "in_code": false, "entropy_smoothed": 0.05820128431034316}
+{"index": 332, "token_id": 537, "token_text": " not", "entropy": 1.4179159961713594e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.0582013016860655}
+{"index": 333, "token_id": 1730, "token_text": " found", "entropy": 0.04019934684038162, "in_think": false, "in_code": false, "entropy_smoothed": 0.05900528829633586}
+{"index": 334, "token_id": 304, "token_text": " in", "entropy": 2.5962359373465915e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.05897906394069171}
+{"index": 335, "token_id": 279, "token_text": " the", "entropy": 4.429660527272006e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.0537154403543133}
+{"index": 336, "token_id": 10997, "token_text": " dictionary", "entropy": 1.5121120213734685e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.05371546335263022}
+{"index": 337, "token_id": 11, "token_text": ",", "entropy": 1.0241039960501297e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.04702615387687234}
+{"index": 338, "token_id": 279, "token_text": " the", "entropy": 1.9371850612515118e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.04702533872143209}
+{"index": 339, "token_id": 729, "token_text": " function", "entropy": 2.943132848542973e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.04483709536136279}
+{"index": 340, "token_id": 1265, "token_text": " should", "entropy": 6.137107902759453e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.04483158613106728}
+{"index": 341, "token_id": 470, "token_text": " return", "entropy": 8.919264655560255e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.044830204293711845}
+{"index": 342, "token_id": 481, "token_text": " -", "entropy": 0.07393692433834076, "in_think": false, "in_code": false, "entropy_smoothed": 0.046306771573463024}
+{"index": 343, "token_id": 16, "token_text": "1", "entropy": 3.024696118569814e-11, "in_think": false, "in_code": false, "entropy_smoothed": 0.04630677146268556}
+{"index": 344, "token_id": 382, "token_text": ".\n\n", "entropy": 5.4040843679104e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.04630775265198156}
+{"index": 345, "token_id": 14374, "token_text": "###", "entropy": 6.378214720825781e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.04624735471791712}
+{"index": 346, "token_id": 53084, "token_text": " Approach", "entropy": 4.635728691937402e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.046248251287357676}
+{"index": 347, "token_id": 198, "token_text": "\n", "entropy": 1.4231929981178837e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.04622858518449095}
+{"index": 348, "token_id": 16, "token_text": "1", "entropy": 0.09009537100791931, "in_think": false, "in_code": false, "entropy_smoothed": 0.04803049196073227}
+{"index": 349, "token_id": 13, "token_text": ".", "entropy": 3.889456365868682e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.04803042077826088}
+{"index": 350, "token_id": 3070, "token_text": " **", "entropy": 1.0826270226971246e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.04803035073941994}
+{"index": 351, "token_id": 31198, "token_text": "Problem", "entropy": 0.049830563366413116, "in_think": false, "in_code": false, "entropy_smoothed": 0.04902696181356178}
+{"index": 352, "token_id": 18320, "token_text": " Analysis", "entropy": 4.2591742385411635e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.049006947694416436}
+{"index": 353, "token_id": 95518, "token_text": "**:", "entropy": 3.2971170185192022e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.049007013632050296}
+{"index": 354, "token_id": 576, "token_text": " The", "entropy": 1.034681645251112e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.04900701926838678}
+{"index": 355, "token_id": 3383, "token_text": " task", "entropy": 0.16761094331741333, "in_think": false, "in_code": false, "entropy_smoothed": 0.05235912393181365}
+{"index": 356, "token_id": 17601, "token_text": " involves", "entropy": 0.31688427925109863, "in_think": false, "in_code": false, "entropy_smoothed": 0.05762687328605692}
+{"index": 357, "token_id": 13295, "token_text": " checking", "entropy": 0.004006937611848116, "in_think": false, "in_code": false, "entropy_smoothed": 0.05367849145418744}
+{"index": 358, "token_id": 421, "token_text": " if", "entropy": 0.05308905243873596, "in_think": false, "in_code": false, "entropy_smoothed": 0.054556484542403035}
+{"index": 359, "token_id": 264, "token_text": " a", "entropy": 0.001232627429999411, "in_think": false, "in_code": false, "entropy_smoothed": 0.054581114540893615}
+{"index": 360, "token_id": 3151, "token_text": " specific", "entropy": 0.4390634000301361, "in_think": false, "in_code": false, "entropy_smoothed": 0.06336237950826784}
+{"index": 361, "token_id": 8392, "token_text": " logging", "entropy": 0.003815297968685627, "in_think": false, "in_code": false, "entropy_smoothed": 0.0487312441376855}
+{"index": 362, "token_id": 2188, "token_text": " level", "entropy": 4.0065521034193807e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.036082929568544836}
+{"index": 363, "token_id": 320, "token_text": " (", "entropy": 0.5934725403785706, "in_think": false, "in_code": false, "entropy_smoothed": 0.04795237881230491}
+{"index": 364, "token_id": 68, "token_text": "e", "entropy": 0.257403701543808, "in_think": false, "in_code": false, "entropy_smoothed": 0.053100257642898885}
+{"index": 365, "token_id": 1302, "token_text": ".g", "entropy": 2.1457699972415867e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.05310013168783995}
+{"index": 366, "token_id": 2572, "token_text": ".,", "entropy": 6.447146461141529e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.05310013273946356}
+{"index": 367, "token_id": 364, "token_text": " '", "entropy": 0.11061396449804306, "in_think": false, "in_code": false, "entropy_smoothed": 0.05531241030417635}
+{"index": 368, "token_id": 6637, "token_text": "INFO", "entropy": 0.013356330804526806, "in_think": false, "in_code": false, "entropy_smoothed": 0.05557951420411558}
+{"index": 369, "token_id": 516, "token_text": "',", "entropy": 0.03268974646925926, "in_think": false, "in_code": false, "entropy_smoothed": 0.05623330585715354}
+{"index": 370, "token_id": 364, "token_text": " '", "entropy": 7.953592229270612e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.0562332843673309}
+{"index": 371, "token_id": 5150, "token_text": "DEBUG", "entropy": 0.0016096439212560654, "in_think": false, "in_code": false, "entropy_smoothed": 0.05526751019627654}
+{"index": 372, "token_id": 863, "token_text": "')", "entropy": 0.017314186319708824, "in_think": false, "in_code": false, "entropy_smoothed": 0.05561379346637211}
+{"index": 373, "token_id": 6724, "token_text": " exists", "entropy": 0.0006334100035019219, "in_think": false, "in_code": false, "entropy_smoothed": 0.05562637693988024}
+{"index": 374, "token_id": 304, "token_text": " in", "entropy": 0.13249662518501282, "in_think": false, "in_code": false, "entropy_smoothed": 0.05443295247660815}
+{"index": 375, "token_id": 264, "token_text": " a", "entropy": 0.032639507204294205, "in_think": false, "in_code": false, "entropy_smoothed": 0.054939919372963296}
+{"index": 376, "token_id": 2661, "token_text": " given", "entropy": 0.8247225880622864, "in_think": false, "in_code": false, "entropy_smoothed": 0.0705335804428333}
+{"index": 377, "token_id": 10997, "token_text": " dictionary", "entropy": 0.002415776252746582, "in_think": false, "in_code": false, "entropy_smoothed": 0.06521120454924045}
+{"index": 378, "token_id": 13, "token_text": ".", "entropy": 0.7598583102226257, "in_think": false, "in_code": false, "entropy_smoothed": 0.0804083707514638}
+{"index": 379, "token_id": 576, "token_text": " The", "entropy": 0.2470262050628662, "in_think": false, "in_code": false, "entropy_smoothed": 0.08534838042389134}
+{"index": 380, "token_id": 10997, "token_text": " dictionary", "entropy": 5.093368235975504e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.08534939902725784}
+{"index": 381, "token_id": 6894, "token_text": " keys", "entropy": 0.38415342569351196, "in_think": false, "in_code": false, "entropy_smoothed": 0.09300943313290519}
+{"index": 382, "token_id": 525, "token_text": " are", "entropy": 0.0009844076121225953, "in_think": false, "in_code": false, "entropy_smoothed": 0.09302909292682772}
+{"index": 383, "token_id": 279, "token_text": " the", "entropy": 0.3765528202056885, "in_think": false, "in_code": false, "entropy_smoothed": 0.09975616239413386}
+{"index": 384, "token_id": 8392, "token_text": " logging", "entropy": 3.6775152693735436e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.09975689737794054}
+{"index": 385, "token_id": 5866, "token_text": " levels", "entropy": 0.22720570862293243, "in_think": false, "in_code": false, "entropy_smoothed": 0.10430101154153988}
+{"index": 386, "token_id": 11, "token_text": ",", "entropy": 0.42404553294181824, "in_think": false, "in_code": false, "entropy_smoothed": 0.11278189195813582}
+{"index": 387, "token_id": 323, "token_text": " and", "entropy": 2.438693136319614e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.11278189196096498}
+{"index": 388, "token_id": 279, "token_text": " the", "entropy": 0.47506964206695557, "in_think": false, "in_code": false, "entropy_smoothed": 0.12228328092793397}
+{"index": 389, "token_id": 2750, "token_text": " values", "entropy": 0.0003372690989635885, "in_think": false, "in_code": false, "entropy_smoothed": 0.1222900262510506}
+{"index": 390, "token_id": 525, "token_text": " are", "entropy": 2.876787696948213e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.12228990408425007}
+{"index": 391, "token_id": 862, "token_text": " their", "entropy": 0.016197707504034042, "in_think": false, "in_code": false, "entropy_smoothed": 0.12261207438139964}
+{"index": 392, "token_id": 19511, "token_text": " respective", "entropy": 1.0706787109375, "in_think": false, "in_code": false, "entropy_smoothed": 0.14254691011338283}
+{"index": 393, "token_id": 7546, "token_text": " integer", "entropy": 0.00013265633606351912, "in_think": false, "in_code": false, "entropy_smoothed": 0.14254956323949916}
+{"index": 394, "token_id": 43613, "token_text": " representations", "entropy": 0.8711214065551758, "in_think": false, "in_code": false, "entropy_smoothed": 0.15997091055372908}
+{"index": 395, "token_id": 624, "token_text": ".\n", "entropy": 0.6874878406524658, "in_think": false, "in_code": false, "entropy_smoothed": 0.17372065461034897}
+{"index": 396, "token_id": 17, "token_text": "2", "entropy": 2.0063068983944277e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.17371972750473672}
+{"index": 397, "token_id": 13, "token_text": ".", "entropy": 1.679727006376197e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.17371970240033074}
+{"index": 398, "token_id": 3070, "token_text": " **", "entropy": 2.2540480415500497e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.17191779948826846}
+{"index": 399, "token_id": 1592, "token_text": "Key", "entropy": 0.6631746292114258, "in_think": false, "in_code": false, "entropy_smoothed": 0.18518128429358424}
+{"index": 400, "token_id": 70971, "token_text": " Insight", "entropy": 2.3322929337155074e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.18518172909963052}
+{"index": 401, "token_id": 95518, "token_text": "**:", "entropy": 9.709811621405606e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.1841851180264985}
+{"index": 402, "token_id": 576, "token_text": " The", "entropy": 0.0011426766868680716, "in_think": false, "in_code": false, "entropy_smoothed": 0.18420711972538814}
+{"index": 403, "token_id": 6291, "token_text": " solution", "entropy": 0.0001967373100342229, "in_think": false, "in_code": false, "entropy_smoothed": 0.18421098852924847}
+{"index": 404, "token_id": 7460, "token_text": " requires", "entropy": 0.42397406697273254, "in_think": false, "in_code": false, "entropy_smoothed": 0.1926904491750702}
+{"index": 405, "token_id": 264, "token_text": " a", "entropy": 0.01590302586555481, "in_think": false, "in_code": false, "entropy_smoothed": 0.18965629082603302}
+{"index": 406, "token_id": 30339, "token_text": " straightforward", "entropy": 0.6050949692726135, "in_think": false, "in_code": false, "entropy_smoothed": 0.19542050462646332}
+{"index": 407, "token_id": 18615, "token_text": " lookup", "entropy": 0.8677912950515747, "in_think": false, "in_code": false, "entropy_smoothed": 0.21269619177525786}
+{"index": 408, "token_id": 304, "token_text": " in", "entropy": 0.11750547587871552, "in_think": false, "in_code": false, "entropy_smoothed": 0.21398452024405745}
+{"index": 409, "token_id": 279, "token_text": " the", "entropy": 0.06048864871263504, "in_think": false, "in_code": false, "entropy_smoothed": 0.21516964066971017}
+{"index": 410, "token_id": 10997, "token_text": " dictionary", "entropy": 0.0173785462975502, "in_think": false, "in_code": false, "entropy_smoothed": 0.20673594359505845}
+{"index": 411, "token_id": 13, "token_text": ".", "entropy": 0.0006064096814952791, "in_think": false, "in_code": false, "entropy_smoothed": 0.20667176582931465}
+{"index": 412, "token_id": 1416, "token_text": " If", "entropy": 0.001981033245101571, "in_think": false, "in_code": false, "entropy_smoothed": 0.20671137848111246}
+{"index": 413, "token_id": 279, "token_text": " the", "entropy": 1.1775045383188854e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.19484192769709113}
+{"index": 414, "token_id": 1376, "token_text": " key", "entropy": 0.8962500691413879, "in_think": false, "in_code": false, "entropy_smoothed": 0.20761885504904273}
+{"index": 415, "token_id": 320, "token_text": " (", "entropy": 0.2994804382324219, "in_think": false, "in_code": false, "entropy_smoothed": 0.21360845952215118}
+{"index": 416, "token_id": 25263, "token_text": "logging", "entropy": 0.002546279225498438, "in_think": false, "in_code": false, "entropy_smoothed": 0.21365938381723187}
+{"index": 417, "token_id": 2188, "token_text": " level", "entropy": 1.1382950582117246e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.21144710475493}
+{"index": 418, "token_id": 8, "token_text": ")", "entropy": 6.262734677875414e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.21118123068577505}
+{"index": 419, "token_id": 374, "token_text": " is", "entropy": 0.2276037633419037, "in_think": false, "in_code": false, "entropy_smoothed": 0.21507951102322792}
+{"index": 420, "token_id": 3042, "token_text": " present", "entropy": 0.017916465178132057, "in_think": false, "in_code": false, "entropy_smoothed": 0.2154378403108834}
+{"index": 421, "token_id": 11, "token_text": ",", "entropy": 0.0015465347096323967, "in_think": false, "in_code": false, "entropy_smoothed": 0.21543657812665093}
+{"index": 422, "token_id": 470, "token_text": " return", "entropy": 0.07397013902664185, "in_think": false, "in_code": false, "entropy_smoothed": 0.21656969718078958}
+{"index": 423, "token_id": 1181, "token_text": " its", "entropy": 0.02646665833890438, "in_think": false, "in_code": false, "entropy_smoothed": 0.21708636214749763}
+{"index": 424, "token_id": 12159, "token_text": " corresponding", "entropy": 1.0756728649139404, "in_think": false, "in_code": false, "entropy_smoothed": 0.2359498869420762}
+{"index": 425, "token_id": 897, "token_text": " value", "entropy": 0.10941191017627716, "in_think": false, "in_code": false, "entropy_smoothed": 0.23748533500151583}
+{"index": 426, "token_id": 26, "token_text": ";", "entropy": 1.9032593627343886e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.22099126389214266}
+{"index": 427, "token_id": 5937, "token_text": " otherwise", "entropy": 0.00016914139268919826, "in_think": false, "in_code": false, "entropy_smoothed": 0.2209463311949415}
+{"index": 428, "token_id": 11, "token_text": ",", "entropy": 1.0743649170308345e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.20574916713921884}
+{"index": 429, "token_id": 470, "token_text": " return", "entropy": 1.246438841917552e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.20080866796673835}
+{"index": 430, "token_id": 481, "token_text": " -", "entropy": 2.0874167603324167e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.20080769104142637}
+{"index": 431, "token_id": 16, "token_text": "1", "entropy": 6.336336316747904e-11, "in_think": false, "in_code": false, "entropy_smoothed": 0.19312462252882337}
+{"index": 432, "token_id": 624, "token_text": ".\n", "entropy": 4.981507117918227e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.19310494433959516}
+{"index": 433, "token_id": 18, "token_text": "3", "entropy": 2.0939714406864596e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.18557388797736082}
+{"index": 434, "token_id": 13, "token_text": ".", "entropy": 2.3109089397621574e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.18557315709612482}
+{"index": 435, "token_id": 3070, "token_text": " **", "entropy": 2.222893300540818e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.18102904736945277}
+{"index": 436, "token_id": 27847, "token_text": "Algorithm", "entropy": 6.043934263288975e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.17254934549746906}
+{"index": 437, "token_id": 24145, "token_text": " Selection", "entropy": 7.051964348647743e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.17255075588546143}
+{"index": 438, "token_id": 95518, "token_text": "**:", "entropy": 9.075066920161134e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.16304936322562363}
+{"index": 439, "token_id": 576, "token_text": " The", "entropy": 0.00738416938111186, "in_think": false, "in_code": false, "entropy_smoothed": 0.1631903012312666}
+{"index": 440, "token_id": 12111, "token_text": " algorithm", "entropy": 0.29818686842918396, "in_think": false, "in_code": false, "entropy_smoothed": 0.16915403802449272}
+{"index": 441, "token_id": 17601, "token_text": " involves", "entropy": 0.35928016901016235, "in_think": false, "in_code": false, "entropy_smoothed": 0.1760156872546153}
+{"index": 442, "token_id": 264, "token_text": " a", "entropy": 0.06977172195911407, "in_think": false, "in_code": false, "entropy_smoothed": 0.15599754747504757}
+{"index": 443, "token_id": 4285, "token_text": " simple", "entropy": 0.6620750427246094, "in_think": false, "in_code": false, "entropy_smoothed": 0.1692363952028185}
+{"index": 444, "token_id": 10997, "token_text": " dictionary", "entropy": 0.5756849050521851, "in_think": false, "in_code": false, "entropy_smoothed": 0.16332766517275868}
+{"index": 445, "token_id": 18615, "token_text": " lookup", "entropy": 0.1358569860458374, "in_think": false, "in_code": false, "entropy_smoothed": 0.1522950480806261}
+{"index": 446, "token_id": 13, "token_text": ".", "entropy": 0.15784208476543427, "in_think": false, "in_code": false, "entropy_smoothed": 0.15545188973580865}
+{"index": 447, "token_id": 1096, "token_text": " This", "entropy": 0.4889875054359436, "in_think": false, "in_code": false, "entropy_smoothed": 0.1652316364850735}
+{"index": 448, "token_id": 5666, "token_text": " operation", "entropy": 0.6534180641174316, "in_think": false, "in_code": false, "entropy_smoothed": 0.17829999325932605}
+{"index": 449, "token_id": 374, "token_text": " is", "entropy": 0.8478063941001892, "in_think": false, "in_code": false, "entropy_smoothed": 0.1819926285571013}
+{"index": 450, "token_id": 11050, "token_text": " efficient", "entropy": 0.1314973086118698, "in_think": false, "in_code": false, "entropy_smoothed": 0.18462210827075196}
+{"index": 451, "token_id": 448, "token_text": " with", "entropy": 0.0985812097787857, "in_think": false, "in_code": false, "entropy_smoothed": 0.18659373227213144}
+{"index": 452, "token_id": 458, "token_text": " an", "entropy": 0.12525904178619385, "in_think": false, "in_code": false, "entropy_smoothed": 0.18907605957411797}
+{"index": 453, "token_id": 5461, "token_text": " average", "entropy": 0.00046733030467294157, "in_think": false, "in_code": false, "entropy_smoothed": 0.18908147143401074}
+{"index": 454, "token_id": 882, "token_text": " time", "entropy": 0.0003695302875712514, "in_think": false, "in_code": false, "entropy_smoothed": 0.18060938070030752}
+{"index": 455, "token_id": 23094, "token_text": " complexity", "entropy": 6.653799573541619e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.18029145325898788}
+{"index": 456, "token_id": 315, "token_text": " of", "entropy": 1.8369769350101706e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.1681895575474895}
+{"index": 457, "token_id": 506, "token_text": " O", "entropy": 0.0005014229682274163, "in_think": false, "in_code": false, "entropy_smoothed": 0.15084376010582254}
+{"index": 458, "token_id": 7, "token_text": "(", "entropy": 3.933767547814604e-11, "in_think": false, "in_code": false, "entropy_smoothed": 0.14849365058903496}
+{"index": 459, "token_id": 16, "token_text": "1", "entropy": 1.5748851112107332e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.14728387764627998}
+{"index": 460, "token_id": 8, "token_text": ")", "entropy": 0.48755207657814026, "in_think": false, "in_code": false, "entropy_smoothed": 0.1566873482518918}
+{"index": 461, "token_id": 369, "token_text": " for", "entropy": 0.6658440828323364, "in_think": false, "in_code": false, "entropy_smoothed": 0.16999210171490858}
+{"index": 462, "token_id": 5175, "token_text": " hash", "entropy": 0.8903378248214722, "in_think": false, "in_code": false, "entropy_smoothed": 0.187759237546436}
+{"index": 463, "token_id": 5980, "token_text": "-based", "entropy": 0.0186016745865345, "in_think": false, "in_code": false, "entropy_smoothed": 0.1881312710146166}
+{"index": 464, "token_id": 57514, "token_text": " dictionaries", "entropy": 0.010352618992328644, "in_think": false, "in_code": false, "entropy_smoothed": 0.17041332201163542}
+{"index": 465, "token_id": 1075, "token_text": " like", "entropy": 0.5286995768547058, "in_think": false, "in_code": false, "entropy_smoothed": 0.17499770478408108}
+{"index": 466, "token_id": 13027, "token_text": " Python", "entropy": 0.0016052548307925463, "in_think": false, "in_code": false, "entropy_smoothed": 0.17497888429618697}
+{"index": 467, "token_id": 594, "token_text": "'s", "entropy": 0.006337287370115519, "in_think": false, "in_code": false, "entropy_smoothed": 0.17510562981593025}
+{"index": 468, "token_id": 1565, "token_text": " `", "entropy": 0.14155912399291992, "in_think": false, "in_code": false, "entropy_smoothed": 0.17793555974885308}
+{"index": 469, "token_id": 8477, "token_text": "dict", "entropy": 4.905744572170079e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.17338446563092944}
+{"index": 470, "token_id": 62338, "token_text": "`.\n\n", "entropy": 0.13936886191368103, "in_think": false, "in_code": false, "entropy_smoothed": 0.17581351356564043}
+{"index": 471, "token_id": 14374, "token_text": "###", "entropy": 8.353140401595738e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.17578258454207585}
+{"index": 472, "token_id": 12478, "token_text": " Solution", "entropy": 6.635027239099145e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.17430450876699083}
+{"index": 473, "token_id": 6119, "token_text": " Code", "entropy": 3.835502411675407e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.17377525231026097}
+{"index": 474, "token_id": 198, "token_text": "\n", "entropy": 6.549261797772488e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.15226192599721813}
+{"index": 475, "token_id": 73594, "token_text": "```", "entropy": 8.512344720656984e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.150073858040587}
+{"index": 476, "token_id": 12669, "token_text": "python", "entropy": 7.255606760736555e-05, "in_think": false, "in_code": true, "entropy_smoothed": 0.1500749285100666}
+{"index": 477, "token_id": 198, "token_text": "\n", "entropy": 1.0757782220593981e-08, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007154589736846}
+{"index": 478, "token_id": 750, "token_text": "def", "entropy": 3.3394419006071985e-05, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007221163701875}
+{"index": 479, "token_id": 633, "token_text": " get", "entropy": 7.215282149530822e-09, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007218685254756}
+{"index": 480, "token_id": 59982, "token_text": "_logging", "entropy": 0.00021628897229675204, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007647088365828}
+{"index": 481, "token_id": 8274, "token_text": "_level", "entropy": 1.335612887487514e-05, "in_think": false, "in_code": true, "entropy_smoothed": 0.1500767380049685}
+{"index": 482, "token_id": 3142, "token_text": "_value", "entropy": 3.593918108890648e-06, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007679992031644}
+{"index": 483, "token_id": 81057, "token_text": "(mapping", "entropy": 4.151534994889516e-06, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007688290913693}
+{"index": 484, "token_id": 11, "token_text": ",", "entropy": 3.681962698465213e-05, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007761467985875}
+{"index": 485, "token_id": 2188, "token_text": " level", "entropy": 1.1525579424187526e-07, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007761253918803}
+{"index": 486, "token_id": 982, "token_text": "):\n", "entropy": 6.593324428649794e-07, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007641693898421}
+{"index": 487, "token_id": 262, "token_text": "   ", "entropy": 2.943314711956191e-07, "in_think": false, "in_code": true, "entropy_smoothed": 0.15007501243274393}
+{"index": 488, "token_id": 470, "token_text": " return", "entropy": 0.6279098987579346, "in_think": false, "in_code": true, "entropy_smoothed": 0.1626332102264013}
+{"index": 489, "token_id": 12731, "token_text": " mapping", "entropy": 1.59767955665302e-06, "in_think": false, "in_code": true, "entropy_smoothed": 0.16248555879237017}
+{"index": 490, "token_id": 670, "token_text": ".get", "entropy": 0.15939296782016754, "in_think": false, "in_code": true, "entropy_smoothed": 0.15970968078018985}
+{"index": 491, "token_id": 23669, "token_text": "(level", "entropy": 9.653347660787404e-06, "in_think": false, "in_code": true, "entropy_smoothed": 0.1525242704669398}
+{"index": 492, "token_id": 11, "token_text": ",", "entropy": 1.7946503305665829e-07, "in_think": false, "in_code": true, "entropy_smoothed": 0.1511288396170582}
+{"index": 493, "token_id": 481, "token_text": " -", "entropy": 4.676274367731992e-10, "in_think": false, "in_code": true, "entropy_smoothed": 0.13788733877191856}
+{"index": 494, "token_id": 16, "token_text": "1", "entropy": 5.112648637783934e-10, "in_think": false, "in_code": true, "entropy_smoothed": 0.12637364068110016}
+{"index": 495, "token_id": 340, "token_text": ")\n", "entropy": 2.586298251117114e-06, "in_think": false, "in_code": true, "entropy_smoothed": 0.12365655268614843}
+{"index": 496, "token_id": 13874, "token_text": "``", "entropy": 1.4773950951507686e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.12049971128631876}
+{"index": 497, "token_id": 19324, "token_text": "`\n\n", "entropy": 1.2065156624885276e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.11071998530791313}
+{"index": 498, "token_id": 14374, "token_text": "###", "entropy": 9.597647476766724e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.097651625945094}
+{"index": 499, "token_id": 71287, "token_text": " Explanation", "entropy": 2.4107866920530796e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.08069598022042862}
+{"index": 500, "token_id": 198, "token_text": "\n", "entropy": 3.3465775572949497e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.07806604074134635}
+{"index": 501, "token_id": 12, "token_text": "-", "entropy": 0.1910349279642105, "in_think": false, "in_code": false, "entropy_smoothed": 0.07991511510505483}
+{"index": 502, "token_id": 3070, "token_text": " **", "entropy": 0.021420590579509735, "in_think": false, "in_code": false, "entropy_smoothed": 0.07783834608092116}
+{"index": 503, "token_id": 8517, "token_text": "Dictionary", "entropy": 0.5874338150024414, "in_think": false, "in_code": false, "entropy_smoothed": 0.08957767577487653}
+{"index": 504, "token_id": 50311, "token_text": " Lookup", "entropy": 0.003229291643947363, "in_think": false, "in_code": false, "entropy_smoothed": 0.08963487100200405}
+{"index": 505, "token_id": 95518, "token_text": "**:", "entropy": 0.009406773373484612, "in_think": false, "in_code": false, "entropy_smoothed": 0.08982287339348227}
+{"index": 506, "token_id": 576, "token_text": " The", "entropy": 1.1683338016155176e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.08982310338628872}
+{"index": 507, "token_id": 729, "token_text": " function", "entropy": 0.4292786717414856, "in_think": false, "in_code": false, "entropy_smoothed": 0.09839864836175388}
+{"index": 508, "token_id": 5711, "token_text": " uses", "entropy": 0.6417601704597473, "in_think": false, "in_code": false, "entropy_smoothed": 0.11123385177016208}
+{"index": 509, "token_id": 279, "token_text": " the", "entropy": 0.31438159942626953, "in_think": false, "in_code": false, "entropy_smoothed": 0.11752148372718978}
+{"index": 510, "token_id": 1565, "token_text": " `", "entropy": 0.2699207067489624, "in_think": false, "in_code": false, "entropy_smoothed": 0.11316885633060622}
+{"index": 511, "token_id": 455, "token_text": "get", "entropy": 0.04036445915699005, "in_think": false, "in_code": false, "entropy_smoothed": 0.1006592638570993}
+{"index": 512, "token_id": 63, "token_text": "`", "entropy": 0.5823754072189331, "in_think": false, "in_code": false, "entropy_smoothed": 0.09450001550504851}
+{"index": 513, "token_id": 1714, "token_text": " method", "entropy": 9.664702247391688e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.09412800134272231}
+{"index": 514, "token_id": 315, "token_text": " of", "entropy": 0.054827239364385605, "in_think": false, "in_code": false, "entropy_smoothed": 0.09501749375016345}
+{"index": 515, "token_id": 279, "token_text": " the", "entropy": 1.0927776098251343, "in_think": false, "in_code": false, "entropy_smoothed": 0.10629905440957202}
+{"index": 516, "token_id": 10997, "token_text": " dictionary", "entropy": 0.0001210863993037492, "in_think": false, "in_code": false, "entropy_smoothed": 0.10626937104094225}
+{"index": 517, "token_id": 13, "token_text": ".", "entropy": 0.8907904028892517, "in_think": false, "in_code": false, "entropy_smoothed": 0.12395843335132498}
+{"index": 518, "token_id": 1096, "token_text": " This", "entropy": 0.6858552098274231, "in_think": false, "in_code": false, "entropy_smoothed": 0.13484435506801504}
+{"index": 519, "token_id": 1714, "token_text": " method", "entropy": 1.652222323400565e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.13484337722354525}
+{"index": 520, "token_id": 70671, "token_text": " retrieves", "entropy": 1.0194311141967773, "in_think": false, "in_code": false, "entropy_smoothed": 0.1524446222692072}
+{"index": 521, "token_id": 279, "token_text": " the", "entropy": 4.237370831106091e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.15244470534599572}
+{"index": 522, "token_id": 897, "token_text": " value", "entropy": 1.3880247706765658e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.15244340610104332}
+{"index": 523, "token_id": 369, "token_text": " for", "entropy": 0.5837719440460205, "in_think": false, "in_code": false, "entropy_smoothed": 0.1641187682719155}
+{"index": 524, "token_id": 264, "token_text": " a", "entropy": 0.36534127593040466, "in_think": false, "in_code": false, "entropy_smoothed": 0.17142546280528762}
+{"index": 525, "token_id": 5189, "token_text": " specified", "entropy": 0.43382465839385986, "in_think": false, "in_code": false, "entropy_smoothed": 0.18010178572627042}
+{"index": 526, "token_id": 1376, "token_text": " key", "entropy": 1.7448942912778875e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.18010033809470685}
+{"index": 527, "token_id": 13, "token_text": ".", "entropy": 0.17992234230041504, "in_think": false, "in_code": false, "entropy_smoothed": 0.1836987847255595}
+{"index": 528, "token_id": 1416, "token_text": " If", "entropy": 0.04824339225888252, "in_think": false, "in_code": false, "entropy_smoothed": 0.18466298468235703}
+{"index": 529, "token_id": 279, "token_text": " the", "entropy": 6.071874025792567e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.18466298575242618}
+{"index": 530, "token_id": 1376, "token_text": " key", "entropy": 2.2298792146102642e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.1846586604189561}
+{"index": 531, "token_id": 374, "token_text": " is", "entropy": 0.03456413000822067, "in_think": false, "in_code": false, "entropy_smoothed": 0.185349675896543}
+{"index": 532, "token_id": 537, "token_text": " not", "entropy": 0.42372018098831177, "in_think": false, "in_code": false, "entropy_smoothed": 0.19382400763794705}
+{"index": 533, "token_id": 1730, "token_text": " found", "entropy": 0.040182195603847504, "in_think": false, "in_code": false, "entropy_smoothed": 0.1946275685193241}
+{"index": 534, "token_id": 11, "token_text": ",", "entropy": 0.005860457196831703, "in_think": false, "in_code": false, "entropy_smoothed": 0.19474404127072106}
+{"index": 535, "token_id": 432, "token_text": " it", "entropy": 0.009089197032153606, "in_think": false, "in_code": false, "entropy_smoothed": 0.19492582290624824}
+{"index": 536, "token_id": 4675, "token_text": " returns", "entropy": 0.2278297245502472, "in_think": false, "in_code": false, "entropy_smoothed": 0.19948240421060434}
+{"index": 537, "token_id": 264, "token_text": " a", "entropy": 0.04044574871659279, "in_think": false, "in_code": false, "entropy_smoothed": 0.20029131329830677}
+{"index": 538, "token_id": 1638, "token_text": " default", "entropy": 0.0023954545613378286, "in_think": false, "in_code": false, "entropy_smoothed": 0.18778102441437483}
+{"index": 539, "token_id": 897, "token_text": " value", "entropy": 4.104816071048845e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.1877810745571051}
+{"index": 540, "token_id": 320, "token_text": " (", "entropy": 0.41564756631851196, "in_think": false, "in_code": false, "entropy_smoothed": 0.19290616652707201}
+{"index": 541, "token_id": 6739, "token_text": "here", "entropy": 0.8373486995697021, "in_think": false, "in_code": false, "entropy_smoothed": 0.20965294745151283}
+{"index": 542, "token_id": 11, "token_text": ",", "entropy": 0.01825331151485443, "in_think": false, "in_code": false, "entropy_smoothed": 0.21001801009250926}
+{"index": 543, "token_id": 481, "token_text": " -", "entropy": 0.13315099477767944, "in_think": false, "in_code": false, "entropy_smoothed": 0.2126810299787103}
+{"index": 544, "token_id": 16, "token_text": "1", "entropy": 6.586755030291158e-10, "in_think": false, "in_code": false, "entropy_smoothed": 0.21268102998165847}
+{"index": 545, "token_id": 4292, "token_text": ").\n", "entropy": 0.1625937521457672, "in_think": false, "in_code": false, "entropy_smoothed": 0.21593285329860878}
+{"index": 546, "token_id": 12, "token_text": "-", "entropy": 2.3963675630511716e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.21593290093048104}
+{"index": 547, "token_id": 3070, "token_text": " **", "entropy": 3.011210836234568e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.215932876860392}
+{"index": 548, "token_id": 46588, "token_text": "Eff", "entropy": 0.09814461320638657, "in_think": false, "in_code": false, "entropy_smoothed": 0.21789576720499024}
+{"index": 549, "token_id": 10387, "token_text": "iciency", "entropy": 1.6926608168432722e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.21789531890086816}
+{"index": 550, "token_id": 95518, "token_text": "**:", "entropy": 6.612555125684594e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.21789531353022407}
+{"index": 551, "token_id": 576, "token_text": " The", "entropy": 0.021322615444660187, "in_think": false, "in_code": false, "entropy_smoothed": 0.21450106727983306}
+{"index": 552, "token_id": 1565, "token_text": " `", "entropy": 0.14317648112773895, "in_think": false, "in_code": false, "entropy_smoothed": 0.21693618509079765}
+{"index": 553, "token_id": 455, "token_text": "get", "entropy": 0.000501937058288604, "in_think": false, "in_code": false, "entropy_smoothed": 0.2051975475319146}
+{"index": 554, "token_id": 63, "token_text": "`", "entropy": 7.379130124718358e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.2051329764572959}
+{"index": 555, "token_id": 1714, "token_text": " method", "entropy": 6.262228271225467e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.20494609343548045}
+{"index": 556, "token_id": 29720, "token_text": " efficiently", "entropy": 1.1334549188613892, "in_think": false, "in_code": false, "entropy_smoothed": 0.22761495814594793}
+{"index": 557, "token_id": 13469, "token_text": " handles", "entropy": 0.3341369330883026, "in_think": false, "in_code": false, "entropy_smoothed": 0.22571212337288427}
+{"index": 558, "token_id": 279, "token_text": " the", "entropy": 0.269212543964386, "in_think": false, "in_code": false, "entropy_smoothed": 0.21826117084297703}
+{"index": 559, "token_id": 18615, "token_text": " lookup", "entropy": 0.049855366349220276, "in_think": false, "in_code": false, "entropy_smoothed": 0.21297064618143605}
+{"index": 560, "token_id": 304, "token_text": " in", "entropy": 0.022579655051231384, "in_think": false, "in_code": false, "entropy_smoothed": 0.2080238251474814}
+{"index": 561, "token_id": 6783, "token_text": " constant", "entropy": 0.15966787934303284, "in_think": false, "in_code": false, "entropy_smoothed": 0.2104098935512023}
+{"index": 562, "token_id": 882, "token_text": " time", "entropy": 6.285630206548376e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.19876251111942775}
+{"index": 563, "token_id": 11, "token_text": ",", "entropy": 0.790256142616272, "in_think": false, "in_code": false, "entropy_smoothed": 0.2145676146423487}
+{"index": 564, "token_id": 506, "token_text": " O", "entropy": 0.6935058832168579, "in_think": false, "in_code": false, "entropy_smoothed": 0.22734118751939814}
+{"index": 565, "token_id": 7, "token_text": "(", "entropy": 8.112240046376229e-11, "in_think": false, "in_code": false, "entropy_smoothed": 0.2054856353245179}
+{"index": 566, "token_id": 16, "token_text": "1", "entropy": 6.686369680153348e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.2054832137302592}
+{"index": 567, "token_id": 701, "token_text": "),", "entropy": 7.33638516976498e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.18766887294950813}
+{"index": 568, "token_id": 3259, "token_text": " making", "entropy": 0.08221887052059174, "in_think": false, "in_code": false, "entropy_smoothed": 0.1755961461633715}
+{"index": 569, "token_id": 279, "token_text": " the", "entropy": 0.179605633020401, "in_think": false, "in_code": false, "entropy_smoothed": 0.17918825551933487}
+{"index": 570, "token_id": 6291, "token_text": " solution", "entropy": 0.00470261974260211, "in_think": false, "in_code": false, "entropy_smoothed": 0.15889368563025136}
+{"index": 571, "token_id": 22823, "token_text": " optimal", "entropy": 0.024580901488661766, "in_think": false, "in_code": false, "entropy_smoothed": 0.15938521891260798}
+{"index": 572, "token_id": 369, "token_text": " for", "entropy": 0.03689836710691452, "in_think": false, "in_code": false, "entropy_smoothed": 0.16012315849425085}
+{"index": 573, "token_id": 419, "token_text": " this", "entropy": 0.793525218963623, "in_think": false, "in_code": false, "entropy_smoothed": 0.1643182239926029}
+{"index": 574, "token_id": 3491, "token_text": " problem", "entropy": 0.13129359483718872, "in_think": false, "in_code": false, "entropy_smoothed": 0.1596372703707386}
+{"index": 575, "token_id": 624, "token_text": ".\n", "entropy": 2.3570857592858374e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.15096124862001326}
+{"index": 576, "token_id": 12, "token_text": "-", "entropy": 1.7412329356147893e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.15096124547847126}
+{"index": 577, "token_id": 3070, "token_text": " **", "entropy": 5.321388840684449e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.1473627996967407}
+{"index": 578, "token_id": 11656, "token_text": "Edge", "entropy": 0.10328997671604156, "in_think": false, "in_code": false, "entropy_smoothed": 0.1484637313858839}
+{"index": 579, "token_id": 55713, "token_text": " Handling", "entropy": 0.20518924295902252, "in_think": false, "in_code": false, "entropy_smoothed": 0.15256751503068955}
+{"index": 580, "token_id": 95518, "token_text": "**:", "entropy": 2.463838022492837e-08, "in_think": false, "in_code": false, "entropy_smoothed": 0.1525675150774813}
+{"index": 581, "token_id": 1416, "token_text": " If", "entropy": 0.5147827863693237, "in_think": false, "in_code": false, "entropy_smoothed": 0.16217188820470338}
+{"index": 582, "token_id": 279, "token_text": " the", "entropy": 0.0006285444833338261, "in_think": false, "in_code": false, "entropy_smoothed": 0.1537100554746038}
+{"index": 583, "token_id": 3897, "token_text": " provided", "entropy": 0.29820895195007324, "in_think": false, "in_code": false, "entropy_smoothed": 0.15887059060152833}
+{"index": 584, "token_id": 1565, "token_text": " `", "entropy": 0.03265191614627838, "in_think": false, "in_code": false, "entropy_smoothed": 0.15940641978051726}
+{"index": 585, "token_id": 3294, "token_text": "level", "entropy": 1.6883922171473387e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.15922466960771853}
+{"index": 586, "token_id": 63, "token_text": "`", "entropy": 1.1447044423462671e-09, "in_think": false, "in_code": false, "entropy_smoothed": 0.15466807513960767}
+{"index": 587, "token_id": 374, "token_text": " is", "entropy": 0.21495017409324646, "in_think": false, "in_code": false, "entropy_smoothed": 0.15815816364714075}
+{"index": 588, "token_id": 537, "token_text": " not", "entropy": 0.0012282145908102393, "in_think": false, "in_code": false, "entropy_smoothed": 0.1581348188477302}
+{"index": 589, "token_id": 264, "token_text": " a", "entropy": 0.7814589738845825, "in_think": false, "in_code": false, "entropy_smoothed": 0.17376391622910042}
+{"index": 590, "token_id": 1376, "token_text": " key", "entropy": 0.0005769860581494868, "in_think": false, "in_code": false, "entropy_smoothed": 0.16546250462389317}
+{"index": 591, "token_id": 304, "token_text": " in", "entropy": 1.5510539697061176e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.14871553373460705}
+{"index": 592, "token_id": 279, "token_text": " the", "entropy": 0.2685340940952301, "in_think": false, "in_code": false, "entropy_smoothed": 0.1537211493862146}
+{"index": 593, "token_id": 1565, "token_text": " `", "entropy": 0.47804272174835205, "in_think": false, "in_code": false, "entropy_smoothed": 0.16061898392562804}
+{"index": 594, "token_id": 40792, "token_text": "mapping", "entropy": 7.662608368264046e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.1606191371646219}
+{"index": 595, "token_id": 63, "token_text": "`", "entropy": 3.320283576613292e-05, "in_think": false, "in_code": false, "entropy_smoothed": 0.15736792617842188}
+{"index": 596, "token_id": 10997, "token_text": " dictionary", "entropy": 8.007130418263841e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.15736803839367897}
+{"index": 597, "token_id": 11, "token_text": ",", "entropy": 9.235938705387525e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.15736822305222886}
+{"index": 598, "token_id": 279, "token_text": " the", "entropy": 0.04938879981637001, "in_think": false, "in_code": false, "entropy_smoothed": 0.15639310678442853}
+{"index": 599, "token_id": 729, "token_text": " function", "entropy": 0.006031320430338383, "in_think": false, "in_code": false, "entropy_smoothed": 0.15651369933981896}
+{"index": 600, "token_id": 16674, "token_text": " defaults", "entropy": 1.4052232503890991, "in_think": false, "in_code": false, "entropy_smoothed": 0.18461816302508993}
+{"index": 601, "token_id": 311, "token_text": " to", "entropy": 6.525443495775107e-06, "in_think": false, "in_code": false, "entropy_smoothed": 0.18419184122506663}
+{"index": 602, "token_id": 13451, "token_text": " returning", "entropy": 0.0008933903300203383, "in_think": false, "in_code": false, "entropy_smoothed": 0.18134617940911227}
+{"index": 603, "token_id": 481, "token_text": " -", "entropy": 0.00031623002723790705, "in_think": false, "in_code": false, "entropy_smoothed": 0.18134246526849127}
+{"index": 604, "token_id": 16, "token_text": "1", "entropy": 7.46563158515734e-11, "in_think": false, "in_code": false, "entropy_smoothed": 0.18134245051172415}
+{"index": 605, "token_id": 11, "token_text": ",", "entropy": 0.5873998403549194, "in_think": false, "in_code": false, "entropy_smoothed": 0.19308919487316828}
+{"index": 606, "token_id": 438, "token_text": " as", "entropy": 0.07891426235437393, "in_think": false, "in_code": false, "entropy_smoothed": 0.17199838174302798}
+{"index": 607, "token_id": 5189, "token_text": " specified", "entropy": 0.693304717540741, "in_think": false, "in_code": false, "entropy_smoothed": 0.17918173743207674}
+{"index": 608, "token_id": 382, "token_text": ".\n\n", "entropy": 0.011309875175356865, "in_think": false, "in_code": false, "entropy_smoothed": 0.17402368405629617}
+{"index": 609, "token_id": 1986, "token_text": "This", "entropy": 0.011840018443763256, "in_think": false, "in_code": false, "entropy_smoothed": 0.173263377098187}
+{"index": 610, "token_id": 5486, "token_text": " approach", "entropy": 0.7134057283401489, "in_think": false, "in_code": false, "entropy_smoothed": 0.18707989856396537}
+{"index": 611, "token_id": 25351, "token_text": " ensures", "entropy": 0.021089153364300728, "in_think": false, "in_code": false, "entropy_smoothed": 0.18430832404439074}
+{"index": 612, "token_id": 429, "token_text": " that", "entropy": 0.07031183689832687, "in_think": false, "in_code": false, "entropy_smoothed": 0.18571443506975313}
+{"index": 613, "token_id": 279, "token_text": " the", "entropy": 0.03281940147280693, "in_think": false, "in_code": false, "entropy_smoothed": 0.17056570024688383}
+{"index": 614, "token_id": 6291, "token_text": " solution", "entropy": 0.4751455783843994, "in_think": false, "in_code": false, "entropy_smoothed": 0.16619849415023466}
+{"index": 615, "token_id": 374, "token_text": " is", "entropy": 6.306627824415045e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.16619850676186787}
+{"index": 616, "token_id": 2176, "token_text": " both", "entropy": 0.10975509881973267, "in_think": false, "in_code": false, "entropy_smoothed": 0.16839360860453512}
+{"index": 617, "token_id": 63594, "token_text": " concise", "entropy": 0.057517245411872864, "in_think": false, "in_code": false, "entropy_smoothed": 0.16954248623573862}
+{"index": 618, "token_id": 323, "token_text": " and", "entropy": 1.9052153277243633e-07, "in_think": false, "in_code": false, "entropy_smoothed": 0.16789811263575743}
+{"index": 619, "token_id": 11050, "token_text": " efficient", "entropy": 0.07118571549654007, "in_think": false, "in_code": false, "entropy_smoothed": 0.16572971428528022}
+{"index": 620, "token_id": 11, "token_text": ",", "entropy": 0.0003170977288391441, "in_think": false, "in_code": false, "entropy_smoothed": 0.16564200384500494}
+{"index": 621, "token_id": 6438, "token_text": " meeting", "entropy": 0.8138649463653564, "in_think": false, "in_code": false, "entropy_smoothed": 0.18142768474253884}
+{"index": 622, "token_id": 678, "token_text": " all", "entropy": 0.5303101539611816, "in_think": false, "in_code": false, "entropy_smoothed": 0.19129592047962418}
+{"index": 623, "token_id": 279, "token_text": " the", "entropy": 1.287302851676941, "in_think": false, "in_code": false, "entropy_smoothed": 0.20117147313389055}
+{"index": 624, "token_id": 3491, "token_text": " problem", "entropy": 0.0929216593503952, "in_think": false, "in_code": false, "entropy_smoothed": 0.20040403442415466}
+{"index": 625, "token_id": 8502, "token_text": " requirements", "entropy": 0.03023216687142849, "in_think": false, "in_code": false, "entropy_smoothed": 0.2010082063444314}
+{"index": 626, "token_id": 448, "token_text": " with", "entropy": 1.0249485969543457, "in_think": false, "in_code": false, "entropy_smoothed": 0.22150717793527172}
+{"index": 627, "token_id": 17377, "token_text": " minimal", "entropy": 0.0032725920900702477, "in_think": false, "in_code": false, "entropy_smoothed": 0.22157262871279534}
+{"index": 628, "token_id": 2038, "token_text": " code", "entropy": 0.7548570036888123, "in_think": false, "in_code": false, "entropy_smoothed": 0.23460396925225077}
+{"index": 629, "token_id": 13, "token_text": ".", "entropy": 0.4222712218761444, "in_think": false, "in_code": false, "entropy_smoothed": 0.2389456088305932}
+{"index": 630, "token_id": 151645, "token_text": "<|im_end|>", "entropy": 0.3934526741504669, "in_think": false, "in_code": false, "entropy_smoothed": 0.24681466182083495}
