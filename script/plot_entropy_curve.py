@@ -27,6 +27,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from model.templlm_auto import AutoDecoModelForCausalLM
 
+TEMP_COLOR_MIN = 0.0
+TEMP_COLOR_MAX = 1.5
+
 
 def _resolve_local_dataset_file(dataset_name: str) -> str | None:
     candidates = [dataset_name]
@@ -457,14 +460,7 @@ def main() -> None:
         gen_max = max(gen_entropies)
     else:
         gen_min, gen_max = 0.0, 1.0
-    gen_temps: List[float] = []
-    if aligned_temps is not None:
-        gen_temps = [t for t in aligned_temps[gen_start:] if t is not None]
-    if gen_temps:
-        gen_temp_min = min(gen_temps)
-        gen_temp_max = max(gen_temps)
-    else:
-        gen_temp_min, gen_temp_max = 0.0, 1.0
+    gen_temp_min, gen_temp_max = TEMP_COLOR_MIN, TEMP_COLOR_MAX
     gen_deltas: List[float] = []
     if aligned_temp_entropy is not None:
         for idx in range(gen_start, len(token_ids)):
