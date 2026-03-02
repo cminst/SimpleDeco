@@ -25,6 +25,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from model.templlm_auto import AutoDecoModelForCausalLM
 
+TEMP_COLOR_MIN = 0.0
+TEMP_COLOR_MAX = 1.5
+
 
 def _resolve_local_dataset_file(dataset_name: str) -> str | None:
     candidates = [dataset_name]
@@ -375,12 +378,7 @@ def main() -> None:
     think_mask = _mask_from_ranges(spans, think_ranges)
     code_mask = _mask_from_ranges(spans, code_ranges)
     gen_start = min(prompt_len, len(token_ids))
-    gen_temps = [t for t in aligned_temps[gen_start:] if t is not None]
-    if gen_temps:
-        gen_min = min(gen_temps)
-        gen_max = max(gen_temps)
-    else:
-        gen_min, gen_max = 0.0, 1.0
+    gen_min, gen_max = TEMP_COLOR_MIN, TEMP_COLOR_MAX
     token_spans_html: List[str] = []
     for idx in range(gen_start, len(token_ids)):
         token_text = decoded[spans[idx][0]:spans[idx][1]]

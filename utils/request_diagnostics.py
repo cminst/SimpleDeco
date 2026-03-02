@@ -21,6 +21,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
+TEMP_COLOR_MIN = 0.0
+TEMP_COLOR_MAX = 1.5
+
 
 def _find_ranges(text: str, start_tag: str, end_tag: str) -> List[Tuple[int, int]]:
     """Find all content ranges between matching tag markers.
@@ -341,12 +344,7 @@ def plot_request_output_temps(
         with open(output_png_path, 'wb') as f:
             f.write(base64.b64decode(img_data_uri.split(',')[1]))
 
-        gen_temps = [t for t in aligned_temps[prompt_len:] if t is not None]
-        if gen_temps:
-            gen_min = min(gen_temps)
-            gen_max = max(gen_temps)
-        else:
-            gen_min, gen_max = 0.0, 1.0
+        gen_min, gen_max = TEMP_COLOR_MIN, TEMP_COLOR_MAX
 
         output_text_path = os.path.join(output_dir, "temp_trace.txt")
         with open(output_text_path, "w", encoding="utf-8") as f:
