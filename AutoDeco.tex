@@ -125,12 +125,7 @@ The following is the training data stream:
 With this differentiable pipeline, our training strategy becomes a straightforward ``end-to-end" optimization. The standard cross-entropy loss is computed between the final distribution $\tilde{\mathbf{p}}$ and the ground-truth token $y^*$. Because the entire process is differentiable, gradients from the loss are backpropagated to simultaneously update the parameters of both the temperature and top-p heads, allowing the model to learn its own optimal, context-specific decoding strategy by directly optimizing for the final task objective.
 
 
-% \paragraph{Training Strategy}
-% With this differentiable pipeline, our training strategy becomes a straightforward end-to-end optimization. The standard cross-entropy loss is computed between the final distribution $\tilde{\mathbf{p}}$ and the ground-truth token $y_t^*$. Because the entire process is differentiable, gradients from the loss are backpropagated to simultaneously update the parameters of both the temperature and top-p heads, allowing the model to learn its own optimal, context-specific decoding strategy by directly optimizing for the final task objective.
-
 Theoretically, these two heads could be trained from the pre-training stage. However, in this paper, we build upon a pre-trained LLM, freezing its base parameters and solely training the \textit{AutoDeco} heads. While training these heads on SFT data provides a strong baseline, we find that applying some certain de-biasing operations to the data can further enhance model performance and robustness:
-% \paragraph{Easy-Token Masking.} For many tokens, the base model's greedy prediction already matches the ground-truth. These ``easy" tokens often yield an optimal temperature $\hat{T_t}^*$ near zero, biasing the head to be overly conservative. To mitigate this, we randomly mask the training loss for a large fraction (e.g., 60\%) of these positions, forcing the model to learn from more challenging and informative examples.
-
 
 \begin{itemize}[leftmargin=2em, ]
     \item \textbf{Easy-Token Masking.} For many tokens, the base model's greedy prediction already matches the ground-truth. These ``easy" tokens often yield an optimal temperature $\hat{T_t}^*$ near zero, biasing the head to be overly conservative. To mitigate this, we randomly mask the training loss for a large fraction (e.g., 60\%) of these positions, forcing the model to learn from more challenging and informative examples.
@@ -385,9 +380,6 @@ Of course, while each head is powerful on its own, our results also confirm that
 \end{table}
 
 
-
-% \paragraph{Inference Efficiency.}
-
 A critical advantage of \textit{AutoDeco} is its computational efficiency. To quantify this, we evaluated its overhead against Default Sampling across three key metrics, with results summarized in Table~\ref{tab:Efficiency}.
 
 The analysis shows that the additional computational burden is minimal. The FLOPs are virtually identical to the baseline, and the memory footprint increases by a mere 4 MB, an insignificant amount for modern hardware. The impact on latency is also negligible. This overhead remains consistently low regardless of prompt length, adding a consistent overhead of 0.29-0.6 s/k tokens, which translates to an average relative increase of just 1.7\%.
@@ -456,11 +448,7 @@ Deterministic methods produce a single, reproducible output for a given input. T
 \paragraph{Model-Based Decoding.}
 To gain more fine-grained control over generation, a third category of methods modifies the model's output distribution using external signals or auxiliary models. Early examples include \textbf{Plug-and-Play Language Models}, which leverage attribute models to steer generation towards desired topics~\citep{dathathriplug}. More recently, \textbf{Contrastive Decoding} uses a smaller ``amateur'' model to steer a larger ``expert'' model away from generic text~\citep{li2023contrastive, chuang2023dola}. Similarly, Speculative Decoding utilizes a faster ``draft" model to generate sequences of tokens that are then verified by the larger model, significantly accelerating inference~\citep{leviathan2023fast, chen2023accelerating}. There is also an art to verification methods~\citep{liu2025trust}. While they are effective, they still operate under a fixed algorithmic framework: the choice of the ``guidance model'' itself acts as another form of hyperparameter. For example, in contrastive decoding and speculative decoding, the authors suggest that using a smaller LM of the same architecture as the guidance model yields the best results.
 
-
-
 Despite this rich landscape of research, a fundamental limitation persists: all these methods rely on a static decoding strategy. Whether it's a fixed algorithm (like Beam Search) or a fixed set of hyperparameters, this ``one-size-fits-all" approach is inherently suboptimal. In contrast, \textit{AutoDeco} proposes a paradigm shift. Instead of relying on fixed hyperparameters or predefined heuristics, we empower the model to dynamically control its own stochasticity at each generation step.
-
-
 
 
 \section{Conclusion and Future Work}
@@ -470,11 +458,6 @@ In this work, we challenged that the ``end-to-end'' label for LLM is a misnomer.
 Our extensive experiments reveal three key contributions. First, \textit{AutoDeco} demonstrates remarkable generalization, consistently outperforming standard decoding methods across diverse models and tasks, even matching oracle-tuned baselines without any task-specific tuning. Second, this performance is achieved with negligible computational overhead, making it a practical, drop-in enhancement for any transformer-based model. Most significantly, we discovered a remarkable emergent capability: \textit{AutoDeco} learns to interpret natural language commands to steer its own generation style, a foundational step towards more intuitive human-AI interaction.
 
 Future Work. Our immediate future work involves jointly training the base model with \textit{AutoDeco}. We believe this will address current limitations like imprecise prompt-based control and data biases—both likely consequences of a frozen backbone—thereby enabling more granular control over generation.
-
-% \section{Limitations and Future Work}
-% \label{sec:limitations_future_work}
-
-% Our work lays a foundation for read end-to-end decoding, illuminating several exciting avenues for future research. A natural next step is to expand \textit{AutoDeco}'s predictive scope beyond temperature and Top to include other parameters, such as repetition penalties. Furthermore, the emergent capability for natural language control is a particularly promising direction; targeted instruction-based fine-tuning could transform this nascent ability into a robust feature, enabling a new paradigm of intuitive, conversational control over generation. Finally, we believe the core principles of our approach could be extended to other generative modalities, representing a promising frontier for adaptive AI systems.
 
 \clearpage
 \newpage
