@@ -280,8 +280,9 @@ def _compute_metrics(
     pooled_b: Dict[str, List[float]],
     configs: List[Tuple[str, int]],
     common: List[str],
-) -> List[List[str]]:
+) -> Tuple[List[List[str]], Dict[str, List[Tuple[int, float, float]]]]:
     rows: List[List[str]] = []
+    plot_data: Dict[str, List[Tuple[int, float, float]]] = {"maj": [], "pass": []}
     for mode, k in configs:
         pooled_mean_a, used_a = _metric_for_scores(pooled_a, common, mode, k)
         pooled_mean_b, used_b = _metric_for_scores(pooled_b, common, mode, k)
@@ -314,7 +315,66 @@ def _compute_metrics(
                 str(used),
             ]
         )
-    return rows
+        if mean_a is not None and mean_b is not None:
+            plot_data[mode].append((k, mean_a, mean_b))
+    return rows, plot_data
+
+
+def _plot_results(
+    path: Path,
+    plot_data: Dict[str, List[Tuple[int, float, float]]],
+    label_a: str,
+    label_b: str,
+) -> None:
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("matplotlib is required for --plot output") from exc
+
+    plt.rcParams.update(
+        {
+            "font.family": ["Times New Roman", "Times", "serif"],
+            "font.size": 12,
+            "axes.titleweight": "bold",
+        }
+    )
+
+    fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
+    order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
+
+    for ax, (mode, ylabel) in zip(axes, order):
+        series = [(k, a, b) for (k, a, b) in plot_data.get(mode, []) if k % 2 == 1]
+        if not series:
+            ax.text(
+                0.5,
+                0.5,
+                f"No odd k data for {mode}@k",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_axis_off()
+            continue
+
+        series.sort(key=lambda t: t[0])
+        ks = [k for k, _, _ in series]
+        vals_a = [a for _, a, _ in series]
+        vals_b = [b for _, _, b in series]
+
+        ax.plot(ks, vals_a, marker="o", linewidth=2.0, markersize=4, label=label_a)
+        ax.plot(ks, vals_b, marker="s", linewidth=2.0, markersize=4, label=label_b)
+        ax.set_ylabel(ylabel)
+        ax.grid(True, alpha=0.25)
+        ax.legend(frameon=False)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
+
+    axes[-1].set_xlabel("k (odd only)")
+    axes[-1].xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
+    fig.suptitle("Trajectory Comparison", fontsize=14, y=1.02)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
 def _resolve_inputs(value: str) -> List[Path]:
@@ -362,6 +422,11 @@ def main() -> None:
         "--config",
         action="append",
         help="Metric config(s) like maj4 or pass@2. Can be repeated or comma-separated.",
+    )
+    parser.add_argument(
+        "--plot",
+        default=None,
+        help="Optional output path for a PDF/PNG plot (odd k only).",
     )
     parser.add_argument("--label_a", default=None, help="Label for input A column.")
     parser.add_argument("--label_b", default=None, help="Label for input B column.")
@@ -422,7 +487,7 @@ def main() -> None:
     label_b = args.label_b or args.input_b
     headers = ["Metric", label_a, label_b, "Delta(B-A)", "Problems"]
 
-    rows = _compute_metrics(
+    rows, plot_data = _compute_metrics(
         scores_a_list,
         scores_b_list,
         pooled_a,
@@ -432,6 +497,8 @@ def main() -> None:
     )
     table = _format_table(headers, rows)
     print(table)
+    if args.plot:
+        _plot_results(Path(args.plot), plot_data, label_a, label_b)
 
 
 if __name__ == "__main__":
