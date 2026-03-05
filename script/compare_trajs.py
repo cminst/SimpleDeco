@@ -1,11 +1,13 @@
-"""Compare two JSONL trajectory files with maj@k/pass@k metrics."""
+"""Compare two JSONL trajectory files with maj@k/pass@k metrics (paper-style estimator)."""
 from __future__ import annotations
 
 import argparse
 import glob
 import json
+import math
 import os
 import random
+import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -175,10 +177,12 @@ def _parse_configs(configs: List[str] | None, max_k: int) -> List[Tuple[str, int
     return parsed
 
 
-def _format_pct(value: float | None) -> str:
-    if value is None:
+def _format_mean_std(mean: float | None, std: float | None) -> str:
+    if mean is None:
         return "n/a"
-    return f"{value:.2f}%"
+    if std is None:
+        return f"{mean:.2f}%"
+    return f"{mean:.2f}±{std:.2f}%"
 
 
 def _format_table(headers: List[str], rows: List[List[str]]) -> str:
@@ -200,38 +204,116 @@ def _format_table(headers: List[str], rows: List[List[str]]) -> str:
         return "\n".join(out)
 
 
+def _count_correct(scores: List[float]) -> int:
+    return sum(1 for s in scores if s > 0.5)
+
+
+def _pass_at_k_estimate(n: int, c: int, k: int) -> float | None:
+    if n < k:
+        return None
+    if n - c < k:
+        return 1.0
+    return 1.0 - (math.comb(n - c, k) / math.comb(n, k))
+
+
+def _maj_at_k_estimate(n: int, c: int, k: int) -> float | None:
+    if n < k:
+        return None
+    total = math.comb(n, k)
+    needed = k // 2 + 1
+    prob = 0.0
+    for j in range(needed, k + 1):
+        if j > c:
+            break
+        if k - j > n - c:
+            continue
+        prob += (math.comb(c, j) * math.comb(n - c, k - j)) / total
+    return prob
+
+
+def _metric_for_scores(
+    scores: Dict[str, List[float]],
+    common: List[str],
+    mode: str,
+    k: int,
+) -> Tuple[float | None, int]:
+    values: List[float] = []
+    for pid in common:
+        vals = scores.get(pid)
+        if not vals:
+            continue
+        n = len(vals)
+        c = _count_correct(vals)
+        if mode == "pass":
+            est = _pass_at_k_estimate(n, c, k)
+        else:
+            est = _maj_at_k_estimate(n, c, k)
+        if est is None:
+            continue
+        values.append(est)
+    if not values:
+        return None, 0
+    return sum(values) / len(values), len(values)
+
+
+def _seed_metrics(
+    scores_list: List[Dict[str, List[float]]],
+    common: List[str],
+    mode: str,
+    k: int,
+) -> Tuple[List[float], List[int]]:
+    metrics: List[float] = []
+    used_counts: List[int] = []
+    for scores in scores_list:
+        mean_val, used = _metric_for_scores(scores, common, mode, k)
+        if mean_val is None:
+            continue
+        metrics.append(mean_val)
+        used_counts.append(used)
+    return metrics, used_counts
+
+
 def _compute_metrics(
-    scores_a: Dict[str, List[float]],
-    scores_b: Dict[str, List[float]],
+    scores_a_list: List[Dict[str, List[float]]],
+    scores_b_list: List[Dict[str, List[float]]],
+    pooled_a: Dict[str, List[float]],
+    pooled_b: Dict[str, List[float]],
     configs: List[Tuple[str, int]],
+    common: List[str],
 ) -> List[List[str]]:
-    common = sorted(set(scores_a) & set(scores_b))
     rows: List[List[str]] = []
     for mode, k in configs:
-        used = 0
-        correct_a = 0
-        correct_b = 0
-        for pid in common:
-            sa = scores_a[pid]
-            sb = scores_b[pid]
-            if len(sa) < k or len(sb) < k:
-                continue
-            used += 1
-            a_slice = sa[:k]
-            b_slice = sb[:k]
-            if mode == "maj":
-                a_ok = (sum(a_slice) / k) > 0.5
-                b_ok = (sum(b_slice) / k) > 0.5
-            else:
-                a_ok = max(a_slice) > 0.5
-                b_ok = max(b_slice) > 0.5
-            correct_a += 1 if a_ok else 0
-            correct_b += 1 if b_ok else 0
-        acc_a = (correct_a / used * 100.0) if used > 0 else None
-        acc_b = (correct_b / used * 100.0) if used > 0 else None
-        delta = (acc_b - acc_a) if (acc_a is not None and acc_b is not None) else None
+        pooled_mean_a, used_a = _metric_for_scores(pooled_a, common, mode, k)
+        pooled_mean_b, used_b = _metric_for_scores(pooled_b, common, mode, k)
+
+        seed_vals_a, used_list_a = _seed_metrics(scores_a_list, common, mode, k)
+        seed_vals_b, used_list_b = _seed_metrics(scores_b_list, common, mode, k)
+
+        std_a = None
+        std_b = None
+        if len(seed_vals_a) > 1:
+            std_a = statistics.pstdev(seed_vals_a) * 100.0
+        if len(seed_vals_b) > 1:
+            std_b = statistics.pstdev(seed_vals_b) * 100.0
+
+        mean_a = pooled_mean_a * 100.0 if pooled_mean_a is not None else None
+        mean_b = pooled_mean_b * 100.0 if pooled_mean_b is not None else None
+        delta = (mean_b - mean_a) if (mean_a is not None and mean_b is not None) else None
+
+        used = min(used_a, used_b) if used_a and used_b else 0
+        if not used and (used_list_a or used_list_b):
+            used = min(used_list_a + used_list_b)
+
         label = f"{mode}@{k}"
-        rows.append([label, _format_pct(acc_a), _format_pct(acc_b), _format_pct(delta), str(used)])
+        rows.append(
+            [
+                label,
+                _format_mean_std(mean_a, std_a),
+                _format_mean_std(mean_b, std_b),
+                _format_mean_std(delta, None),
+                str(used),
+            ]
+        )
     return rows
 
 
@@ -258,7 +340,11 @@ def _sample_paths(paths: List[Path], count: int, seed: int | None) -> List[Path]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Compare two JSONL trajectory files with maj@k / pass@k metrics."
+        description=(
+            "Compare JSONL trajectory files with maj@k / pass@k metrics. "
+            "Uses a hypergeometric estimator over all samples and reports mean±std "
+            "across seeds when multiple files are provided."
+        )
     )
     parser.add_argument(
         "--input_a", required=True, help="Path or glob pattern to first JSONL(s)."
@@ -305,31 +391,45 @@ def main() -> None:
             for path in paths_b:
                 print(f"  {path}")
 
-    scores_a = _merge_scores(paths_a)
-    scores_b = _merge_scores(paths_b)
-    if not scores_a or not scores_b:
+    scores_a_list = [_load_scores(p) for p in paths_a]
+    scores_b_list = [_load_scores(p) for p in paths_b]
+    pooled_a = _merge_scores(paths_a)
+    pooled_b = _merge_scores(paths_b)
+    if not pooled_a or not pooled_b:
         raise RuntimeError("Failed to load scores from one or both inputs.")
 
-    common = set(scores_a) & set(scores_b)
+    all_dicts = scores_a_list + scores_b_list
+    if not all_dicts:
+        raise RuntimeError("No scores loaded from inputs.")
+    common = set(all_dicts[0])
+    for scores in all_dicts[1:]:
+        common &= set(scores)
     if not common:
         raise RuntimeError("No overlapping problems between the two inputs.")
 
-    min_samples = min(
-        min(len(scores_a[pid]), len(scores_b[pid])) for pid in common
+    min_samples_pooled = min(
+        min(len(pooled_a[pid]), len(pooled_b[pid])) for pid in common
     )
-    if min_samples < 1:
+    if min_samples_pooled < 1:
         raise RuntimeError("Insufficient samples to compute metrics.")
 
-    configs = _parse_configs(args.config, max_k=min_samples)
+    configs = _parse_configs(args.config, max_k=min_samples_pooled)
     if not configs:
-        configs = [("maj", k) for k in range(1, min_samples + 1)]
-        configs += [("pass", k) for k in range(1, min_samples + 1)]
+        configs = [("maj", k) for k in range(1, min_samples_pooled + 1)]
+        configs += [("pass", k) for k in range(1, min_samples_pooled + 1)]
 
     label_a = args.label_a or args.input_a
     label_b = args.label_b or args.input_b
     headers = ["Metric", label_a, label_b, "Delta(B-A)", "Problems"]
 
-    rows = _compute_metrics(scores_a, scores_b, configs)
+    rows = _compute_metrics(
+        scores_a_list,
+        scores_b_list,
+        pooled_a,
+        pooled_b,
+        configs,
+        sorted(common),
+    )
     table = _format_table(headers, rows)
     print(table)
 
