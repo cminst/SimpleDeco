@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
+import os
+import random
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -135,6 +138,15 @@ def _load_scores(path: Path) -> Dict[str, List[float]]:
     return ordered_scores
 
 
+def _merge_scores(paths: List[Path]) -> Dict[str, List[float]]:
+    merged: Dict[str, List[float]] = defaultdict(list)
+    for path in paths:
+        scores = _load_scores(path)
+        for pid, vals in scores.items():
+            merged[pid].extend(vals)
+    return dict(merged)
+
+
 def _parse_configs(configs: List[str] | None, max_k: int) -> List[Tuple[str, int]]:
     if not configs:
         return []
@@ -223,12 +235,43 @@ def _compute_metrics(
     return rows
 
 
+def _resolve_inputs(value: str) -> List[Path]:
+    expanded = os.path.expanduser(value)
+    if glob.has_magic(expanded):
+        matches = sorted(glob.glob(expanded))
+        if not matches:
+            raise FileNotFoundError(f"No files matched pattern: {value}")
+        return [Path(m) for m in matches]
+    path = Path(expanded)
+    if not path.exists():
+        raise FileNotFoundError(f"Input not found: {value}")
+    return [path]
+
+
+def _sample_paths(paths: List[Path], count: int, seed: int | None) -> List[Path]:
+    if count >= len(paths):
+        return list(paths)
+    rng = random.Random(seed)
+    chosen = rng.sample(paths, count)
+    return sorted(chosen)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Compare two JSONL trajectory files with maj@k / pass@k metrics."
     )
-    parser.add_argument("--input_a", required=True, help="Path to first JSONL.")
-    parser.add_argument("--input_b", required=True, help="Path to second JSONL.")
+    parser.add_argument(
+        "--input_a", required=True, help="Path or glob pattern to first JSONL(s)."
+    )
+    parser.add_argument(
+        "--input_b", required=True, help="Path or glob pattern to second JSONL(s)."
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for subsampling when glob patterns yield different counts.",
+    )
     parser.add_argument(
         "--config",
         action="append",
@@ -238,13 +281,32 @@ def main() -> None:
     parser.add_argument("--label_b", default=None, help="Label for input B column.")
     args = parser.parse_args()
 
-    path_a = Path(args.input_a)
-    path_b = Path(args.input_b)
-    if not path_a.exists() or not path_b.exists():
-        raise FileNotFoundError("Both --input_a and --input_b must exist.")
+    paths_a = _resolve_inputs(args.input_a)
+    paths_b = _resolve_inputs(args.input_b)
 
-    scores_a = _load_scores(path_a)
-    scores_b = _load_scores(path_b)
+    if len(paths_a) != len(paths_b):
+        min_seeds = min(len(paths_a), len(paths_b))
+        prompt = (
+            f"Found {len(paths_a)} files for A and {len(paths_b)} for B. "
+            f"Use {min_seeds} seeds by randomly subsampling the larger set? [y/N]: "
+        )
+        response = input(prompt).strip().lower()
+        if response not in ("y", "yes"):
+            print("Aborting without computing metrics.")
+            sys.exit(1)
+        if len(paths_a) > min_seeds:
+            paths_a = _sample_paths(paths_a, min_seeds, args.seed)
+            print(f"Subsampled A to {min_seeds} files:")
+            for path in paths_a:
+                print(f"  {path}")
+        if len(paths_b) > min_seeds:
+            paths_b = _sample_paths(paths_b, min_seeds, args.seed)
+            print(f"Subsampled B to {min_seeds} files:")
+            for path in paths_b:
+                print(f"  {path}")
+
+    scores_a = _merge_scores(paths_a)
+    scores_b = _merge_scores(paths_b)
     if not scores_a or not scores_b:
         raise RuntimeError("Failed to load scores from one or both inputs.")
 
@@ -263,8 +325,8 @@ def main() -> None:
         configs = [("maj", k) for k in range(1, min_samples + 1)]
         configs += [("pass", k) for k in range(1, min_samples + 1)]
 
-    label_a = args.label_a or path_a.name
-    label_b = args.label_b or path_b.name
+    label_a = args.label_a or args.input_a
+    label_b = args.label_b or args.input_b
     headers = ["Metric", label_a, label_b, "Delta(B-A)", "Problems"]
 
     rows = _compute_metrics(scores_a, scores_b, configs)
