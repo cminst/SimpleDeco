@@ -1,7 +1,8 @@
-"""Compare two JSONL trajectory files with maj@k/pass@k metrics (paper-style estimator)."""
+"""Compare JSONL trajectory files with maj@k/pass@k metrics (paper-style estimator)."""
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
 import json
 import math
@@ -177,6 +178,19 @@ def _parse_configs(configs: List[str] | None, max_k: int) -> List[Tuple[str, int
     return parsed
 
 
+def _parse_csv_args(values: List[str] | None) -> List[str]:
+    if not values:
+        return []
+    items: List[str] = []
+    for value in values:
+        for row in csv.reader([value], skipinitialspace=True):
+            for item in row:
+                item = item.strip()
+                if item:
+                    items.append(item)
+    return items
+
+
 def _format_mean_std(mean: float | None, std: float | None) -> str:
     if mean is None:
         return "n/a"
@@ -274,57 +288,47 @@ def _seed_metrics(
 
 
 def _compute_metrics(
-    scores_a_list: List[Dict[str, List[float]]],
-    scores_b_list: List[Dict[str, List[float]]],
-    pooled_a: Dict[str, List[float]],
-    pooled_b: Dict[str, List[float]],
+    groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
     configs: List[Tuple[str, int]],
     common: List[str],
-) -> Tuple[List[List[str]], Dict[str, List[Tuple[int, float, float]]]]:
+) -> Tuple[List[List[str]], Dict[str, List[List[Tuple[int, float]]]]]:
     rows: List[List[str]] = []
-    plot_data: Dict[str, List[Tuple[int, float, float]]] = {"maj": [], "pass": []}
+    plot_data: Dict[str, List[List[Tuple[int, float]]]] = {
+        "maj": [[] for _ in groups],
+        "pass": [[] for _ in groups],
+    }
     for mode, k in configs:
-        pooled_mean_a, used_a = _metric_for_scores(pooled_a, common, mode, k)
-        pooled_mean_b, used_b = _metric_for_scores(pooled_b, common, mode, k)
+        row: List[str] = [f"{mode}@{k}"]
+        used_counts: List[int] = []
+        means: List[float | None] = []
+        stds: List[float | None] = []
 
-        seed_vals_a, used_list_a = _seed_metrics(scores_a_list, common, mode, k)
-        seed_vals_b, used_list_b = _seed_metrics(scores_b_list, common, mode, k)
+        for _, scores_list, pooled in groups:
+            pooled_mean, used = _metric_for_scores(pooled, common, mode, k)
+            seed_vals, used_list = _seed_metrics(scores_list, common, mode, k)
+            std = statistics.pstdev(seed_vals) * 100.0 if len(seed_vals) > 1 else None
+            mean = pooled_mean * 100.0 if pooled_mean is not None else None
+            means.append(mean)
+            stds.append(std)
+            used_counts.append(used if used else (min(used_list) if used_list else 0))
 
-        std_a = None
-        std_b = None
-        if len(seed_vals_a) > 1:
-            std_a = statistics.pstdev(seed_vals_a) * 100.0
-        if len(seed_vals_b) > 1:
-            std_b = statistics.pstdev(seed_vals_b) * 100.0
+        for mean, std in zip(means, stds):
+            row.append(_format_mean_std(mean, std))
 
-        mean_a = pooled_mean_a * 100.0 if pooled_mean_a is not None else None
-        mean_b = pooled_mean_b * 100.0 if pooled_mean_b is not None else None
-        delta = (mean_b - mean_a) if (mean_a is not None and mean_b is not None) else None
+        used = min(u for u in used_counts if u > 0) if any(u > 0 for u in used_counts) else 0
+        row.append(str(used))
+        rows.append(row)
 
-        used = min(used_a, used_b) if used_a and used_b else 0
-        if not used and (used_list_a or used_list_b):
-            used = min(used_list_a + used_list_b)
-
-        label = f"{mode}@{k}"
-        rows.append(
-            [
-                label,
-                _format_mean_std(mean_a, std_a),
-                _format_mean_std(mean_b, std_b),
-                _format_mean_std(delta, None),
-                str(used),
-            ]
-        )
-        if mean_a is not None and mean_b is not None:
-            plot_data[mode].append((k, mean_a, mean_b))
+        for idx, mean in enumerate(means):
+            if mean is not None:
+                plot_data[mode][idx].append((k, mean))
     return rows, plot_data
 
 
 def _plot_results(
     path: Path,
-    plot_data: Dict[str, List[Tuple[int, float, float]]],
-    label_a: str,
-    label_b: str,
+    plot_data: Dict[str, List[List[Tuple[int, float]]]],
+    labels: List[str],
 ) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -340,12 +344,16 @@ def _plot_results(
         }
     )
 
+    if plot_data.get("maj") and len(plot_data["maj"]) != len(labels):
+        raise ValueError("Plot data does not match number of labels.")
+
     fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
+    markers = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
     for ax, (mode, ylabel) in zip(axes, order):
-        series = [(k, a, b) for (k, a, b) in plot_data.get(mode, []) if k % 2 == 1]
-        if not series:
+        series_groups = plot_data.get(mode, [])
+        if not series_groups:
             ax.text(
                 0.5,
                 0.5,
@@ -357,13 +365,36 @@ def _plot_results(
             ax.set_axis_off()
             continue
 
-        series.sort(key=lambda t: t[0])
-        ks = [k for k, _, _ in series]
-        vals_a = [a for _, a, _ in series]
-        vals_b = [b for _, _, b in series]
+        has_any = False
+        for idx, series in enumerate(series_groups):
+            series = [(k, v) for (k, v) in series if k % 2 == 1]
+            if not series:
+                continue
+            series.sort(key=lambda t: t[0])
+            ks = [k for k, _ in series]
+            vals = [v for _, v in series]
+            ax.plot(
+                ks,
+                vals,
+                marker=markers[idx % len(markers)],
+                linewidth=2.0,
+                markersize=4,
+                label=labels[idx],
+            )
+            has_any = True
 
-        ax.plot(ks, vals_a, marker="o", linewidth=2.0, markersize=4, label=label_a)
-        ax.plot(ks, vals_b, marker="s", linewidth=2.0, markersize=4, label=label_b)
+        if not has_any:
+            ax.text(
+                0.5,
+                0.5,
+                f"No odd k data for {mode}@k",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_axis_off()
+            continue
+
         ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.25)
         ax.legend(frameon=False)
@@ -401,16 +432,19 @@ def _sample_paths(paths: List[Path], count: int, seed: int | None) -> List[Path]
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare JSONL trajectory files with maj@k / pass@k metrics. "
+            "Compare multiple JSONL trajectory files with maj@k / pass@k metrics. "
             "Uses a hypergeometric estimator over all samples and reports mean±std "
             "across seeds when multiple files are provided."
         )
     )
     parser.add_argument(
-        "--input_a", required=True, help="Path or glob pattern to first JSONL(s)."
-    )
-    parser.add_argument(
-        "--input_b", required=True, help="Path or glob pattern to second JSONL(s)."
+        "--inputs",
+        required=True,
+        action="append",
+        help=(
+            "Comma-separated list of JSONL paths/globs. "
+            "Can be passed multiple times."
+        ),
     )
     parser.add_argument(
         "--seed",
@@ -428,42 +462,60 @@ def main() -> None:
         default=None,
         help="Optional output path for a PDF/PNG plot (odd k only).",
     )
-    parser.add_argument("--label_a", default=None, help="Label for input A column.")
-    parser.add_argument("--label_b", default=None, help="Label for input B column.")
+    parser.add_argument(
+        "--labels",
+        action="append",
+        help="Comma-separated labels for inputs (same order as --inputs).",
+    )
     args = parser.parse_args()
 
-    paths_a = _resolve_inputs(args.input_a)
-    paths_b = _resolve_inputs(args.input_b)
+    input_specs = _parse_csv_args(args.inputs)
+    if not input_specs:
+        raise RuntimeError("No inputs provided.")
+    label_specs = _parse_csv_args(args.labels)
+    if label_specs and len(label_specs) != len(input_specs):
+        raise ValueError("Number of labels must match number of inputs.")
+    labels = label_specs if label_specs else input_specs
 
-    if len(paths_a) != len(paths_b):
-        min_seeds = min(len(paths_a), len(paths_b))
+    groups_raw: List[Tuple[str, List[Path]]] = []
+    for spec in input_specs:
+        groups_raw.append((spec, _resolve_inputs(spec)))
+
+    counts = [len(paths) for _, paths in groups_raw]
+    if len(set(counts)) > 1:
+        min_seeds = min(counts)
+        counts_str = ", ".join(
+            f"{label}={count}" for label, count in zip(labels, counts)
+        )
         prompt = (
-            f"Found {len(paths_a)} files for A and {len(paths_b)} for B. "
-            f"Use {min_seeds} seeds by randomly subsampling the larger set? [y/N]: "
+            f"Found differing counts ({counts_str}). "
+            f"Use {min_seeds} seeds by randomly subsampling larger sets? [y/N]: "
         )
         response = input(prompt).strip().lower()
         if response not in ("y", "yes"):
             print("Aborting without computing metrics.")
             sys.exit(1)
-        if len(paths_a) > min_seeds:
-            paths_a = _sample_paths(paths_a, min_seeds, args.seed)
-            print(f"Subsampled A to {min_seeds} files:")
-            for path in paths_a:
-                print(f"  {path}")
-        if len(paths_b) > min_seeds:
-            paths_b = _sample_paths(paths_b, min_seeds, args.seed)
-            print(f"Subsampled B to {min_seeds} files:")
-            for path in paths_b:
-                print(f"  {path}")
+        new_groups_raw: List[Tuple[str, List[Path]]] = []
+        for (spec, paths), label in zip(groups_raw, labels):
+            if len(paths) > min_seeds:
+                paths = _sample_paths(paths, min_seeds, args.seed)
+                print(f"Subsampled {label} to {min_seeds} files:")
+                for path in paths:
+                    print(f"  {path}")
+            new_groups_raw.append((spec, paths))
+        groups_raw = new_groups_raw
 
-    scores_a_list = [_load_scores(p) for p in paths_a]
-    scores_b_list = [_load_scores(p) for p in paths_b]
-    pooled_a = _merge_scores(paths_a)
-    pooled_b = _merge_scores(paths_b)
-    if not pooled_a or not pooled_b:
-        raise RuntimeError("Failed to load scores from one or both inputs.")
+    groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]] = []
+    for label, paths in zip(labels, [paths for _, paths in groups_raw]):
+        scores_list = [_load_scores(p) for p in paths]
+        pooled = _merge_scores(paths)
+        if not pooled:
+            raise RuntimeError(f"Failed to load scores for {label}.")
+        groups.append((label, scores_list, pooled))
 
-    all_dicts = scores_a_list + scores_b_list
+    all_dicts: List[Dict[str, List[float]]] = []
+    for _, scores_list, _ in groups:
+        all_dicts.extend(scores_list)
     if not all_dicts:
         raise RuntimeError("No scores loaded from inputs.")
     common = set(all_dicts[0])
@@ -473,7 +525,7 @@ def main() -> None:
         raise RuntimeError("No overlapping problems between the two inputs.")
 
     min_samples_pooled = min(
-        min(len(pooled_a[pid]), len(pooled_b[pid])) for pid in common
+        min(len(group[2][pid]) for group in groups) for pid in common
     )
     if min_samples_pooled < 1:
         raise RuntimeError("Insufficient samples to compute metrics.")
@@ -483,22 +535,13 @@ def main() -> None:
         configs = [("maj", k) for k in range(1, min_samples_pooled + 1)]
         configs += [("pass", k) for k in range(1, min_samples_pooled + 1)]
 
-    label_a = args.label_a or args.input_a
-    label_b = args.label_b or args.input_b
-    headers = ["Metric", label_a, label_b, "Delta(B-A)", "Problems"]
+    headers = ["Metric"] + labels + ["Problems"]
 
-    rows, plot_data = _compute_metrics(
-        scores_a_list,
-        scores_b_list,
-        pooled_a,
-        pooled_b,
-        configs,
-        sorted(common),
-    )
+    rows, plot_data = _compute_metrics(groups, configs, sorted(common))
     table = _format_table(headers, rows)
     print(table)
     if args.plot:
-        _plot_results(Path(args.plot), plot_data, label_a, label_b)
+        _plot_results(Path(args.plot), plot_data, labels)
 
 
 if __name__ == "__main__":
