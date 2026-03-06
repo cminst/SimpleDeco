@@ -191,12 +191,50 @@ def _parse_csv_args(values: List[str] | None) -> List[str]:
     return items
 
 
-def _format_mean_std(mean: float | None, std: float | None) -> str:
+def _t_critical_975(df: int) -> float:
+    if df <= 0:
+        return 0.0
+    table = {
+        1: 12.706,
+        2: 4.303,
+        3: 3.182,
+        4: 2.776,
+        5: 2.571,
+        6: 2.447,
+        7: 2.365,
+        8: 2.306,
+        9: 2.262,
+        10: 2.228,
+        11: 2.201,
+        12: 2.179,
+        13: 2.160,
+        14: 2.145,
+        15: 2.131,
+        16: 2.120,
+        17: 2.110,
+        18: 2.101,
+        19: 2.093,
+        20: 2.086,
+        21: 2.080,
+        22: 2.074,
+        23: 2.069,
+        24: 2.064,
+        25: 2.060,
+        26: 2.056,
+        27: 2.052,
+        28: 2.048,
+        29: 2.045,
+        30: 2.042,
+    }
+    return table.get(df, 1.96)
+
+
+def _format_mean_ci(mean: float | None, ci: float | None) -> str:
     if mean is None:
         return "n/a"
-    if std is None:
+    if ci is None:
         return f"{mean:.2f}%"
-    return f"{mean:.2f}±{std:.2f}%"
+    return f"{mean:.2f}±{ci:.2f}%"
 
 
 def _format_table(headers: List[str], rows: List[List[str]]) -> str:
@@ -301,27 +339,33 @@ def _compute_metrics(
         row: List[str] = [f"{mode}@{k}"]
         used_counts: List[int] = []
         means: List[float | None] = []
-        stds: List[float | None] = []
+        cis: List[float | None] = []
 
         for _, scores_list, pooled in groups:
             pooled_mean, used = _metric_for_scores(pooled, common, mode, k)
             seed_vals, used_list = _seed_metrics(scores_list, common, mode, k)
-            std = statistics.pstdev(seed_vals) * 100.0 if len(seed_vals) > 1 else None
-            mean = pooled_mean * 100.0 if pooled_mean is not None else None
-            means.append(mean)
-            stds.append(std)
+            seed_mean = sum(seed_vals) / len(seed_vals) if seed_vals else None
+            if len(seed_vals) > 1:
+                stdev = statistics.stdev(seed_vals)
+                t_critical = _t_critical_975(len(seed_vals) - 1)
+                ci = t_critical * stdev / math.sqrt(len(seed_vals))
+            else:
+                ci = None
+            mean = seed_mean if seed_mean is not None else pooled_mean
+            means.append(mean * 100.0 if mean is not None else None)
+            cis.append(ci * 100.0 if ci is not None else None)
             used_counts.append(used if used else (min(used_list) if used_list else 0))
 
-        for mean, std in zip(means, stds):
-            row.append(_format_mean_std(mean, std))
+        for mean, ci in zip(means, cis):
+            row.append(_format_mean_ci(mean, ci))
 
         used = min(u for u in used_counts if u > 0) if any(u > 0 for u in used_counts) else 0
         row.append(str(used))
         rows.append(row)
 
-        for idx, (mean, std) in enumerate(zip(means, stds)):
+        for idx, (mean, ci) in enumerate(zip(means, cis)):
             if mean is not None:
-                plot_data[mode][idx].append((k, mean, std))
+                plot_data[mode][idx].append((k, mean, ci))
     return rows, plot_data
 
 
@@ -375,9 +419,9 @@ def _plot_results(
             series.sort(key=lambda t: t[0])
             ks = [k for k, _, _ in series]
             vals = [v for _, v, _ in series]
-            stds = [s for _, _, s in series]
+            errs = [s for _, _, s in series]
             color_cycle = f"C{idx % 10}"
-            error = [s if s is not None else 0.0 for s in stds]
+            error = [s if s is not None else 0.0 for s in errs]
 
             line = ax.plot(
                 ks,
@@ -390,9 +434,9 @@ def _plot_results(
                 label=labels[idx],
                 zorder=3,
             )[0]
-            if any(s is not None and s > 0.0 for s in stds):
-                lower = [max(0.0, v - (s or 0.0)) for v, s in zip(vals, stds)]
-                upper = [min(100.0, v + (s or 0.0)) for v, s in zip(vals, stds)]
+            if any(s is not None and s > 0.0 for s in errs):
+                lower = [max(0.0, v - (s or 0.0)) for v, s in zip(vals, errs)]
+                upper = [min(100.0, v + (s or 0.0)) for v, s in zip(vals, errs)]
                 color = line.get_color()
                 ax.fill_between(
                     ks,
@@ -465,7 +509,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Compare multiple JSONL trajectory files with maj@k / pass@k metrics. "
-            "Uses a hypergeometric estimator over all samples and reports mean±std "
+            "Uses a hypergeometric estimator over all samples and reports mean±95% CI "
             "across seeds when multiple files are provided."
         )
     )
