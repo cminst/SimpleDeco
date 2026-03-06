@@ -366,6 +366,7 @@ def _plot_results(
             continue
 
         has_any = False
+
         for idx, series in enumerate(series_groups):
             series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
             if not series:
@@ -376,6 +377,7 @@ def _plot_results(
             stds = [s for _, _, s in series]
             color_cycle = f"C{idx % 10}"
             error = [s if s is not None else 0.0 for s in stds]
+
             container = ax.errorbar(
                 ks,
                 vals,
@@ -416,7 +418,6 @@ def _plot_results(
             continue
 
         ax.set_ylabel(ylabel)
-        ax.set_ylim(0, 100)
         ax.grid(True, alpha=0.25)
         ax.legend(frameon=False)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
