@@ -338,7 +338,7 @@ def _plot_results(
 
     plt.rcParams.update(
         {
-            "font.family": ["Times New Roman", "Times", "serif"],
+            "font.family": ["Times New Roman", "serif"],
             "font.size": 12,
             "axes.titleweight": "bold",
         }
@@ -463,6 +463,12 @@ def main() -> None:
         help="Optional output path for a PDF/PNG plot (odd k only).",
     )
     parser.add_argument(
+        "--max-k",
+        type=int,
+        default=64,
+        help="Maximum k to compute (default: 64).",
+    )
+    parser.add_argument(
         "--labels",
         action="append",
         help="Comma-separated labels for inputs (same order as --inputs).",
@@ -530,10 +536,13 @@ def main() -> None:
     if min_samples_pooled < 1:
         raise RuntimeError("Insufficient samples to compute metrics.")
 
-    configs = _parse_configs(args.config, max_k=min_samples_pooled)
+    if args.max_k < 1:
+        raise ValueError("--max-k must be >= 1.")
+    effective_max_k = min(args.max_k, min_samples_pooled)
+    configs = _parse_configs(args.config, max_k=effective_max_k)
     if not configs:
-        configs = [("maj", k) for k in range(1, min_samples_pooled + 1)]
-        configs += [("pass", k) for k in range(1, min_samples_pooled + 1)]
+        configs = [("maj", k) for k in range(1, effective_max_k + 1)]
+        configs += [("pass", k) for k in range(1, effective_max_k + 1)]
 
     headers = ["Metric"] + labels + ["Problems"]
 
