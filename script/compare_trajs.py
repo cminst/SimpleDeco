@@ -291,9 +291,9 @@ def _compute_metrics(
     groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
     configs: List[Tuple[str, int]],
     common: List[str],
-) -> Tuple[List[List[str]], Dict[str, List[List[Tuple[int, float]]]]]:
+) -> Tuple[List[List[str]], Dict[str, List[List[Tuple[int, float, float | None]]]]]:
     rows: List[List[str]] = []
-    plot_data: Dict[str, List[List[Tuple[int, float]]]] = {
+    plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]] = {
         "maj": [[] for _ in groups],
         "pass": [[] for _ in groups],
     }
@@ -319,15 +319,15 @@ def _compute_metrics(
         row.append(str(used))
         rows.append(row)
 
-        for idx, mean in enumerate(means):
+        for idx, (mean, std) in enumerate(zip(means, stds)):
             if mean is not None:
-                plot_data[mode][idx].append((k, mean))
+                plot_data[mode][idx].append((k, mean, std))
     return rows, plot_data
 
 
 def _plot_results(
     path: Path,
-    plot_data: Dict[str, List[List[Tuple[int, float]]]],
+    plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]],
     labels: List[str],
 ) -> None:
     try:
@@ -367,20 +367,40 @@ def _plot_results(
 
         has_any = False
         for idx, series in enumerate(series_groups):
-            series = [(k, v) for (k, v) in series if k % 2 == 1]
+            series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
             if not series:
                 continue
             series.sort(key=lambda t: t[0])
-            ks = [k for k, _ in series]
-            vals = [v for _, v in series]
-            ax.plot(
+            ks = [k for k, _, _ in series]
+            vals = [v for _, v, _ in series]
+            stds = [s for _, _, s in series]
+            color_cycle = f"C{idx % 10}"
+            error = [s if s is not None else 0.0 for s in stds]
+            container = ax.errorbar(
                 ks,
                 vals,
+                yerr=error,
+                color=color_cycle,
                 marker=markers[idx % len(markers)],
                 linewidth=2.0,
                 markersize=4,
+                capsize=3,
+                capthick=1,
+                elinewidth=1.0,
                 label=labels[idx],
             )
+            if any(s is not None and s > 0.0 for s in stds):
+                lower = [max(0.0, v - (s or 0.0)) for v, s in zip(vals, stds)]
+                upper = [min(100.0, v + (s or 0.0)) for v, s in zip(vals, stds)]
+                color = container[0].get_color()
+                ax.fill_between(
+                    ks,
+                    lower,
+                    upper,
+                    color=color,
+                    alpha=0.14,
+                    linewidth=0,
+                )
             has_any = True
 
         if not has_any:
@@ -396,6 +416,7 @@ def _plot_results(
             continue
 
         ax.set_ylabel(ylabel)
+        ax.set_ylim(0, 100)
         ax.grid(True, alpha=0.25)
         ax.legend(frameon=False)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
