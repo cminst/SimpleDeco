@@ -420,6 +420,8 @@ def _plot_results(
     fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
+    markers = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
+    non_focus_styles = ["--", "-.", ":", (0, (3, 1, 1, 1))]
     for ax, (mode, ylabel) in zip(axes, order):
         series_groups = plot_data.get(mode, [])
         if not series_groups:
@@ -436,6 +438,10 @@ def _plot_results(
 
         has_any = False
 
+        total_series = len(series_groups)
+        non_focus_total = (
+            total_series - 1 if focus_idx is not None and total_series > 0 else 0
+        )
         for idx, series in enumerate(series_groups):
             series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
             if not series:
@@ -443,27 +449,34 @@ def _plot_results(
             series.sort(key=lambda t: t[0])
             ks = [k for k, _, _ in series]
             vals = [v for _, v, _ in series]
-            errs = [s for _, _, s in series]
             color_cycle = f"C{idx % 10}"
             is_focus = focus_idx is None or idx == focus_idx
             if focus_idx is None:
                 line_color = color_cycle
                 line_alpha = 0.9
-                band_alpha = 0.08
                 line_z = 3
-                band_z = 1
+                line_style = "-"
+                marker = None
+                markersize = 0
             elif is_focus:
                 line_color = color_cycle
                 line_alpha = 0.95
-                band_alpha = 0.12
                 line_z = 3
-                band_z = 1
+                line_style = "-"
+                marker = markers[idx % len(markers)]
+                markersize = 4
             else:
-                line_color = "0.6"
-                line_alpha = 0.35
-                band_alpha = 0.05
+                rank = idx if focus_idx is None else sum(1 for j in range(idx) if j != focus_idx)
+                if non_focus_total > 1:
+                    shade = 0.25 + 0.55 * (rank / (non_focus_total - 1))
+                else:
+                    shade = 0.5
+                line_color = str(shade)
+                line_alpha = 0.6
                 line_z = 2
-                band_z = 0
+                line_style = non_focus_styles[rank % len(non_focus_styles)]
+                marker = None
+                markersize = 0
 
             ax.plot(
                 ks,
@@ -473,19 +486,10 @@ def _plot_results(
                 alpha=line_alpha,
                 label=labels[idx],
                 zorder=line_z,
+                linestyle=line_style,
+                marker=marker,
+                markersize=markersize,
             )
-            if any(s is not None and s > 0.0 for s in errs):
-                lower = [max(0.0, v - (s or 0.0)) for v, s in zip(vals, errs)]
-                upper = [min(100.0, v + (s or 0.0)) for v, s in zip(vals, errs)]
-                ax.fill_between(
-                    ks,
-                    lower,
-                    upper,
-                    color=line_color,
-                    alpha=band_alpha,
-                    linewidth=0,
-                    zorder=band_z,
-                )
             has_any = True
 
         if not has_any:
