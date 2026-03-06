@@ -421,7 +421,7 @@ def _plot_results(
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
     markers = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
-    non_focus_styles = ["--", "-.", ":", (0, (3, 1, 1, 1))]
+    non_focus_styles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1))]
     for ax, (mode, ylabel) in zip(axes, order):
         series_groups = plot_data.get(mode, [])
         if not series_groups:
@@ -463,16 +463,16 @@ def _plot_results(
                 line_alpha = 0.95
                 line_z = 3
                 line_style = "-"
-                marker = markers[idx % len(markers)]
+                marker = "o"
                 markersize = 4
             else:
                 rank = idx if focus_idx is None else sum(1 for j in range(idx) if j != focus_idx)
                 if non_focus_total > 1:
-                    shade = 0.25 + 0.55 * (rank / (non_focus_total - 1))
+                    shade = 0.35 + 0.30 * (rank / (non_focus_total - 1))
                 else:
                     shade = 0.5
                 line_color = str(shade)
-                line_alpha = 0.6
+                line_alpha = 0.65
                 line_z = 2
                 line_style = non_focus_styles[rank % len(non_focus_styles)]
                 marker = None
