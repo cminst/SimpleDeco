@@ -237,6 +237,31 @@ def _format_mean_ci(mean: float | None, ci: float | None) -> str:
     return f"{mean:.2f}±{ci:.2f}%"
 
 
+def _resolve_focus_index(labels: List[str], focus: str | None) -> int | None:
+    if focus is None:
+        return None
+    focus = focus.strip()
+    if not focus or focus.lower() in {"none", "off", "false"}:
+        return None
+    if focus.lower() == "auto":
+        return 0 if labels else None
+    if focus.isdigit():
+        idx = int(focus) - 1
+        if idx < 0 or idx >= len(labels):
+            raise ValueError(f"--focus index out of range: {focus}")
+        return idx
+    if focus in labels:
+        return labels.index(focus)
+    lowered = [label.lower() for label in labels]
+    focus_lower = focus.lower()
+    if focus_lower in lowered:
+        return lowered.index(focus_lower)
+    matches = [i for i, label in enumerate(lowered) if focus_lower in label]
+    if len(matches) == 1:
+        return matches[0]
+    raise ValueError(f"--focus '{focus}' did not match labels: {', '.join(labels)}")
+
+
 def _format_table(headers: List[str], rows: List[List[str]]) -> str:
     try:
         from tabulate import tabulate  # type: ignore
@@ -373,10 +398,10 @@ def _plot_results(
     path: Path,
     plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]],
     labels: List[str],
+    focus_idx: int | None,
 ) -> None:
     try:
         import matplotlib.pyplot as plt
-        from matplotlib import colors as mcolors
         from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
         raise RuntimeError("matplotlib is required for --plot output") from exc
@@ -395,7 +420,6 @@ def _plot_results(
     fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
-    markers = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
     for ax, (mode, ylabel) in zip(axes, order):
         series_groups = plot_data.get(mode, [])
         if not series_groups:
@@ -421,41 +445,46 @@ def _plot_results(
             vals = [v for _, v, _ in series]
             errs = [s for _, _, s in series]
             color_cycle = f"C{idx % 10}"
-            error = [s if s is not None else 0.0 for s in errs]
+            is_focus = focus_idx is None or idx == focus_idx
+            if focus_idx is None:
+                line_color = color_cycle
+                line_alpha = 0.9
+                band_alpha = 0.08
+                line_z = 3
+                band_z = 1
+            elif is_focus:
+                line_color = color_cycle
+                line_alpha = 0.95
+                band_alpha = 0.12
+                line_z = 3
+                band_z = 1
+            else:
+                line_color = "0.6"
+                line_alpha = 0.35
+                band_alpha = 0.05
+                line_z = 2
+                band_z = 0
 
-            line = ax.plot(
+            ax.plot(
                 ks,
                 vals,
-                color=color_cycle,
-                marker=markers[idx % len(markers)],
-                linewidth=1.8,
-                markersize=3.5,
-                alpha=0.9,
+                color=line_color,
+                linewidth=1.6,
+                alpha=line_alpha,
                 label=labels[idx],
-                zorder=3,
-            )[0]
+                zorder=line_z,
+            )
             if any(s is not None and s > 0.0 for s in errs):
                 lower = [max(0.0, v - (s or 0.0)) for v, s in zip(vals, errs)]
                 upper = [min(100.0, v + (s or 0.0)) for v, s in zip(vals, errs)]
-                color = line.get_color()
                 ax.fill_between(
                     ks,
                     lower,
                     upper,
-                    color=color,
-                    alpha=0.10,
+                    color=line_color,
+                    alpha=band_alpha,
                     linewidth=0,
-                    zorder=1,
-                )
-                ax.errorbar(
-                    ks,
-                    vals,
-                    yerr=error,
-                    fmt="none",
-                    ecolor=mcolors.to_rgba(color, 0.35),
-                    elinewidth=0.8,
-                    capsize=0,
-                    zorder=2,
+                    zorder=band_z,
                 )
             has_any = True
 
@@ -549,6 +578,14 @@ def main() -> None:
         action="append",
         help="Comma-separated labels for inputs (same order as --inputs).",
     )
+    parser.add_argument(
+        "--focus",
+        default="auto",
+        help=(
+            "Label or 1-based index to emphasize in plots; others are muted. "
+            "Use 'none' to disable (default: auto)."
+        ),
+    )
     args = parser.parse_args()
 
     input_specs = _parse_csv_args(args.inputs)
@@ -558,6 +595,7 @@ def main() -> None:
     if label_specs and len(label_specs) != len(input_specs):
         raise ValueError("Number of labels must match number of inputs.")
     labels = label_specs if label_specs else input_specs
+    focus_idx = _resolve_focus_index(labels, args.focus)
 
     groups_raw: List[Tuple[str, List[Path]]] = []
     for spec in input_specs:
@@ -626,7 +664,7 @@ def main() -> None:
     table = _format_table(headers, rows)
     print(table)
     if args.plot:
-        _plot_results(Path(args.plot), plot_data, labels)
+        _plot_results(Path(args.plot), plot_data, labels, focus_idx)
 
 
 if __name__ == "__main__":
