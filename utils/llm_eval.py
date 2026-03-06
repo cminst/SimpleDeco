@@ -25,6 +25,31 @@ def write_ascii_table(txt_path: str, dataset_name: str, avg_acc: float):
     table_str = border + header_line + border + data_line + border
     with open(txt_path, "w") as txt_file:
         txt_file.write(table_str)
+
+
+def parse_dynamic_sampling_kv(arg: str):
+    if "=" not in arg:
+        raise argparse.ArgumentTypeError("Dynamic sampling kwargs must be KEY=VALUE.")
+    key, raw_value = arg.split("=", 1)
+    key = key.strip().replace("-", "_")
+    if not key:
+        raise argparse.ArgumentTypeError("Dynamic sampling kwargs key cannot be empty.")
+
+    raw_value = raw_value.strip()
+    try:
+        return key, json.loads(raw_value)
+    except json.JSONDecodeError:
+        lowered = raw_value.lower()
+        if lowered in {"true", "false"}:
+            return key, lowered == "true"
+        for cast in (int, float):
+            try:
+                return key, cast(raw_value)
+            except ValueError:
+                pass
+        return key, raw_value
+
+
 if __name__ == "__main__":
     def extract_model_name(path):
         path = path.rstrip('/')
@@ -37,7 +62,20 @@ if __name__ == "__main__":
             return 'unknown'
     
 
-    parser = argparse.ArgumentParser()
+    dynamic_policy_help = (
+        "Dynamic sampling policies and kwargs:\n"
+        "  confidence_gated: T_high (>=0), maxprob_threshold (0..1)\n"
+        "  entropy_continuous: T_min (>=0), T_max (>=0 and >=T_min)\n"
+        "  entropy_adaptive: H_threshold (0..1, normalized), T_low (>=0), T_high (>=0)\n"
+        "Example:\n"
+        "  --dynamic_sampling_policy entropy_adaptive "
+        "--dyn H_threshold=0.15 --dyn T_low=0.3 --dyn T_high=1.0"
+    )
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=dynamic_policy_help,
+    )
     parser.add_argument('--temp', type=float, default=1.0)
     parser.add_argument('--top_p', type=float, default=1.0)
     parser.add_argument('--top_k', type=int, default=-1)
@@ -51,6 +89,15 @@ if __name__ == "__main__":
     parser.add_argument('--max_tokens', type=int, default=32768)
     parser.add_argument('--save-outputs', '--save_outputs', dest='save_outputs', type=str, default=None,
                         help='Optional jsonl output path for per-sample generations.')
+    parser.add_argument('--dynamic_sampling_policy', type=str, default=None,
+                        help='Optional dynamic sampling policy '
+                             '(confidence_gated, entropy_continuous, entropy_adaptive).')
+    parser.add_argument('--dynamic_sampling_kwargs', type=str, default='{}',
+                        help='Optional JSON object of kwargs for dynamic sampling policy. '
+                             'Overrides can be provided via --dyn.')
+    parser.add_argument('--dyn', action='append', type=parse_dynamic_sampling_kv, default=[],
+                        metavar='KEY=VALUE',
+                        help='Repeatable override for dynamic sampling kwargs, e.g. --dyn window=16 --dyn alpha=0.5')
     args = parser.parse_args()
 
 
@@ -62,7 +109,39 @@ if __name__ == "__main__":
     with open(f'data/TempTest/{args.dataset}.jsonl', 'r') as f:
         data = [json.loads(line) for line in f.readlines()]
 
-    sampling_params = SamplingParams(temperature=temp, top_p=args.top_p, top_k=args.top_k, max_tokens=args.max_tokens, n=k, seed=seed, repetition_penalty=args.rp)
+    try:
+        dynamic_sampling_kwargs = json.loads(args.dynamic_sampling_kwargs)
+    except json.JSONDecodeError as exc:
+        parser.error(f"--dynamic_sampling_kwargs must be valid JSON: {exc}")
+    if not isinstance(dynamic_sampling_kwargs, dict):
+        parser.error("--dynamic_sampling_kwargs must decode to a JSON object.")
+
+    for key, value in args.dyn:
+        dynamic_sampling_kwargs[key] = value
+
+    if not dynamic_sampling_kwargs:
+        dynamic_sampling_kwargs = None
+
+    extra_args = None
+    if args.dynamic_sampling_policy:
+        extra_args = {
+            "dynamic_sampling_policy": args.dynamic_sampling_policy,
+        }
+        if dynamic_sampling_kwargs is not None:
+            extra_args["dynamic_sampling_kwargs"] = dynamic_sampling_kwargs
+    elif dynamic_sampling_kwargs is not None:
+        parser.error("--dynamic_sampling_kwargs or --dyn requires --dynamic_sampling_policy.")
+
+    sampling_params = SamplingParams(
+        temperature=temp,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        max_tokens=args.max_tokens,
+        n=k,
+        seed=seed,
+        repetition_penalty=args.rp,
+        extra_args=extra_args,
+    )
 
     llm = LLM(model=args.model_name_or_path, tensor_parallel_size=args.tp_size, max_model_len=args.max_tokens)
 
@@ -99,7 +178,8 @@ if __name__ == "__main__":
         # maj@k
         return 1.0 if (sum(scores) / len(scores)) > 0.5 else 0.0
 
-    with open(f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}.json', 'w') as f:
+    dyn_tag = f"-dyn_{args.dynamic_sampling_policy}" if args.dynamic_sampling_policy else ""
+    with open(f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}{dyn_tag}.json', 'w') as f:
         all_acc = []
         for idx, output_group in enumerate(outputs):
             solutions = []
@@ -138,6 +218,8 @@ if __name__ == "__main__":
                             'seed': args.seed,
                             'model_name_or_path': args.model_name_or_path,
                             'ckpt_name': ckpt_name,
+                            'dynamic_sampling_policy': args.dynamic_sampling_policy,
+                            'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
                         }
                     }, ensure_ascii=False) + '\n')
                 # logprobs.append(output.logprobs)
@@ -151,6 +233,8 @@ if __name__ == "__main__":
                 'temp': temps,
                 'top_p': top_ps,
                 'mode': args.mode,
+                'dynamic_sampling_policy': args.dynamic_sampling_policy,
+                'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
                 # 'logprobs': logprobs
             }, ensure_ascii=False)+'\n')
         
