@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Dynamic Sampling Visualizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 { text-align: center; color: #2c3e50; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .control-group { margin-bottom: 15px; }
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        input[type=range] { width: 100%; }
+        select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+        .policy-settings {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+        }
+        .active-policy { display: block; }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .stat-box { text-align: center; }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2980b9;
+        }
+        .final-temp {
+            background: #27ae60;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .final-temp .stat-value { color: white; font-size: 32px; }
+    </style>
+</head>
+<body>
+
+    <h1>Dynamic Sampling Policy Visualizer</h1>
+
+    <div class="grid">
+        <div class="card">
+            <h3>1. Simulate Token Distribution</h3>
+            <p style="font-size: 14px; color: #666;">Adjust the "sharpness" to simulate the model being highly confident (peaky) or highly uncertain (flat).</p>
+            <div class="control-group">
+                <label>
+                    <span>Distribution Sharpness</span>
+                    <span id="sharpness_val">1.0</span>
+                </label>
+                <input type="range" id="sharpness" min="0.1" max="5.0" step="0.1" value="1.0">
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+            <h3>2. Choose Policy</h3>
+            <select id="policy">
+                <option value="confidence_gated">Confidence Gated</option>
+                <option value="entropy_continuous">Entropy Continuous</option>
+                <option value="entropy_adaptive">Entropy Adaptive</option>
+            </select>
+
+            <div id="settings-confidence_gated" class="policy-settings active-policy">
+                <p><strong>Logic:</strong> Use $T_{high}$ unless the max probability exceeds the threshold, then use Greedy (-1.0).</p>
+                <div class="control-group">
+                    <label><span>T_high</span> <span id="cg_thigh_val">1.0</span></label>
+                    <input type="range" id="cg_thigh" min="0.0" max="2.0" step="0.05" value="1.0">
+                </div>
+                <div class="control-group">
+                    <label><span>maxprob_threshold</span> <span id="cg_thresh_val">0.9</span></label>
+                    <input type="range" id="cg_thresh" min="0.0" max="1.0" step="0.05" value="0.9">
+                </div>
+            </div>
+
+            <div id="settings-entropy_continuous" class="policy-settings">
+                <p><strong>Logic:</strong> Scale temperature linearly between $T_{min}$ and $T_{max}$ based on normalized entropy.</p>
+                <div class="control-group">
+                    <label><span>T_min</span> <span id="ec_tmin_val">0.3</span></label>
+                    <input type="range" id="ec_tmin" min="0.0" max="2.0" step="0.05" value="0.3">
+                </div>
+                <div class="control-group">
+                    <label><span>T_max</span> <span id="ec_tmax_val">1.0</span></label>
+                    <input type="range" id="ec_tmax" min="0.0" max="2.0" step="0.05" value="1.0">
+                </div>
+            </div>
+
+            <div id="settings-entropy_adaptive" class="policy-settings">
+                <p><strong>Logic:</strong> If normalized entropy < $H_{threshold}$, use $T_{low}$, else use $T_{high}$.</p>
+                <div class="control-group">
+                    <label><span>H_threshold</span> <span id="ea_hthresh_val">0.15</span></label>
+                    <input type="range" id="ea_hthresh" min="0.0" max="1.0" step="0.01" value="0.15">
+                </div>
+                <div class="control-group">
+                    <label><span>T_low</span> <span id="ea_tlow_val">0.3</span></label>
+                    <input type="range" id="ea_tlow" min="0.0" max="2.0" step="0.05" value="0.3">
+                </div>
+                <div class="control-group">
+                    <label><span>T_high</span> <span id="ea_thigh_val">1.0</span></label>
+                    <input type="range" id="ea_thigh" min="0.0" max="2.0" step="0.05" value="1.0">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Distribution & Metrics</h3>
+            <canvas id="probChart" height="200"></canvas>
+            
+            <div class="stats">
+                <div class="stat-box">
+                    <div>Max Probability</div>
+                    <div id="val-maxprob" class="stat-value">0.00</div>
+                </div>
+                <div class="stat-box">
+                    <div>Norm. Entropy ($H_{norm}$)</div>
+                    <div id="val-entropy" class="stat-value">0.00</div>
+                </div>
+            </div>
+
+            <div class="final-temp">
+                <div>Calculated Temperature</div>
+                <div id="val-temp" class="stat-value">1.00</div>
+                <div style="font-size: 12px; margin-top: 5px;">(Note: -1.0 means Greedy decoding)</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Setup Chart
+        const ctx = document.getElementById('probChart').getContext('2d');
+        const probChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({length: 15}, (_, i) => `Token ${i+1}`),
+                datasets: [{
+                    label: 'Probability',
+                    data: [],
+                    backgroundColor: '#3498db',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                scales: { y: { beginAtZero: true, max: 1.0 } },
+                animation: { duration: 150 },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // Base random logits to simulate vocabulary
+        const baseLogits = [12, 10, 8, 7, 5, 4, 3, 2, 2, 1, 1, 0.5, 0.2, 0.1, 0];
+        const GREEDY_TEMPERATURE = -1.0;
+        const DYNAMIC_SAMPLING_EPS = 1e-5;
+
+        // UI Elements
+        const inputs = document.querySelectorAll('input[type="range"]');
+        const policySelect = document.getElementById('policy');
+
+        // Event Listeners
+        inputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                document.getElementById(`${e.target.id}_val`).innerText = e.target.value;
+                calculate();
+            });
+        });
+
+        policySelect.addEventListener('change', (e) => {
+            document.querySelectorAll('.policy-settings').forEach(el => el.classList.remove('active-policy'));
+            document.getElementById(`settings-${e.target.value}`).classList.add('active-policy');
+            calculate();
+        });
+
+        function calculate() {
+            // 1. Simulate Distribution via Sharpness slider
+            const sharpness = parseFloat(document.getElementById('sharpness').value);
+            const logits = baseLogits.map(x => x * sharpness);
+            
+            // Softmax
+            const maxLogit = Math.max(...logits);
+            const exps = logits.map(x => Math.exp(x - maxLogit));
+            const sumExps = exps.reduce((a, b) => a + b, 0);
+            const probs = exps.map(x => x / sumExps);
+
+            // 2. Compute Metrics
+            const maxProb = Math.max(...probs);
+            
+            // Entropy: sum(-p * log(p))
+            let entropy = 0;
+            probs.forEach(p => { if (p > 0) entropy -= p * Math.log(p); });
+            
+            // Normalize entropy based on vocab size
+            const maxEntropy = Math.log(probs.length);
+            let entropyNorm = entropy / maxEntropy;
+            entropyNorm = Math.max(0, Math.min(1, entropyNorm)); // clamp
+
+            // 3. Apply Policy Logic
+            const policy = policySelect.value;
+            let temp = 1.0;
+
+            if (policy === 'confidence_gated') {
+                const tHigh = parseFloat(document.getElementById('cg_thigh').value);
+                const thresh = parseFloat(document.getElementById('cg_thresh').value);
+                temp = maxProb > thresh ? GREEDY_TEMPERATURE : tHigh;
+            } 
+            else if (policy === 'entropy_continuous') {
+                const tMin = parseFloat(document.getElementById('ec_tmin').value);
+                const tMax = parseFloat(document.getElementById('ec_tmax').value);
+                temp = tMin + (tMax - tMin) * entropyNorm;
+            } 
+            else if (policy === 'entropy_adaptive') {
+                const hThresh = parseFloat(document.getElementById('ea_hthresh').value);
+                const tLow = parseFloat(document.getElementById('ea_tlow').value);
+                const tHigh = parseFloat(document.getElementById('ea_thigh').value);
+                temp = entropyNorm < hThresh ? tLow : tHigh;
+            }
+
+            // Sanitize Temperature
+            if (temp < DYNAMIC_SAMPLING_EPS && temp !== GREEDY_TEMPERATURE) {
+                temp = GREEDY_TEMPERATURE;
+            }
+
+            // 4. Update UI
+            probChart.data.datasets[0].data = probs;
+            probChart.update();
+
+            document.getElementById('val-maxprob').innerText = maxProb.toFixed(3);
+            document.getElementById('val-entropy').innerText = entropyNorm.toFixed(3);
+            document.getElementById('val-temp').innerText = temp === GREEDY_TEMPERATURE ? "Greedy (-1.0)" : temp.toFixed(3);
+
+            // Color-code the temperature box
+            const tempBox = document.querySelector('.final-temp');
+            tempBox.style.background = getTempColor(temp);
+        }
+
+        function getTempColor(temp) {
+            if (temp === GREEDY_TEMPERATURE) return '#7f8c8d';
+            if (temp <= 0.25) return '#27ae60';
+
+            const green = [0x27, 0xae, 0x60];
+            const orange = [0xe6, 0x7e, 0x22];
+            const red = [0xe7, 0x4c, 0x3c];
+            const deepRed = [0xc0, 0x39, 0x2b];
+
+            if (temp <= 1.0) {
+                const t = (temp - 0.25) / (1.0 - 0.25);
+                return lerpColor(green, orange, t);
+            }
+
+            const t = Math.min((temp - 1.0) / 0.75, 1);
+            const mid = lerpColor(orange, red, Math.min(t * 1.25, 1));
+            return t < 1 ? mid : lerpColor(red, deepRed, 0.6);
+        }
+
+        function lerpColor(a, b, t) {
+            const lerp = (x, y) => Math.round(x + (y - x) * t);
+            const r = lerp(a[0], b[0]);
+            const g = lerp(a[1], b[1]);
+            const bch = lerp(a[2], b[2]);
+            return `rgb(${r}, ${g}, ${bch})`;
+        }
+
+        // Initial compute
+        calculate();
+    </script>
+</body>
+</html>
