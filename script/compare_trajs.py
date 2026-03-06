@@ -332,6 +332,7 @@ def _plot_results(
 ) -> None:
     try:
         import matplotlib.pyplot as plt
+        from matplotlib import colors as mcolors
         from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
         raise RuntimeError("matplotlib is required for --plot output") from exc
@@ -378,30 +379,39 @@ def _plot_results(
             color_cycle = f"C{idx % 10}"
             error = [s if s is not None else 0.0 for s in stds]
 
-            container = ax.errorbar(
+            line = ax.plot(
                 ks,
                 vals,
-                yerr=error,
                 color=color_cycle,
                 marker=markers[idx % len(markers)],
-                linewidth=2.0,
-                markersize=4,
-                capsize=3,
-                capthick=1,
-                elinewidth=1.0,
+                linewidth=1.8,
+                markersize=3.5,
+                alpha=0.9,
                 label=labels[idx],
-            )
+                zorder=3,
+            )[0]
             if any(s is not None and s > 0.0 for s in stds):
                 lower = [max(0.0, v - (s or 0.0)) for v, s in zip(vals, stds)]
                 upper = [min(100.0, v + (s or 0.0)) for v, s in zip(vals, stds)]
-                color = container[0].get_color()
+                color = line.get_color()
                 ax.fill_between(
                     ks,
                     lower,
                     upper,
                     color=color,
-                    alpha=0.14,
+                    alpha=0.10,
                     linewidth=0,
+                    zorder=1,
+                )
+                ax.errorbar(
+                    ks,
+                    vals,
+                    yerr=error,
+                    fmt="none",
+                    ecolor=mcolors.to_rgba(color, 0.35),
+                    elinewidth=0.8,
+                    capsize=0,
+                    zorder=2,
                 )
             has_any = True
 
