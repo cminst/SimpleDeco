@@ -338,7 +338,7 @@ def _plot_results(
 
     plt.rcParams.update(
         {
-            "font.family": ["Times New Roman", "Times", "serif"],
+            "font.family": ["Times New Roman", "serif"],
             "font.size": 12,
             "axes.titleweight": "bold",
         }
