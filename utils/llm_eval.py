@@ -179,69 +179,50 @@ if __name__ == "__main__":
         return 1.0 if (sum(scores) / len(scores)) > 0.5 else 0.0
 
     dyn_tag = f"-dyn_{args.dynamic_sampling_policy}" if args.dynamic_sampling_policy else ""
-    with open(f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}{dyn_tag}.json', 'w') as f:
-        all_acc = []
-        for idx, output_group in enumerate(outputs):
-            solutions = []
-            temps = []
-            gt = str(ground_truths[idx])
-            scores = []
-            logprobs = []
-            top_ps = []
-            for sample_idx, output in enumerate(output_group.outputs):
-                generated_text = output.text
-                temp = getattr(output, 'temperatures', None)  # 使用当前循环的temp值作为默认值
-                top_p = getattr(output, 'top_ps', None)
-                score = compute_score(generated_text, gt)
-                scores.append(score)
-                solutions.append(generated_text)
-                if temp is not None:
-                    temps.append(temp)
-                if top_p is not None:
-                    top_ps.append(top_p)
-                if save_outputs_f is not None:
-                    save_outputs_f.write(json.dumps({
-                        'prompt': problems[idx],
-                        'response': generated_text,
-                        'metadata': {
-                            'dataset': args.dataset,
-                            'problem_index': idx,
-                            'sample_index': sample_idx,
-                            'ground_truth': ground_truths[idx],
-                            'score': score,
-                            'temp': temp if temp is not None else args.temp,
-                            'top_p': top_p if top_p is not None else args.top_p,
-                            'top_k': args.top_k,
-                            'rp': args.rp,
-                            'max_tokens': args.max_tokens,
-                            'mode': args.mode,
-                            'seed': args.seed,
-                            'model_name_or_path': args.model_name_or_path,
-                            'ckpt_name': ckpt_name,
-                            'dynamic_sampling_policy': args.dynamic_sampling_policy,
-                            'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
-                        }
-                    }, ensure_ascii=False) + '\n')
-                # logprobs.append(output.logprobs)
-            problem_acc = round(aggregate_score(scores, args.mode) * 100, 2)
-            all_acc.append(problem_acc)
-            f.write(json.dumps({
-                'problem': problems[idx],
-                'ground_truth': ground_truths[idx], 
-                'temp_acc': {args.temp: problem_acc}, 
-                'solutions': solutions,
-                'temp': temps,
-                'top_p': top_ps,
-                'mode': args.mode,
-                'dynamic_sampling_policy': args.dynamic_sampling_policy,
-                'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
-                # 'logprobs': logprobs
-            }, ensure_ascii=False)+'\n')
-        
-        avg_acc = round(sum(all_acc)/len(all_acc), 2)
-        print(f"Overall avg Acc: {avg_acc}%")
+    log_base = (
+        f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}'
+        f'-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}{dyn_tag}'
+    )
+    all_acc = []
+    for idx, output_group in enumerate(outputs):
+        gt = str(ground_truths[idx])
+        scores = []
+        for sample_idx, output in enumerate(output_group.outputs):
+            generated_text = output.text
+            temp = getattr(output, 'temperatures', None)  # 使用当前循环的temp值作为默认值
+            top_p = getattr(output, 'top_ps', None)
+            score = compute_score(generated_text, gt)
+            scores.append(score)
+            if save_outputs_f is not None:
+                save_outputs_f.write(json.dumps({
+                    'prompt': problems[idx],
+                    'response': generated_text,
+                    'metadata': {
+                        'dataset': args.dataset,
+                        'problem_index': idx,
+                        'sample_index': sample_idx,
+                        'ground_truth': ground_truths[idx],
+                        'score': score,
+                        'temp': temp if temp is not None else args.temp,
+                        'top_p': top_p if top_p is not None else args.top_p,
+                        'top_k': args.top_k,
+                        'rp': args.rp,
+                        'max_tokens': args.max_tokens,
+                        'mode': args.mode,
+                        'seed': args.seed,
+                        'model_name_or_path': args.model_name_or_path,
+                        'ckpt_name': ckpt_name,
+                        'dynamic_sampling_policy': args.dynamic_sampling_policy,
+                        'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
+                    }
+                }, ensure_ascii=False) + '\n')
+        problem_acc = round(aggregate_score(scores, args.mode) * 100, 2)
+        all_acc.append(problem_acc)
 
-        txt_path = os.path.splitext(f.name)[0] + '.txt'
-        write_ascii_table(txt_path, args.dataset, avg_acc)
+    avg_acc = round(sum(all_acc)/len(all_acc), 2)
+    print(f"Overall avg Acc: {avg_acc}%")
+
+    txt_path = f"{log_base}.txt"
+    write_ascii_table(txt_path, args.dataset, avg_acc)
     if save_outputs_f is not None:
         save_outputs_f.close()

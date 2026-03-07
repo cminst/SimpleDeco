@@ -35,7 +35,7 @@ app = modal.App(image=image, name="AutoDeco Experiments")
 
 
 @app.function(
-    gpu="A100-80GB:2",
+    gpu="A100-80GB:4",
     timeout=86400,
     volumes={"/root/SimpleDeco": autodeco_volume},
 )
