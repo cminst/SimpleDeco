@@ -46,13 +46,12 @@ autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
 
 app = modal.App(image=image, name="AutoDeco Experiments")
 
-@app.function(timeout=3600, volumes={"/autodeco-saved": autodeco_volume})
+@app.function(timeout=48000, volumes={"/autodeco-saved": autodeco_volume})
 def get_autodeco():
-    subprocess.run(["hf", "download", "cminst/SimpleDeco-CKPT", "SimpleDeco.tar.gz", "--local-dir", "."], check=True)
-    subprocess.run(["tar", "-xzvf", "SimpleDeco.tar.gz"], check=True)
-    subprocess.run(["rm", "SimpleDeco.tar.gz"], check=True)
+    subprocess.run(["git", "clone", "https://github.com/cminst/SimpleDeco.git", "--recurse-submodules", "."], check=True)
+    subprocess.run(["bash", "utils/install_simpledeco_vllm_modal.sh"], cwd="SimpleDeco", check=True)
 
-@app.function(gpu="H100:1", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
+@app.function(gpu="A100:2", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
 def runwithgpu():
     token = 'modal'
 
