@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Adapted from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/hendrycks_math/utils.py
+import re
 
 
 def compute_score(solution_str, ground_truth) -> float:
@@ -39,11 +40,25 @@ def is_equiv(str1, str2, verbose=False):
     try:
         ss1 = strip_string(str1)
         ss2 = strip_string(str2)
+        mc_answer = normalize_multiple_choice_answer(ss2)
+        if mc_answer is not None:
+            return normalize_multiple_choice_answer(ss1) == mc_answer
         if verbose:
             print(ss1, ss2)
         return ss1 == ss2
     except Exception:
         return str1 == str2
+
+
+def normalize_multiple_choice_answer(string):
+    string = string.strip().upper()
+    string = re.sub(r"\\(?:TEXT|MATHRM|TEXTBF|BF|mathbf)\{([A-J])\}", r"\1", string)
+
+    while len(string) >= 2 and string[0] in "([{" and string[-1] in ")]}":
+        string = string[1:-1].strip()
+
+    string = string.rstrip(".,;:!")
+    return string if re.fullmatch(r"[A-J]", string) else None
 
 
 def remove_boxed(s):
@@ -189,7 +204,7 @@ def strip_string(string):
 
     # remove percentage
     string = string.replace("\\%", "")
-    string = string.replace("\%", "")  # noqa: W605
+    string = string.replace(r"\%", "")
 
     # " 0." equivalent to " ." and "{0." equivalent to "{." Alternatively, add "0" if "." is the start of the string
     string = string.replace(" .", " 0.")
@@ -221,4 +236,3 @@ def strip_string(string):
     string = fix_a_slash_b(string)
 
     return string
-
