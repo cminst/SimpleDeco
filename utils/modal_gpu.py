@@ -20,8 +20,10 @@ image = (
         'git config --global user.email "qingy2019@outlook.com"',
         'git config --global user.name "Qingyun Li (from Modal)"',
         f'echo "https://qingy1337:{os.environ.get("GITHUB_PAT", "")}@github.com" >> ~/.git-credentials',
-        "git config --global credential.helper store",
-        "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' --torch-backend=cu128 --no-build-isolation --system",
+        "git config --global credential.helper store"
+    )
+    .run_commands(
+        "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' vllm==0.10.2 --torch-backend=cu128 --no-build-isolation --system",
         "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptools_scm --torch-backend=cu128 --system",
 
         "git clone https://github.com/cminst/SimpleDeco.git --recurse-submodules /tmp/SimpleDeco",
@@ -35,7 +37,7 @@ app = modal.App(image=image, name="AutoDeco Experiments")
 
 
 @app.function(
-    gpu="A100-80GB:4",
+    gpu="A100-40GB:1",
     timeout=86400,
     volumes={"/root/SimpleDeco": autodeco_volume},
 )
@@ -44,7 +46,7 @@ def runwithgpu():
     token = "modal"
 
     # First run only: populate the volume-backed repo
-    if not (repo / ".git").exists():
+    if not repo.exists():
         subprocess.run(
             [
                 "git",
