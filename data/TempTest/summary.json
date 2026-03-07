@@ -1,0 +1,30 @@
+{
+  "aime24.jsonl": {
+    "rows": 30,
+    "path": "data/TempTest/aime24.jsonl"
+  },
+  "aime25.jsonl": {
+    "rows": 30,
+    "path": "data/TempTest/aime25.jsonl"
+  },
+  "gpqa_diamond.jsonl": {
+    "rows": 198,
+    "path": "data/TempTest/gpqa_diamond.jsonl"
+  },
+  "mmlu_pro.jsonl": {
+    "rows": 12032,
+    "path": "data/TempTest/mmlu_pro.jsonl"
+  },
+  "brumo25.jsonl": {
+    "rows": 30,
+    "path": "data/TempTest/brumo25.jsonl"
+  },
+  "hmmt25.jsonl": {
+    "rows": 30,
+    "path": "data/TempTest/hmmt25.jsonl"
+  },
+  "beyondaime.jsonl": {
+    "rows": 100,
+    "path": "data/TempTest/beyondaime.jsonl"
+  }
+}
