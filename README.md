@@ -12,7 +12,7 @@ Official Implementation of "The End of Manual Decoding: Towards Truly End-to-End
 - **Flexible Training**: Supports independent training of temperature head, top-p head, or joint training
 - **Efficient Deployment**: Only saves AutoDeco prediction head weights during training, merges with base model during decoding.
 
-##️ Architecture
+## Architecture
 
 The AutoDeco framework consists of two core components:
 
