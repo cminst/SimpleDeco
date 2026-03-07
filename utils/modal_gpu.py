@@ -48,7 +48,7 @@ app = modal.App(image=image, name="AutoDeco Experiments")
 
 @app.function(timeout=48000, volumes={"/autodeco-saved": autodeco_volume})
 def get_autodeco():
-    subprocess.run(["git", "clone", "https://github.com/cminst/SimpleDeco.git", "--recurse-submodules", "."], check=True)
+    subprocess.run(["git", "clone", "https://github.com/cminst/SimpleDeco.git", "--recurse-submodules"], check=True)
     subprocess.run(["bash", "utils/install_simpledeco_vllm_modal.sh"], cwd="SimpleDeco", check=True)
 
 @app.function(gpu="A100:2", timeout=86400, volumes={"/autodeco-saved": autodeco_volume})
