@@ -75,20 +75,21 @@
 #   --save_outputs ckpt/base_r1_distill_qwen7b_aime24_maj16_seed42.jsonl 2>&1 | tee ckpt/aime24/base-r1-distill-qwen7b/maj16_seed42.log
 
 # Meanshift
-for seed in 42 43 44 45 46 47 48 49; do  
-  python utils/llm_eval.py \
-    --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
-    --dataset aime24 \
-    --temp 0.798 \
-    --top_p 0.907 \
-    --mode maj@k \
-    --num_samples 16 \
-    --seed $seed \
-    --tp_size 1 \
-    --max_tokens 32768 \
-    --save_outputs ckpt/meanshift2_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl 2>&1 | tee ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.log
-done
+# for seed in 42 43 44 45 46 47 48 49; do  
+#   python utils/llm_eval.py \
+#     --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
+#     --dataset aime24 \
+#     --temp 0.798 \
+#     --top_p 0.907 \
+#     --mode maj@k \
+#     --num_samples 16 \
+#     --seed $seed \
+#     --tp_size 1 \
+#     --max_tokens 32768 \
+#     --save_outputs ckpt/meanshift2_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl 2>&1 | tee ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.log
+# done
 
+# CONFGATE
 # for seed in 42 43 44 45 46 47 48 49; do
 #   python utils/llm_eval.py \
 #     --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
@@ -106,6 +107,7 @@ done
 #     2>&1 | tee ckpt/aime24/confgate_0.9_0.7-r1-distill-qwen7b/maj16_seed$seed.log
 # done
 
+# GREEDY
 # for seed in 42; do
 #   python utils/llm_eval.py \
 #     --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
@@ -122,3 +124,21 @@ done
 #     --save_outputs ckpt/greedy_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl \
 #     2>&1 | tee ckpt/aime24/greedy-r1-distill-qwen7b/maj16_seed$seed.log
 # done
+
+# Entropy Gated
+for seed in 42 43 44 45 46 47 48 49; do
+  python utils/llm_eval.py \
+    --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
+    --dataset aime24 \
+    --temp 1.0 \
+    --top_p 0.95 \
+    --mode pass@k \
+    --num_samples 16 \
+    --tp_size 1 \
+    --max_tokens 32768 \
+    --dynamic_sampling_policy entropy_adaptive \
+    --dynamic_sampling_kwargs '{"H_threshold": 0.05, "T_low": 0.0, "T_high": 0.8}' \
+    --seed $seed \
+    --save_outputs ckpt/entropygated_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl \
+    2>&1 | tee ckpt/aime24/entropygated-r1-distill-qwen7b/maj16_seed$seed.log
+done
