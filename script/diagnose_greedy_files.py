@@ -65,6 +65,17 @@ def _resolve_inputs(value: str) -> List[Path]:
     return [path]
 
 
+def _extract_response_text(row: Dict[str, Any]) -> str | None:
+    for key in ("response", "completion", "solution", "output", "generated", "answer"):
+        if key in row and isinstance(row[key], str):
+            return row[key]
+    return None
+
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
 def _sha256_path(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -93,11 +104,13 @@ def _summarize_file(path: Path) -> Dict[str, Any]:
     per_problem_samples: Dict[str, int] = {}
     per_problem_rows: Dict[str, int] = {}
     per_problem_sources: Dict[str, str] = {}
+    per_problem_unique_outputs: Dict[str, set] = {}
     fallback_ids: List[str] = []
     rows_with_solutions = 0
     solutions_sizes: List[int] = []
     total_rows = 0
     total_samples = 0
+    missing_outputs = 0
     seed_keys: Dict[str, set] = {}
 
     for row_idx, row in enumerate(_read_jsonl(path), 1):
@@ -119,22 +132,39 @@ def _summarize_file(path: Path) -> Dict[str, Any]:
             total_samples += num_solutions
             per_problem_samples[problem_id] = per_problem_samples.get(problem_id, 0) + num_solutions
             per_problem_rows[problem_id] = per_problem_rows.get(problem_id, 0) + 1
+            for solution in row["solutions"]:
+                if isinstance(solution, str):
+                    per_problem_unique_outputs.setdefault(problem_id, set()).add(
+                        _hash_text(solution)
+                    )
             continue
 
         total_samples += 1
         per_problem_samples[problem_id] = per_problem_samples.get(problem_id, 0) + 1
         per_problem_rows[problem_id] = per_problem_rows.get(problem_id, 0) + 1
+        response = _extract_response_text(row)
+        if response is None:
+            missing_outputs += 1
+        else:
+            per_problem_unique_outputs.setdefault(problem_id, set()).add(_hash_text(response))
 
     multi_sample = {pid: count for pid, count in per_problem_samples.items() if count > 1}
+    multi_unique = {
+        pid: len(values)
+        for pid, values in per_problem_unique_outputs.items()
+        if len(values) > 1
+    }
     summary = {
         "path": path,
         "rows": total_rows,
         "samples": total_samples,
         "problems": len(per_problem_samples),
         "multi_sample": multi_sample,
+        "multi_unique": multi_unique,
         "fallback_ids": fallback_ids,
         "rows_with_solutions": rows_with_solutions,
         "solutions_sizes": solutions_sizes,
+        "missing_outputs": missing_outputs,
         "seed_keys": seed_keys,
         "per_problem_samples": per_problem_samples,
     }
@@ -229,6 +259,18 @@ def main() -> None:
                 print(f"  rows with solutions list: {summary['rows_with_solutions']}")
         else:
             print("  rows with solutions list: 0")
+
+        multi_unique = summary["multi_unique"]
+        if multi_unique:
+            print(f"  problems with >1 unique outputs: {len(multi_unique)}")
+            for pid in list(multi_unique.keys())[: args.show]:
+                print(f"    {pid}: {multi_unique[pid]} unique outputs")
+        else:
+            print("  problems with >1 unique outputs: 0")
+        if summary["missing_outputs"]:
+            print(f"  rows missing output text: {summary['missing_outputs']}")
+        else:
+            print("  rows missing output text: 0")
 
         fallback_ids = summary["fallback_ids"]
         if fallback_ids:
