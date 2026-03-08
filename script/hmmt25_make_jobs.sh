@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATASET="hmmt25"
 JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/hmmt25_jobs.txt}"
 APPEND="${APPEND:-0}"
+FILTER_EXISTING="${FILTER_EXISTING:-1}"
 
 # Update if your model paths differ.
 MODEL_BASE="${MODEL_BASE:-ckpt/DeepSeek-R1-Distill-Qwen-7B}"
@@ -33,6 +34,9 @@ emit_job() {
   local log="$2"
   local out_dir
   out_dir="$(dirname "$out")"
+  if [[ "$FILTER_EXISTING" == "1" && -s "$out" ]]; then
+    return
+  fi
   shift 2
   local -a cmd=("$@")
   local cmd_str=""
