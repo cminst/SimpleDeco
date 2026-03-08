@@ -237,6 +237,14 @@ def _format_mean_ci(mean: float | None, ci: float | None) -> str:
     return f"{mean:.2f}±{ci:.2f}%"
 
 
+def _format_diff_ci(mean: float | None, ci: float | None) -> str:
+    if mean is None:
+        return "n/a"
+    if ci is None:
+        return f"{mean:+.2f}%"
+    return f"{mean:+.2f}±{ci:.2f}%"
+
+
 def _resolve_focus_index(labels: List[str], focus: str | None) -> int | None:
     if focus is None:
         return None
@@ -350,6 +358,19 @@ def _seed_metrics(
     return metrics, used_counts
 
 
+def _per_seed_metrics(
+    scores_list: List[Dict[str, List[float]]],
+    common: List[str],
+    mode: str,
+    k: int,
+) -> List[float | None]:
+    metrics: List[float | None] = []
+    for scores in scores_list:
+        mean_val, _ = _metric_for_scores(scores, common, mode, k)
+        metrics.append(mean_val)
+    return metrics
+
+
 def _compute_metrics(
     groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
     configs: List[Tuple[str, int]],
@@ -392,6 +413,57 @@ def _compute_metrics(
             if mean is not None:
                 plot_data[mode][idx].append((k, mean, ci))
     return rows, plot_data
+
+
+def _compute_pairwise_diffs(
+    groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
+    configs: List[Tuple[str, int]],
+    common: List[str],
+    labels: List[str],
+) -> List[Tuple[str, str]]:
+    tables: List[Tuple[str, str]] = []
+    for i in range(len(groups)):
+        for j in range(i + 1, len(groups)):
+            label_i = labels[i]
+            label_j = labels[j]
+            rows: List[List[str]] = []
+            for mode, k in configs:
+                seeds_i = _per_seed_metrics(groups[i][1], common, mode, k)
+                seeds_j = _per_seed_metrics(groups[j][1], common, mode, k)
+                diffs = [
+                    a - b
+                    for a, b in zip(seeds_i, seeds_j)
+                    if a is not None and b is not None
+                ]
+                if not diffs:
+                    mean = None
+                    ci = None
+                else:
+                    mean = sum(diffs) / len(diffs)
+                    if len(diffs) > 1:
+                        stdev = statistics.stdev(diffs)
+                        t_critical = _t_critical_975(len(diffs) - 1)
+                        ci = t_critical * stdev / math.sqrt(len(diffs))
+                    else:
+                        ci = None
+                mean_pct = mean * 100.0 if mean is not None else None
+                ci_pct = ci * 100.0 if ci is not None else None
+                sig = (
+                    "yes"
+                    if mean is not None and ci is not None and (mean - ci > 0 or mean + ci < 0)
+                    else "no"
+                )
+                rows.append(
+                    [
+                        f"{mode}@{k}",
+                        _format_diff_ci(mean_pct, ci_pct),
+                        str(len(diffs)),
+                        sig,
+                    ]
+                )
+            headers = ["Metric", f"{label_i}-{label_j}", "Seeds", "Sig95"]
+            tables.append((f"{label_i} vs {label_j}", _format_table(headers, rows)))
+    return tables
 
 
 def _plot_results(
@@ -623,6 +695,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--diff",
+        action="store_true",
+        help=(
+            "Report pairwise differences across seeds with 95% CI. "
+            "Differences are paired by seed index (same order as inputs)."
+        ),
+    )
+    parser.add_argument(
         "--max-k",
         type=int,
         default=64,
@@ -745,6 +825,12 @@ def main() -> None:
     rows, plot_data = _compute_metrics(groups, configs, sorted(common))
     table = _format_table(headers, rows)
     print(table)
+    if args.diff:
+        diff_tables = _compute_pairwise_diffs(groups, configs, sorted(common), labels)
+        for title, diff_table in diff_tables:
+            print()
+            print(title)
+            print(diff_table)
     if args.plot:
         _plot_results(Path(args.plot), plot_data, labels, focus_idx, args.maj_avg)
 
