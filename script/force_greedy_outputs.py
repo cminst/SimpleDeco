@@ -7,8 +7,19 @@ import glob
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_UTILS_PATH = _REPO_ROOT / "utils"
+if str(_UTILS_PATH) not in sys.path:
+    sys.path.insert(0, str(_UTILS_PATH))
+
+try:
+    from boxed_extract import compute_score  # type: ignore
+except Exception as exc:  # pragma: no cover - runtime import guard
+    raise RuntimeError("Failed to import compute_score from utils/boxed_extract.py") from exc
 
 OUTPUT_KEYS = ("response", "completion", "solution", "output", "generated", "answer")
 SEED_REGEX = re.compile(r"(seed)(\d+)", re.IGNORECASE)
@@ -88,27 +99,92 @@ def _extract_solution_text(row: Dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_score(row: Dict[str, Any], response: str | None) -> float | None:
+    meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    if "score" in meta:
+        try:
+            return float(meta["score"])
+        except Exception:
+            return None
+    if "score" in row:
+        try:
+            return float(row["score"])
+        except Exception:
+            return None
+    if response is None:
+        return None
+    ground_truth = None
+    for key in ("ground_truth", "gt", "answer"):
+        if key in meta:
+            ground_truth = meta[key]
+            break
+        if key in row:
+            ground_truth = row[key]
+            break
+    if ground_truth is not None:
+        try:
+            return float(compute_score(response, ground_truth))
+        except Exception:
+            return None
+    return None
+
+
 def _build_canonical(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    canonical: Dict[str, Dict[str, Any]] = {}
+    per_problem_samples: Dict[str, List[Dict[str, Any]]] = {}
     for row_idx, row in enumerate(rows, 1):
         pid = _extract_problem_id(row, row_idx)
-        entry = canonical.setdefault(
-            pid,
-            {"output": None, "solution": None, "meta_score": None, "row_score": None},
-        )
-        if entry["solution"] is None:
-            sol = _extract_solution_text(row)
-            if sol is not None:
-                entry["solution"] = sol
-        if entry["output"] is None:
-            out = _extract_output_text(row)
-            if out is not None:
-                entry["output"] = out
-        meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else None
-        if entry["meta_score"] is None and meta and "score" in meta:
-            entry["meta_score"] = meta["score"]
-        if entry["row_score"] is None and "score" in row:
-            entry["row_score"] = row["score"]
+        samples = per_problem_samples.setdefault(pid, [])
+
+        solutions = row.get("solutions")
+        if isinstance(solutions, list) and solutions:
+            scores_list = row.get("scores")
+            meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            ground_truth = None
+            for key in ("ground_truth", "gt", "answer"):
+                if key in meta:
+                    ground_truth = meta[key]
+                    break
+                if key in row:
+                    ground_truth = row[key]
+                    break
+            for idx, sol in enumerate(solutions):
+                if not isinstance(sol, str):
+                    continue
+                score = None
+                if isinstance(scores_list, list) and idx < len(scores_list):
+                    try:
+                        score = float(scores_list[idx])
+                    except Exception:
+                        score = None
+                if score is None and ground_truth is not None:
+                    try:
+                        score = float(compute_score(sol, ground_truth))
+                    except Exception:
+                        score = None
+                samples.append({"output": sol, "score": score})
+            continue
+
+        output = _extract_output_text(row)
+        score = _extract_score(row, output)
+        samples.append({"output": output, "score": score})
+
+    canonical: Dict[str, Dict[str, Any]] = {}
+    for pid, samples in per_problem_samples.items():
+        chosen = None
+        for sample in samples:
+            score = sample.get("score")
+            if score is not None and score <= 0.5:
+                chosen = sample
+                break
+        if chosen is None:
+            for sample in samples:
+                if sample.get("output") is not None:
+                    chosen = sample
+                    break
+        canonical[pid] = {
+            "output": chosen.get("output") if chosen else None,
+            "score": chosen.get("score") if chosen else None,
+        }
     return canonical
 
 
@@ -130,8 +206,9 @@ def _apply_canonical(
         stats["rows"] += 1
         pid = _extract_problem_id(row, row_idx)
         entry = canonical.get(pid, {})
-        canonical_output = entry.get("output") or entry.get("solution")
-        canonical_solution = entry.get("solution") or entry.get("output")
+        canonical_output = entry.get("output")
+        canonical_score = entry.get("score")
+        canonical_solution = canonical_output
         updated = False
 
         row = dict(row)
@@ -165,12 +242,12 @@ def _apply_canonical(
             row["metadata"] = meta
         meta["seed"] = seed_value
 
-        if "score" in meta and entry.get("meta_score") is not None:
-            meta["score"] = entry["meta_score"]
+        if canonical_score is not None:
+            meta["score"] = canonical_score
             updated = True
-        if "score" in row and entry.get("row_score") is not None:
-            row["score"] = entry["row_score"]
-            updated = True
+            if "score" in row:
+                row["score"] = canonical_score
+                updated = True
 
         if updated:
             stats["rows_updated"] += 1
