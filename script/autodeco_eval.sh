@@ -10,7 +10,7 @@
 #   --seed 42 \
 #   --tp_size 1 \
 #   --max_tokens 32768 \
-#   --save_outputs ckpt/qwen3_4b_thinking_aime24_maj8_seed42.jsonl 2>&1 | tee ckpt/aime24/qwen3-4b-thinking/maj8_seed42.log
+#   --save_outputs ckpt/aime24/qwen3-4b-thinking/maj8_seed42.jsonl 2>&1 | tee ckpt/aime24/qwen3-4b-thinking/maj8_seed42.log
 
 # --- AutoDeco ---
 # python utils/llm_eval.py \
@@ -34,7 +34,7 @@
 #   --seed 42 \
 #   --tp_size 1 \
 #   --max_tokens 32768 \
-#   --save_outputs ckpt/simpledeco_ql_aime24_maj8_seed42.jsonl 2>&1 | tee ckpt/simpledeco_ql_aime24_maj8_seed42.log
+#   --save_outputs ckpt/aime24/simpledeco-ql/maj8_seed42.jsonl 2>&1 | tee ckpt/aime24/simpledeco-ql/maj8_seed42.log
 
 # --- No Top-P Guardrails ---
 # python utils/llm_eval.py \
@@ -59,7 +59,7 @@
 #   --seed 42 \
 #   --tp_size 1 \
 #   --max_tokens 32768 \
-#   --save_outputs ckpt/autodeco_r1_distill_qwen7b_aime24_maj16_seed42.jsonl 2>&1 | tee ckpt/aime24/autodeco-r1-distill-qwen7b/maj16_seed42.log
+#   --save_outputs ckpt/aime24/autodeco-r1-distill-qwen7b/maj16_seed42.jsonl 2>&1 | tee ckpt/aime24/autodeco-r1-distill-qwen7b/maj16_seed42.log
 
 # --- R1 distill default params ---
 # python utils/llm_eval.py \
@@ -72,10 +72,10 @@
 #   --seed 42 \
 #   --tp_size 1 \
 #   --max_tokens 32768 \
-#   --save_outputs ckpt/base_r1_distill_qwen7b_aime24_maj16_seed42.jsonl 2>&1 | tee ckpt/aime24/base-r1-distill-qwen7b/maj16_seed42.log
+#   --save_outputs ckpt/aime24/base-r1-distill-qwen7b/maj16_seed42.jsonl 2>&1 | tee ckpt/aime24/base-r1-distill-qwen7b/maj16_seed42.log
 
 # Meanshift
-# for seed in 42 43 44 45 46 47 48 49; do  
+# for seed in 42 43 44 45 46 47 48 49; do
 #   python utils/llm_eval.py \
 #     --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
 #     --dataset aime24 \
@@ -86,7 +86,7 @@
 #     --seed $seed \
 #     --tp_size 1 \
 #     --max_tokens 32768 \
-#     --save_outputs ckpt/meanshift2_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl 2>&1 | tee ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.log
+#     --save_outputs ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.jsonl 2>&1 | tee ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.log
 # done
 
 # CONFGATE
@@ -103,8 +103,8 @@
 #     --dynamic_sampling_policy confidence_gated \
 #     --dynamic_sampling_kwargs '{"maxprob_threshold": 0.7, "T_high": 0.9}' \
 #     --seed $seed \
-#     --save_outputs ckpt/confgate_0.9_0.7_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl \
-#     2>&1 | tee ckpt/aime24/confgate_0.9_0.7-r1-distill-qwen7b/maj16_seed$seed.log
+#     --save_outputs ckpt/aime24/confgate-0.9-0.7-r1-distill-qwen7b/maj16_seed$seed.jsonl \
+#     2>&1 | tee ckpt/aime24/confgate-0.9-0.7-r1-distill-qwen7b/maj16_seed$seed.log
 # done
 
 # GREEDY
@@ -121,24 +121,41 @@
 #     --dynamic_sampling_policy confidence_gated \
 #     --dynamic_sampling_kwargs '{"maxprob_threshold": 1.0, "T_high": 0.0}' \
 #     --seed $seed \
-#     --save_outputs ckpt/greedy_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl \
+#     --save_outputs ckpt/aime24/greedy-r1-distill-qwen7b/maj16_seed$seed.jsonl \
 #     2>&1 | tee ckpt/aime24/greedy-r1-distill-qwen7b/maj16_seed$seed.log
 # done
 
 # Entropy Gated
+# for seed in 42 43 44 45 46 47 48 49; do
+#   python utils/llm_eval.py \
+#     --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
+#     --dataset aime24 \
+#     --temp 1.0 \
+#     --top_p 0.95 \
+#     --mode pass@k \
+#     --num_samples 16 \
+#     --tp_size 1 \
+#     --max_tokens 32768 \
+#     --dynamic_sampling_policy entropy_adaptive \
+#     --dynamic_sampling_kwargs '{"H_threshold": 0.05, "T_low": 0.0, "T_high": 0.8}' \
+#     --seed $seed \
+#     --save_outputs ckpt/aime24/entropygated-r1-distill-qwen7b/maj16_seed$seed.jsonl \
+#     2>&1 | tee ckpt/aime24/entropygated-r1-distill-qwen7b/maj16_seed$seed.log
+# done
+
+# DO NOT REMOVE THE ABOVE COMMENTED COMMANDS
+# HMMT Base
 for seed in 42 43 44 45 46 47 48 49; do
   python utils/llm_eval.py \
     --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
-    --dataset aime24 \
-    --temp 1.0 \
+    --dataset hmmt25 \
+    --temp 0.6 \
     --top_p 0.95 \
-    --mode pass@k \
+    --mode maj@k \
     --num_samples 16 \
     --tp_size 1 \
     --max_tokens 32768 \
-    --dynamic_sampling_policy entropy_adaptive \
-    --dynamic_sampling_kwargs '{"H_threshold": 0.05, "T_low": 0.0, "T_high": 0.8}' \
     --seed $seed \
-    --save_outputs ckpt/entropygated_r1_distill_qwen7b_aime24_maj16_seed$seed.jsonl \
-    2>&1 | tee ckpt/aime24/entropygated-r1-distill-qwen7b/maj16_seed$seed.log
+    --save_outputs ckpt/hmmt25/base-r1-distill-qwen7b/maj16_seed$seed.jsonl \
+    2>&1 | tee ckpt/hmmt25/base-r1-distill-qwen7b/maj16_seed$seed.log
 done

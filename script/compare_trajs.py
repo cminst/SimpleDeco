@@ -565,7 +565,6 @@ def main() -> None:
     )
     parser.add_argument(
         "--inputs",
-        required=True,
         action="append",
         help=(
             "Comma-separated list of JSONL paths/globs. "
@@ -600,6 +599,21 @@ def main() -> None:
         help="Comma-separated labels for inputs (same order as --inputs).",
     )
     parser.add_argument(
+        "--ckpt-root",
+        default="ckpt",
+        help="Root directory for --dataset/--tags expansion (default: ckpt).",
+    )
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help="Dataset name to expand --tags into ckpt/{dataset}/{tag}/*.jsonl.",
+    )
+    parser.add_argument(
+        "--tags",
+        action="append",
+        help="Comma-separated tag names to compare (requires --dataset).",
+    )
+    parser.add_argument(
         "--focus",
         default="none",
         help=(
@@ -610,12 +624,24 @@ def main() -> None:
     args = parser.parse_args()
 
     input_specs = _parse_csv_args(args.inputs)
+    input_labels = list(input_specs)
+
+    tag_specs = _parse_csv_args(args.tags)
+    if tag_specs:
+        if not args.dataset:
+            raise ValueError("--dataset is required when using --tags.")
+        for tag in tag_specs:
+            spec = os.path.join(args.ckpt_root, args.dataset, tag, "*.jsonl")
+            input_specs.append(spec)
+            input_labels.append(tag)
+
     if not input_specs:
-        raise RuntimeError("No inputs provided.")
+        raise RuntimeError("No inputs provided. Use --inputs or --dataset/--tags.")
+
     label_specs = _parse_csv_args(args.labels)
     if label_specs and len(label_specs) != len(input_specs):
         raise ValueError("Number of labels must match number of inputs.")
-    labels = label_specs if label_specs else input_specs
+    labels = label_specs if label_specs else input_labels
     focus_idx = _resolve_focus_index(labels, args.focus)
 
     groups_raw: List[Tuple[str, List[Path]]] = []
