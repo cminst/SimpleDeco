@@ -32,6 +32,14 @@ image = (
         "apt install openssh-client netcat-openbsd tmux -y"
     )
     .add_local_file("utils/tailscale-entrypoint.sh", "/root/entrypoint.sh", copy=True)
+    .run_commands(
+        "mkdir -p ~/.ssh",
+        'echo "Host 100.84.104.59" >> ~/.ssh/config',
+        'echo "    HostName 100.84.104.59" >> ~/.ssh/config',
+        'echo "    User zli" >> ~/.ssh/config',
+        'echo "    ProxyCommand nc -X 5 -x localhost:1080 %h %p" >> ~/.ssh/config',
+        "chmod 600 ~/.ssh/config",
+    )
     .run_commands("chmod +x /root/entrypoint.sh")
     .entrypoint(["/root/entrypoint.sh"])
 )
@@ -39,10 +47,8 @@ image = (
 autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
 app = modal.App(image=image, name="AutoDeco Experiments")
 
-# ssh -o 'ProxyCommand=nc -X 5 -x localhost:1080 %h %p' zli@100.84.104.58
-
 @app.function(
-    gpu="RTX-PRO-6000:1",
+    gpu="H200:1", # RTX-PRO-6000:1
     timeout=86400,
     volumes={"/root/SimpleDeco": autodeco_volume},
     secrets=[modal.Secret.from_name("tailscale-auth", required_keys=["TAILSCALE_AUTHKEY"])],
