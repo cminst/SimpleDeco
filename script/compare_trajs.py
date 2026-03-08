@@ -459,7 +459,7 @@ def _plot_results(
                 marker = None
                 markersize = 0
             elif is_focus:
-                line_color = color_cycle
+                line_color = "tab:red"
                 line_alpha = 0.95
                 line_z = 3
                 line_style = "-"
