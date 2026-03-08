@@ -16,6 +16,8 @@ STOP_ON_FAIL="${STOP_ON_FAIL:-0}"
 REQUEUE_ON_FAIL="${REQUEUE_ON_FAIL:-1}"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 FAILED_FILE="${FAILED_FILE:-$ROOT_DIR/jobs/failed_jobs.txt}"
+MAX_JOBS_TO_RUN="${MAX_JOBS_TO_RUN:-0}"
+RUN_COUNT=0
 
 pop_job() {
   if [[ -n "$QUEUE_HOST" ]]; then
@@ -91,5 +93,11 @@ while true; do
     if [[ "$STOP_ON_FAIL" == "1" ]]; then
       exit 1
     fi
+  fi
+
+  ((RUN_COUNT += 1))
+  if (( MAX_JOBS_TO_RUN > 0 && RUN_COUNT >= MAX_JOBS_TO_RUN )); then
+    echo "Reached MAX_JOBS_TO_RUN=$MAX_JOBS_TO_RUN. Exiting."
+    exit 0
   fi
 done
