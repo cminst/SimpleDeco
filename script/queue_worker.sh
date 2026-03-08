@@ -19,7 +19,7 @@ FAILED_FILE="${FAILED_FILE:-$ROOT_DIR/jobs/failed_jobs.txt}"
 
 pop_job() {
   if [[ -n "$QUEUE_HOST" ]]; then
-    ssh $SSH_OPTS "$QUEUE_HOST" "python3 '$QUEUE_POP_SCRIPT' --file '$QUEUE_FILE'"
+    ssh $SSH_OPTS "$QUEUE_HOST" "python3 $QUEUE_POP_SCRIPT --file $QUEUE_FILE"
   else
     python3 "$QUEUE_POP_SCRIPT" --file "$QUEUE_FILE"
   fi
@@ -28,7 +28,7 @@ pop_job() {
 append_job() {
   local job_line="$1"
   if [[ -n "$QUEUE_HOST" ]]; then
-    printf '%s' "$job_line" | ssh $SSH_OPTS "$QUEUE_HOST" "python3 '$QUEUE_APPEND_SCRIPT' --file '$QUEUE_FILE' --stdin"
+    printf '%s' "$job_line" | ssh $SSH_OPTS "$QUEUE_HOST" "python3 $QUEUE_APPEND_SCRIPT --file $QUEUE_FILE --stdin"
   else
     printf '%s' "$job_line" | python3 "$QUEUE_APPEND_SCRIPT" --file "$QUEUE_FILE" --stdin
   fi
@@ -37,7 +37,7 @@ append_job() {
 append_failed() {
   local job_line="$1"
   if [[ -n "$QUEUE_HOST" ]]; then
-    printf '%s' "$job_line" | ssh $SSH_OPTS "$QUEUE_HOST" "python3 '$QUEUE_APPEND_SCRIPT' --file '$FAILED_FILE' --stdin"
+    printf '%s' "$job_line" | ssh $SSH_OPTS "$QUEUE_HOST" "python3 $QUEUE_APPEND_SCRIPT --file $FAILED_FILE --stdin"
   else
     printf '%s' "$job_line" | python3 "$QUEUE_APPEND_SCRIPT" --file "$FAILED_FILE" --stdin
   fi
@@ -74,7 +74,7 @@ while true; do
   fi
 
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] Running: $job"
-  if ! CUDA_VISIBLE_DEVICES="$GPU_ID" VLLM_DISABLE_COMPILE_CACHE=1 bash -lc "$job"; then
+  if ! CUDA_VISIBLE_DEVICES="$GPU_ID" VLLM_DISABLE_COMPILE_CACHE=1 bash -lc "cd \"$ROOT_DIR\" && $job"; then
     echo "Job failed: $job" >&2
     if [[ "$REQUEUE_ON_FAIL" == "1" ]]; then
       retries="$(parse_retry "$job")"
