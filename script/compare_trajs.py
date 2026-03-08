@@ -436,7 +436,11 @@ def _plot_results(
             ax.text(
                 0.5,
                 0.5,
-                f"No odd k data for {mode}@k",
+                (
+                    f"No odd k data for {mode}@k"
+                    if mode == "maj"
+                    else f"No data for {mode}@k"
+                ),
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
@@ -451,7 +455,8 @@ def _plot_results(
             total_series - 1 if focus_idx is not None and total_series > 0 else 0
         )
         for idx, series in enumerate(series_groups):
-            series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
+            if mode == "maj":
+                series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
             if not series:
                 continue
             series.sort(key=lambda t: t[0])
@@ -504,7 +509,11 @@ def _plot_results(
             ax.text(
                 0.5,
                 0.5,
-                f"No odd k data for {mode}@k",
+                (
+                    f"No odd k data for {mode}@k"
+                    if mode == "maj"
+                    else f"No data for {mode}@k"
+                ),
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
@@ -517,7 +526,7 @@ def _plot_results(
         ax.legend(frameon=False)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
 
-    axes[-1].set_xlabel("k (odd only)")
+    axes[-1].set_xlabel("k (maj: odd only)")
     axes[-1].xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
     fig.suptitle("Trajectory Comparison", fontsize=14, y=1.02)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -577,7 +586,7 @@ def main() -> None:
     parser.add_argument(
         "--plot",
         default=None,
-        help="Optional output path for a PDF/PNG plot (odd k only).",
+        help="Optional output path for a PDF/PNG plot (maj uses odd k only).",
     )
     parser.add_argument(
         "--max-k",
