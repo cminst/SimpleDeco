@@ -584,10 +584,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--focus",
-        default="auto",
+        default="none",
         help=(
             "Label or 1-based index to emphasize in plots; others are muted. "
-            "Use 'none' to disable (default: auto)."
+            "Use 'none' to disable (default: none)."
         ),
     )
     args = parser.parse_args()
