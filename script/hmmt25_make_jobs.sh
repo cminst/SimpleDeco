@@ -42,10 +42,10 @@ emit_job() {
   local out_q log_q
   out_q=$(printf "%q" "$out")
   log_q=$(printf "%q" "$log")
-  local mkdir_cmd
-  mkdir_cmd=$(printf "%q" "mkdir -p $out_dir")
-  printf "if [ -s %s ]; then echo \"Skipping existing %s\"; else %s; %s2>&1 | tee %s; fi\n" \
-    "$out_q" "$out" "$mkdir_cmd" "$cmd_str" "$log_q" >> "$JOB_FILE"
+  local out_dir_q
+  out_dir_q=$(printf "%q" "$out_dir")
+  printf "if [ -s %s ]; then echo \"Skipping existing %s\"; else mkdir -p %s; %s2>&1 | tee %s; fi\n" \
+    "$out_q" "$out" "$out_dir_q" "$cmd_str" "$log_q" >> "$JOB_FILE"
 }
 
 emit_eval_jobs() {
