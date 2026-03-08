@@ -422,6 +422,14 @@ def _plot_results(
 
     markers = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
     non_focus_styles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1))]
+    focus_color = "#004488"
+    non_focus_palette = [
+        "#EE7733",
+        "#44AA99",
+        "#66CCEE",
+        "#999933",
+        "#BBBBBB",
+    ]
     for ax, (mode, ylabel) in zip(axes, order):
         series_groups = plot_data.get(mode, [])
         if not series_groups:
@@ -459,7 +467,7 @@ def _plot_results(
                 marker = None
                 markersize = 0
             elif is_focus:
-                line_color = "tab:red"
+                line_color = focus_color
                 line_alpha = 0.95
                 line_z = 3
                 line_style = "-"
@@ -467,12 +475,12 @@ def _plot_results(
                 markersize = 4
             else:
                 rank = idx if focus_idx is None else sum(1 for j in range(idx) if j != focus_idx)
-                if non_focus_total > 1:
-                    shade = 0.35 + 0.30 * (rank / (non_focus_total - 1))
-                else:
-                    shade = 0.5
-                line_color = str(shade)
-                line_alpha = 0.65
+                line_color = (
+                    non_focus_palette[rank]
+                    if rank < len(non_focus_palette)
+                    else non_focus_palette[-1]
+                )
+                line_alpha = 0.8
                 line_z = 2
                 line_style = non_focus_styles[rank % len(non_focus_styles)]
                 marker = None
