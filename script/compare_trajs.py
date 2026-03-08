@@ -399,6 +399,7 @@ def _plot_results(
     plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]],
     labels: List[str],
     focus_idx: int | None,
+    maj_avg: str,
 ) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -430,6 +431,22 @@ def _plot_results(
         "#999933",
         "#BBBBBB",
     ]
+
+    def _pairwise_average(series: List[Tuple[int, float, float | None]]) -> List[Tuple[int, float, float | None]]:
+        by_k = {k: (v, s) for k, v, s in series}
+        averaged: List[Tuple[int, float, float | None]] = []
+        for k in sorted(by_k):
+            if k % 2 == 0 and (k - 1) in by_k:
+                v_even, s_even = by_k[k]
+                v_odd, s_odd = by_k[k - 1]
+                avg_val = (v_even + v_odd) / 2.0
+                if s_even is None or s_odd is None:
+                    avg_ci = None
+                else:
+                    avg_ci = (s_even + s_odd) / 2.0
+                averaged.append((k, avg_val, avg_ci))
+        return averaged
+
     for ax, (mode, ylabel) in zip(axes, order):
         series_groups = plot_data.get(mode, [])
         if not series_groups:
@@ -437,7 +454,7 @@ def _plot_results(
                 0.5,
                 0.5,
                 (
-                    f"No odd k data for {mode}@k"
+                    f"No data for {mode}@k"
                     if mode == "maj"
                     else f"No data for {mode}@k"
                 ),
@@ -456,7 +473,10 @@ def _plot_results(
         )
         for idx, series in enumerate(series_groups):
             if mode == "maj":
-                series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
+                if maj_avg == "pairs":
+                    series = _pairwise_average(series)
+                elif maj_avg == "odd":
+                    series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
             if not series:
                 continue
             series.sort(key=lambda t: t[0])
@@ -510,7 +530,7 @@ def _plot_results(
                 0.5,
                 0.5,
                 (
-                    f"No odd k data for {mode}@k"
+                    f"No data for {mode}@k"
                     if mode == "maj"
                     else f"No data for {mode}@k"
                 ),
@@ -526,7 +546,13 @@ def _plot_results(
         ax.legend(frameon=False)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
 
-    axes[-1].set_xlabel("k (maj: odd only)")
+    if maj_avg == "pairs":
+        xlabel = "k (maj: pairwise avg of k-1,k at even k)"
+    elif maj_avg == "odd":
+        xlabel = "k (maj: odd only)"
+    else:
+        xlabel = "k"
+    axes[-1].set_xlabel(xlabel)
     axes[-1].xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
     fig.suptitle("Trajectory Comparison", fontsize=14, y=1.02)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -585,7 +611,16 @@ def main() -> None:
     parser.add_argument(
         "--plot",
         default=None,
-        help="Optional output path for a PDF/PNG plot (maj uses odd k only).",
+        help="Optional output path for a PDF/PNG plot.",
+    )
+    parser.add_argument(
+        "--maj-avg",
+        choices=("pairs", "odd", "all"),
+        default="pairs",
+        help=(
+            "Plotting mode for maj@k: 'pairs' averages (2i-1,2i) at even k; "
+            "'odd' shows odd k only; 'all' shows every k (default: pairs)."
+        ),
     )
     parser.add_argument(
         "--max-k",
@@ -711,7 +746,7 @@ def main() -> None:
     table = _format_table(headers, rows)
     print(table)
     if args.plot:
-        _plot_results(Path(args.plot), plot_data, labels, focus_idx)
+        _plot_results(Path(args.plot), plot_data, labels, focus_idx, args.maj_avg)
 
 
 if __name__ == "__main__":
