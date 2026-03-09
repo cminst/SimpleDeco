@@ -29,7 +29,7 @@ image = (
         "cd /tmp/SimpleDeco && bash utils/install_simpledeco_vllm_modal.sh",
     )
     .run_commands( # Additional apt installations after everything else
-        "apt install openssh-client netcat-openbsd tmux -y"
+        "apt install openssh-client netcat-openbsd tmux sshpass -y"
     )
     .add_local_file("utils/tailscale-entrypoint.sh", "/root/entrypoint.sh", copy=True)
     .run_commands(

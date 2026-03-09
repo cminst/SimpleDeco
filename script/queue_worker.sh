@@ -21,6 +21,8 @@ MAX_JOBS_TO_RUN="${MAX_JOBS_TO_RUN:-0}"
 RUN_COUNT=0
 CURRENT_JOB=""
 JOB_RUNNING=0
+INTERRUPTED=0
+CHILD_PID=""
 
 usage() {
   cat <<'USAGE'
@@ -61,18 +63,15 @@ if [[ -n "$SSH_PASS" ]]; then
   fi
 fi
 
-requeue_current_job() {
-  if [[ -n "$CURRENT_JOB" && "$JOB_RUNNING" == "1" ]]; then
-    echo "Interrupted. Re-queuing: $CURRENT_JOB" >&2
-    append_job "$CURRENT_JOB"
-  fi
-}
-
 on_interrupt() {
   if [[ "$JOB_RUNNING" == "1" ]]; then
+    INTERRUPTED=1
     echo "Interrupted. Stopping current job..." >&2
+    if [[ -n "$CHILD_PID" ]]; then
+      kill -INT "$CHILD_PID" 2>/dev/null || true
+    fi
+    return 0
   fi
-  requeue_current_job
   exit 130
 }
 
@@ -150,7 +149,22 @@ while true; do
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] Running: $job"
   CURRENT_JOB="$job"
   JOB_RUNNING=1
-  if ! CUDA_VISIBLE_DEVICES="$GPU_ID" VLLM_DISABLE_COMPILE_CACHE=1 bash -lc "cd \"$ROOT_DIR\" && $job"; then
+  INTERRUPTED=0
+  CUDA_VISIBLE_DEVICES="$GPU_ID" VLLM_DISABLE_COMPILE_CACHE=1 bash -lc "cd \"$ROOT_DIR\" && $job" &
+  CHILD_PID=$!
+  set +e
+  wait "$CHILD_PID"
+  job_status=$?
+  set -e
+  CHILD_PID=""
+
+  if [[ "$INTERRUPTED" == "1" ]]; then
+    echo "Interrupted. Re-queuing: $CURRENT_JOB" >&2
+    append_job "$CURRENT_JOB"
+    exit 130
+  fi
+
+  if (( job_status != 0 )); then
     echo "Job failed: $job" >&2
     if [[ "$REQUEUE_ON_FAIL" == "1" ]]; then
       retries="$(parse_retry "$job")"
