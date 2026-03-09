@@ -766,7 +766,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Compare multiple JSONL trajectory files with maj@k / pass@k metrics. "
-            "Uses a hypergeometric estimator over all samples and reports mean±95% CI "
+            "Uses a hypergeometric estimator over all samples and reports mean±95%% CI "
             "across seeds when multiple files are provided."
         )
     )
@@ -812,7 +812,7 @@ def main() -> None:
         "--diff",
         action="store_true",
         help=(
-            "Report pairwise differences across seeds with 95% CI. "
+            "Report pairwise differences across seeds with 95%% CI. "
             "Differences are paired by seed index (same order as inputs)."
         ),
     )
