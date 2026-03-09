@@ -103,6 +103,19 @@ append_job() {
   fi
 }
 
+prepend_job() {
+  local job_line="$1"
+  if [[ -n "$QUEUE_HOST" ]]; then
+    if [[ -n "$SSH_PASS" ]]; then
+      printf '%s' "$job_line" | sshpass -p "$SSH_PASS" ssh $SSH_OPTS "$QUEUE_HOST" "python3 $QUEUE_APPEND_SCRIPT --file $QUEUE_FILE --prepend --stdin"
+    else
+      printf '%s' "$job_line" | ssh $SSH_OPTS "$QUEUE_HOST" "python3 $QUEUE_APPEND_SCRIPT --file $QUEUE_FILE --prepend --stdin"
+    fi
+  else
+    printf '%s' "$job_line" | python3 "$QUEUE_APPEND_SCRIPT" --file "$QUEUE_FILE" --prepend --stdin
+  fi
+}
+
 append_failed() {
   local job_line="$1"
   if [[ -n "$QUEUE_HOST" ]]; then
@@ -160,7 +173,7 @@ while true; do
 
   if [[ "$INTERRUPTED" == "1" ]]; then
     echo "Interrupted. Re-queuing: $CURRENT_JOB" >&2
-    append_job "$CURRENT_JOB"
+    prepend_job "$CURRENT_JOB"
     exit 130
   fi
 
