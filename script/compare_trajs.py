@@ -245,6 +245,45 @@ def _format_diff_ci(mean: float | None, ci: float | None) -> str:
     return f"{mean:+.2f}±{ci:.2f}%"
 
 
+def _format_diff_ci_range(mean: float | None, lo: float | None, hi: float | None) -> str:
+    if mean is None:
+        return "n/a"
+    if lo is None or hi is None:
+        return f"{mean:+.2f}%"
+    return f"{mean:+.2f}% [{lo:+.2f}, {hi:+.2f}]%"
+
+
+def _percentile(sorted_vals: List[float], q: float) -> float:
+    if not sorted_vals:
+        raise ValueError("Cannot compute percentile of empty list.")
+    if q <= 0:
+        return sorted_vals[0]
+    if q >= 1:
+        return sorted_vals[-1]
+    pos = q * (len(sorted_vals) - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return sorted_vals[lo]
+    frac = pos - lo
+    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * frac
+
+
+def _bootstrap_mean_ci(values: List[float], iters: int, seed: int | None) -> Tuple[float, float]:
+    if iters < 1:
+        raise ValueError("--bootstrap-iters must be >= 1.")
+    rng = random.Random(seed)
+    n = len(values)
+    means: List[float] = []
+    for _ in range(iters):
+        acc = 0.0
+        for _ in range(n):
+            acc += values[rng.randrange(n)]
+        means.append(acc / n)
+    means.sort()
+    return _percentile(means, 0.025), _percentile(means, 0.975)
+
+
 def _resolve_focus_index(labels: List[str], focus: str | None) -> int | None:
     if focus is None:
         return None
@@ -371,6 +410,28 @@ def _per_seed_metrics(
     return metrics
 
 
+def _per_problem_estimates(
+    scores: Dict[str, List[float]],
+    common: List[str],
+    mode: str,
+    k: int,
+) -> List[float | None]:
+    estimates: List[float | None] = []
+    for pid in common:
+        vals = scores.get(pid)
+        if not vals:
+            estimates.append(None)
+            continue
+        n = len(vals)
+        c = _count_correct(vals)
+        if mode == "pass":
+            est = _pass_at_k_estimate(n, c, k)
+        else:
+            est = _maj_at_k_estimate(n, c, k)
+        estimates.append(est)
+    return estimates
+
+
 def _compute_metrics(
     groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
     configs: List[Tuple[str, int]],
@@ -420,6 +481,9 @@ def _compute_pairwise_diffs(
     configs: List[Tuple[str, int]],
     common: List[str],
     labels: List[str],
+    diff_test: str,
+    bootstrap_iters: int,
+    bootstrap_seed: int | None,
 ) -> List[Tuple[str, str]]:
     tables: List[Tuple[str, str]] = []
     for i in range(len(groups)):
@@ -428,40 +492,80 @@ def _compute_pairwise_diffs(
             label_j = labels[j]
             rows: List[List[str]] = []
             for mode, k in configs:
-                seeds_i = _per_seed_metrics(groups[i][1], common, mode, k)
-                seeds_j = _per_seed_metrics(groups[j][1], common, mode, k)
-                diffs = [
-                    a - b
-                    for a, b in zip(seeds_i, seeds_j)
-                    if a is not None and b is not None
-                ]
-                if not diffs:
-                    mean = None
-                    ci = None
-                else:
-                    mean = sum(diffs) / len(diffs)
-                    if len(diffs) > 1:
-                        stdev = statistics.stdev(diffs)
-                        t_critical = _t_critical_975(len(diffs) - 1)
-                        ci = t_critical * stdev / math.sqrt(len(diffs))
-                    else:
-                        ci = None
-                mean_pct = mean * 100.0 if mean is not None else None
-                ci_pct = ci * 100.0 if ci is not None else None
-                sig = (
-                    "yes"
-                    if mean is not None and ci is not None and (mean - ci > 0 or mean + ci < 0)
-                    else "no"
-                )
-                rows.append(
-                    [
-                        f"{mode}@{k}",
-                        _format_diff_ci(mean_pct, ci_pct),
-                        str(len(diffs)),
-                        sig,
+                if diff_test == "bootstrap":
+                    est_i = _per_problem_estimates(groups[i][2], common, mode, k)
+                    est_j = _per_problem_estimates(groups[j][2], common, mode, k)
+                    diffs = [
+                        a - b
+                        for a, b in zip(est_i, est_j)
+                        if a is not None and b is not None
                     ]
-                )
-            headers = ["Metric", f"{label_i}-{label_j}", "Seeds", "Sig95"]
+                    if not diffs:
+                        mean = None
+                        lo = None
+                        hi = None
+                        sig = "no"
+                    else:
+                        mean = sum(diffs) / len(diffs)
+                        if len(diffs) > 1:
+                            lo, hi = _bootstrap_mean_ci(diffs, bootstrap_iters, bootstrap_seed)
+                        else:
+                            lo = None
+                            hi = None
+                        sig = (
+                            "yes"
+                            if lo is not None and hi is not None and (lo > 0 or hi < 0)
+                            else "no"
+                        )
+                    mean_pct = mean * 100.0 if mean is not None else None
+                    lo_pct = lo * 100.0 if lo is not None else None
+                    hi_pct = hi * 100.0 if hi is not None else None
+                    rows.append(
+                        [
+                            f"{mode}@{k}",
+                            _format_diff_ci_range(mean_pct, lo_pct, hi_pct),
+                            str(len(diffs)),
+                            sig,
+                        ]
+                    )
+                else:
+                    seeds_i = _per_seed_metrics(groups[i][1], common, mode, k)
+                    seeds_j = _per_seed_metrics(groups[j][1], common, mode, k)
+                    diffs = [
+                        a - b
+                        for a, b in zip(seeds_i, seeds_j)
+                        if a is not None and b is not None
+                    ]
+                    if not diffs:
+                        mean = None
+                        ci = None
+                    else:
+                        mean = sum(diffs) / len(diffs)
+                        if len(diffs) > 1:
+                            stdev = statistics.stdev(diffs)
+                            t_critical = _t_critical_975(len(diffs) - 1)
+                            ci = t_critical * stdev / math.sqrt(len(diffs))
+                        else:
+                            ci = None
+                    mean_pct = mean * 100.0 if mean is not None else None
+                    ci_pct = ci * 100.0 if ci is not None else None
+                    sig = (
+                        "yes"
+                        if mean is not None and ci is not None and (mean - ci > 0 or mean + ci < 0)
+                        else "no"
+                    )
+                    rows.append(
+                        [
+                            f"{mode}@{k}",
+                            _format_diff_ci(mean_pct, ci_pct),
+                            str(len(diffs)),
+                            sig,
+                        ]
+                    )
+            if diff_test == "bootstrap":
+                headers = ["Metric", f"{label_i}-{label_j}", "Problems", "Sig95"]
+            else:
+                headers = ["Metric", f"{label_i}-{label_j}", "Seeds", "Sig95"]
             tables.append((f"{label_i} vs {label_j}", _format_table(headers, rows)))
     return tables
 
@@ -653,6 +757,11 @@ def _sample_paths(paths: List[Path], count: int, seed: int | None) -> List[Path]
     return sorted(chosen)
 
 
+def _log(enabled: bool, message: str) -> None:
+    if enabled:
+        print(message, file=sys.stderr, flush=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -674,6 +783,11 @@ def main() -> None:
         type=int,
         default=None,
         help="Random seed for subsampling when glob patterns yield different counts.",
+    )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print progress to stderr while loading and computing.",
     )
     parser.add_argument(
         "--config",
@@ -701,6 +815,22 @@ def main() -> None:
             "Report pairwise differences across seeds with 95% CI. "
             "Differences are paired by seed index (same order as inputs)."
         ),
+    )
+    parser.add_argument(
+        "--diff-test",
+        choices=("t", "bootstrap"),
+        default="t",
+        help=(
+            "Significance test for --diff. "
+            "'t' uses a paired t-interval over per-seed diffs (default). "
+            "'bootstrap' uses a paired bootstrap over problems on pooled scores."
+        ),
+    )
+    parser.add_argument(
+        "--bootstrap-iters",
+        type=int,
+        default=10000,
+        help="Number of bootstrap resamples for --diff-test bootstrap (default: 10000).",
     )
     parser.add_argument(
         "--max-k",
@@ -789,7 +919,11 @@ def main() -> None:
 
     groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]] = []
     for label, paths in zip(labels, [paths for _, paths in groups_raw]):
-        scores_list = [_load_scores(p) for p in paths]
+        _log(args.progress, f"Loading {label}: {len(paths)} file(s)")
+        scores_list: List[Dict[str, List[float]]] = []
+        for idx, path in enumerate(paths, 1):
+            _log(args.progress, f"  [{idx}/{len(paths)}] {path}")
+            scores_list.append(_load_scores(path))
         pooled = _merge_scores(paths)
         if not pooled:
             raise RuntimeError(f"Failed to load scores for {label}.")
@@ -822,11 +956,21 @@ def main() -> None:
 
     headers = ["Metric"] + labels + ["Problems"]
 
+    _log(args.progress, f"Computing metrics for {len(configs)} configs")
     rows, plot_data = _compute_metrics(groups, configs, sorted(common))
     table = _format_table(headers, rows)
     print(table)
     if args.diff:
-        diff_tables = _compute_pairwise_diffs(groups, configs, sorted(common), labels)
+        _log(args.progress, f"Computing pairwise diffs with '{args.diff_test}' test")
+        diff_tables = _compute_pairwise_diffs(
+            groups,
+            configs,
+            sorted(common),
+            labels,
+            args.diff_test,
+            args.bootstrap_iters,
+            args.seed,
+        )
         for title, diff_table in diff_tables:
             print()
             print(title)
