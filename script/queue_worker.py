@@ -322,8 +322,6 @@ def main() -> None:
 
     if args.queue_host:
         remote_root = args.queue_remote_root
-        if not args.queue_file:
-            args.queue_file = f"{remote_root}/jobs/hmmt25_jobs.txt"
         if not args.queue_pop_script:
             args.queue_pop_script = f"{remote_root}/script/queue_pop_job.py"
         if not args.queue_append_script:
@@ -335,8 +333,6 @@ def main() -> None:
         if not args.failed_file:
             args.failed_file = f"{remote_root}/jobs/failed_jobs.txt"
     else:
-        if not args.queue_file:
-            args.queue_file = f"{root_dir}/jobs/hmmt25_jobs.txt"
         if not args.queue_pop_script:
             args.queue_pop_script = f"{root_dir}/script/queue_pop_job.py"
         if not args.queue_append_script:
@@ -347,6 +343,9 @@ def main() -> None:
             args.worker_state_file = f"{root_dir}/jobs/worker_state.json"
         if not args.failed_file:
             args.failed_file = f"{root_dir}/jobs/failed_jobs.txt"
+
+    if not args.queue_file:
+        parser.error("--queue-file is required (or set QUEUE_FILE).")
 
     if not args.stale_after:
         args.stale_after = max(2 * args.ping_interval, args.ping_interval + 60)

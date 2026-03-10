@@ -6,7 +6,7 @@ This worker runs jobs from a shared queue on a **host** machine over SSH and kee
 
 Nothing is required for the system to work. The host only needs the queue files and scripts:
 
-- `jobs/hmmt25_jobs.txt`
+- `jobs/benchmarkname_jobs.txt`
 - `jobs/failed_jobs.txt`
 - `jobs/worker_state.json` (created automatically)
 - `script/queue_pop_job.py`
@@ -16,18 +16,17 @@ Nothing is required for the system to work. The host only needs the queue files 
 Optional (for monitoring):
 
 ```
-QUEUE_FILE="/home/zli/SimpleDeco/jobs/hmmt25_jobs.txt" \
-WORKER_STATE_FILE="/home/zli/SimpleDeco/jobs/worker_state.json" \
+QUEUE_FILE="jobs/hmmt25_jobs.txt" \
+WORKER_STATE_FILE="jobs/worker_state.json" \
 STALE_AFTER=1200 \
 bash script/queue_top.sh
 ```
 
 ## What to run on the worker node
 
-Minimal example (only host + worker id + gpu):
-
 ```
 QUEUE_HOST="zli@100.84.104.59" \
+QUEUE_FILE="jobs/gpqa_diamond_jobs.txt" \
 WORKER_ID="modal_h200_1" \
 GPU_ID=0 \
 bash script/queue_worker.sh --ssh-pass "test1234"
@@ -40,7 +39,6 @@ When `QUEUE_HOST` is set, these default to the remote repo root:
 - `QUEUE_POP_SCRIPT` → `SimpleDeco/script/queue_pop_job.py`
 - `QUEUE_APPEND_SCRIPT` → `SimpleDeco/script/queue_append_job.py`
 - `QUEUE_WORKER_STATE_SCRIPT` → `SimpleDeco/script/queue_worker_state.py`
-- `QUEUE_FILE` → `SimpleDeco/jobs/hmmt25_jobs.txt`
 - `FAILED_FILE` → `SimpleDeco/jobs/failed_jobs.txt`
 - `WORKER_STATE_FILE` → `SimpleDeco/jobs/worker_state.json`
 
