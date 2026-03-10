@@ -762,6 +762,24 @@ def _log(enabled: bool, message: str) -> None:
         print(message, file=sys.stderr, flush=True)
 
 
+def _is_greedy_tag(name: str) -> bool:
+    return "greedy" in name.lower()
+
+
+def _expand_samples(scores: Dict[str, List[float]], target: int) -> Dict[str, List[float]]:
+    expanded: Dict[str, List[float]] = {}
+    for pid, vals in scores.items():
+        if not vals:
+            continue
+        if len(vals) >= target:
+            expanded[pid] = list(vals[:target])
+            continue
+        times = target // len(vals)
+        remainder = target % len(vals)
+        expanded[pid] = list(vals) * times + list(vals[:remainder])
+    return expanded
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -839,6 +857,15 @@ def main() -> None:
         help="Maximum k to compute (default: 64).",
     )
     parser.add_argument(
+        "--greedy-samples",
+        type=int,
+        default=16,
+        help=(
+            "When an input tag contains 'greedy', pretend each problem has this many samples "
+            "(default: 16)."
+        ),
+    )
+    parser.add_argument(
         "--labels",
         action="append",
         help="Comma-separated labels for inputs (same order as --inputs).",
@@ -869,7 +896,15 @@ def main() -> None:
     args = parser.parse_args()
 
     input_specs = _parse_csv_args(args.inputs)
-    input_labels = list(input_specs)
+    input_groups: List[Dict[str, Any]] = []
+    for spec in input_specs:
+        input_groups.append(
+            {
+                "spec": spec,
+                "label": spec,
+                "greedy": _is_greedy_tag(spec),
+            }
+        )
 
     tag_specs = _parse_csv_args(args.tags)
     if tag_specs:
@@ -877,48 +912,90 @@ def main() -> None:
             raise ValueError("--dataset is required when using --tags.")
         for tag in tag_specs:
             spec = os.path.join(args.ckpt_root, args.dataset, tag, "*.jsonl")
-            input_specs.append(spec)
-            input_labels.append(tag)
+            input_groups.append(
+                {
+                    "spec": spec,
+                    "label": tag,
+                    "greedy": _is_greedy_tag(tag),
+                }
+            )
 
-    if not input_specs:
+    if not input_groups:
         raise RuntimeError("No inputs provided. Use --inputs or --dataset/--tags.")
 
     label_specs = _parse_csv_args(args.labels)
-    if label_specs and len(label_specs) != len(input_specs):
+    if label_specs and len(label_specs) != len(input_groups):
         raise ValueError("Number of labels must match number of inputs.")
-    labels = label_specs if label_specs else input_labels
+    if label_specs:
+        for group, label in zip(input_groups, label_specs):
+            group["label"] = label
+            group["greedy"] = group["greedy"] or _is_greedy_tag(label)
+    labels = [group["label"] for group in input_groups]
     focus_idx = _resolve_focus_index(labels, args.focus)
 
-    groups_raw: List[Tuple[str, List[Path]]] = []
-    for spec in input_specs:
-        groups_raw.append((spec, _resolve_inputs(spec)))
+    groups_raw: List[Dict[str, Any]] = []
+    for group in input_groups:
+        groups_raw.append(
+            {
+                "spec": group["spec"],
+                "label": group["label"],
+                "greedy": group["greedy"],
+                "paths": _resolve_inputs(group["spec"]),
+            }
+        )
 
-    counts = [len(paths) for _, paths in groups_raw]
-    if len(set(counts)) > 1:
-        min_seeds = min(counts)
-        counts_str = ", ".join(
-            f"{label}={count}" for label, count in zip(labels, counts)
-        )
-        prompt = (
-            f"Found differing counts ({counts_str}). "
-            f"Use {min_seeds} seeds by randomly subsampling larger sets? [y/N]: "
-        )
-        response = input(prompt).strip().lower()
-        if response not in ("y", "yes"):
-            print("Aborting without computing metrics.")
-            sys.exit(1)
-        new_groups_raw: List[Tuple[str, List[Path]]] = []
-        for (spec, paths), label in zip(groups_raw, labels):
-            if len(paths) > min_seeds:
-                paths = _sample_paths(paths, min_seeds, args.seed)
-                print(f"Subsampled {label} to {min_seeds} files:")
-                for path in paths:
-                    print(f"  {path}")
-            new_groups_raw.append((spec, paths))
-        groups_raw = new_groups_raw
+    counts = [len(group["paths"]) for group in groups_raw]
+    non_greedy_counts = [len(group["paths"]) for group in groups_raw if not group["greedy"]]
+    if non_greedy_counts:
+        target_seeds = min(non_greedy_counts)
+        if len(set(non_greedy_counts)) > 1:
+            counts_str = ", ".join(
+                f"{group['label']}={len(group['paths'])}"
+                for group in groups_raw
+                if not group["greedy"]
+            )
+            prompt = (
+                f"Found differing counts ({counts_str}). "
+                f"Use {target_seeds} seeds by randomly subsampling larger sets? [y/N]: "
+            )
+            response = input(prompt).strip().lower()
+            if response not in ("y", "yes"):
+                print("Aborting without computing metrics.")
+                sys.exit(1)
+            for group in groups_raw:
+                if group["greedy"]:
+                    continue
+                if len(group["paths"]) > target_seeds:
+                    group["paths"] = _sample_paths(group["paths"], target_seeds, args.seed)
+                    print(f"Subsampled {group['label']} to {target_seeds} files:")
+                    for path in group["paths"]:
+                        print(f"  {path}")
+    else:
+        target_seeds = min(counts)
+        if len(set(counts)) > 1:
+            counts_str = ", ".join(
+                f"{group['label']}={len(group['paths'])}" for group in groups_raw
+            )
+            prompt = (
+                f"Found differing counts ({counts_str}). "
+                f"Use {target_seeds} seeds by randomly subsampling larger sets? [y/N]: "
+            )
+            response = input(prompt).strip().lower()
+            if response not in ("y", "yes"):
+                print("Aborting without computing metrics.")
+                sys.exit(1)
+            for group in groups_raw:
+                if len(group["paths"]) > target_seeds:
+                    group["paths"] = _sample_paths(group["paths"], target_seeds, args.seed)
+                    print(f"Subsampled {group['label']} to {target_seeds} files:")
+                    for path in group["paths"]:
+                        print(f"  {path}")
 
     groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]] = []
-    for label, paths in zip(labels, [paths for _, paths in groups_raw]):
+    for group in groups_raw:
+        label = group["label"]
+        paths = group["paths"]
+        is_greedy = group["greedy"]
         _log(args.progress, f"Loading {label}: {len(paths)} file(s)")
         scores_list: List[Dict[str, List[float]]] = []
         for idx, path in enumerate(paths, 1):
@@ -927,6 +1004,18 @@ def main() -> None:
         pooled = _merge_scores(paths)
         if not pooled:
             raise RuntimeError(f"Failed to load scores for {label}.")
+        if is_greedy:
+            scores_list = [
+                _expand_samples(scores, args.greedy_samples) for scores in scores_list
+            ]
+            pooled = _expand_samples(pooled, args.greedy_samples)
+            if target_seeds and len(scores_list) != target_seeds:
+                if len(scores_list) < target_seeds:
+                    scores_list = [
+                        scores_list[i % len(scores_list)] for i in range(target_seeds)
+                    ]
+                else:
+                    scores_list = scores_list[:target_seeds]
         groups.append((label, scores_list, pooled))
 
     all_dicts: List[Dict[str, List[float]]] = []
@@ -948,6 +1037,8 @@ def main() -> None:
 
     if args.max_k < 1:
         raise ValueError("--max-k must be >= 1.")
+    if args.greedy_samples < 1:
+        raise ValueError("--greedy-samples must be >= 1.")
     effective_max_k = min(args.max_k, min_samples_pooled)
     configs = _parse_configs(args.config, max_k=effective_max_k)
     if not configs:
