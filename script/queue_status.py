@@ -168,11 +168,11 @@ def watch_curses(args: argparse.Namespace) -> None:
         if curses.has_colors():
             curses.start_color()
             has_colors = True
-            curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
-            curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
-            curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
-            curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-            curses.init_pair(5, curses.COLOR_RED, curses.COLOR_BLACK)
+            curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+            curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
+            curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_WHITE)
+            curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_WHITE)
+            curses.init_pair(5, curses.COLOR_RED, curses.COLOR_WHITE)
 
         while True:
             status = collect_status(args.file, args.state_file, args.stale_after)
@@ -185,14 +185,14 @@ def watch_curses(args: argparse.Namespace) -> None:
                 if len(rows) < height:
                     rows.append((hint, "hint"))
 
-            stdscr.bkgd(" ", curses.color_pair(2) if has_colors else curses.A_NORMAL)
+            stdscr.bkgd(" ", curses.color_pair(1) if has_colors else curses.A_NORMAL)
             stdscr.erase()
             for idx, (line, style) in enumerate(rows[:height]):
                 attr = curses.A_NORMAL
                 if style == "header":
-                    attr = curses.A_REVERSE | curses.A_BOLD
+                    attr = curses.A_NORMAL
                     if has_colors:
-                        attr = curses.color_pair(1) | curses.A_BOLD
+                        attr = curses.color_pair(1)
                 elif style == "section":
                     attr = curses.A_BOLD
                     if has_colors:
