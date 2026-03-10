@@ -2,9 +2,9 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
-import textwrap
 import time
 
 
@@ -60,47 +60,6 @@ def collect_status(queue_file: str, state_file, stale_after: int) -> dict:
     return status
 
 
-def wrap_with_prefix(text: str, prefix: str, width: int):
-    if width <= len(prefix) + 2:
-        return [f"{prefix}{text[: max(0, width - len(prefix))]}"]
-    wrapped = textwrap.wrap(text, width=width - len(prefix)) or [""]
-    lines = [prefix + wrapped[0]]
-    indent = " " * len(prefix)
-    for chunk in wrapped[1:]:
-        lines.append(indent + chunk)
-    return lines
-
-
-def common_prefix(strings):
-    if not strings:
-        return ""
-    prefix = strings[0]
-    for item in strings[1:]:
-        limit = min(len(prefix), len(item))
-        idx = 0
-        while idx < limit and prefix[idx] == item[idx]:
-            idx += 1
-        prefix = prefix[:idx]
-        if not prefix:
-            break
-    return prefix
-
-
-def common_suffix(strings):
-    if not strings:
-        return ""
-    suffix = strings[0]
-    for item in strings[1:]:
-        limit = min(len(suffix), len(item))
-        idx = 0
-        while idx < limit and suffix[-(idx + 1)] == item[-(idx + 1)]:
-            idx += 1
-        suffix = suffix[len(suffix) - idx :] if idx else ""
-        if not suffix:
-            break
-    return suffix
-
-
 def elide_middle(text: str, max_len: int):
     if max_len <= 3:
         return text[:max_len]
@@ -115,67 +74,72 @@ def elide_middle(text: str, max_len: int):
     return f"{text[:keep_start]}...{text[-keep_end:]}"
 
 
-def summarize_jobs_for_display(jobs, width: int):
-    lines = []
-    if not jobs:
-        return lines
+def extract_job_label(job: str):
+    patterns = [
+        r"--save_outputs\s+(\S+)",
+        r"\btee\s+(\S+)",
+        r"-s\s+(\S+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, job)
+        if match:
+            return match.group(1).strip("\"'")
 
-    if len(jobs) == 1:
-        lines.extend(wrap_with_prefix(jobs[0], "- ", width))
-        return lines
+    matches = re.findall(
+        r"([A-Za-z0-9_./-]+\.(?:jsonl|log|txt|json|yaml|yml|csv))", job
+    )
+    if matches:
+        return matches[-1]
 
-    prefix = common_prefix(jobs)
-    suffix = common_suffix(jobs)
-    min_len = min(len(job) for job in jobs)
-    usable_prefix = len(prefix) >= 16
-    usable_suffix = len(suffix) >= 16
-    has_middle = len(prefix) + len(suffix) + 6 < min_len
+    return job.strip()
 
-    if (usable_prefix or usable_suffix) and has_middle:
-        template = f"{prefix}...{suffix}"
-        lines.extend(
-            wrap_with_prefix(elide_middle(template, max(10, width - 10)), "Template: ", width)
-        )
-        lines.append("  (showing only differing segments)")
-        for job in jobs:
-            middle = job[len(prefix) : len(job) - len(suffix) if suffix else None]
-            middle = middle.strip() or "(no diff)"
-            lines.extend(wrap_with_prefix(middle, "  - ", width))
-        return lines
 
-    for job in jobs:
-        lines.extend(wrap_with_prefix(job, "- ", width))
-    return lines
+def job_display(job: str, width: int):
+    label = extract_job_label(job)
+    return elide_middle(label, max(12, width))
+
+
+def fit_line(text: str, width: int):
+    if width <= 0:
+        return ""
+    return elide_middle(text, width)
+
+
+def build_display_rows(status: dict, head: int, width: int, now_str: str):
+    rows = []
+    rows.append(("Queue Status " + now_str, "header"))
+    rows.append(("", "blank"))
+    rows.append((f"Queue file: {status['queue_file']}", "meta"))
+    rows.append((f"Remaining jobs: {status['remaining']}", "meta"))
+    rows.append(("", "blank"))
+    rows.append(("Next jobs:", "section"))
+
+    if status["jobs"] and head > 0:
+        for idx, job in enumerate(status["jobs"][:head], 1):
+            label = job_display(job, max(10, width - 6))
+            rows.append((f"{idx:>2}. {label}", "job"))
+    else:
+        rows.append(("  (none)", "dim"))
+
+    rows.append(("", "blank"))
+    rows.append(("Workers:", "section"))
+    if status["workers"]:
+        for worker in status["workers"]:
+            base = f"{worker['id']} | {worker['status']} | last ping {worker['age_str']}"
+            if worker["job"]:
+                label = job_display(worker["job"], max(10, width - 10))
+                base = f"{base} | {label}"
+            style = f"worker_{worker['status']}"
+            rows.append((base, style))
+    else:
+        rows.append(("  (none)", "dim"))
+
+    return rows
 
 
 def format_status_lines(status: dict, head: int, width: int, now_str: str):
-    lines = []
-    lines.append(now_str)
-    lines.append("")
-    lines.append(f"Queue file: {status['queue_file']}")
-    lines.append(f"Remaining jobs: {status['remaining']}")
-
-    if head > 0:
-        if status["jobs"]:
-            lines.append("Next jobs:")
-            lines.extend(summarize_jobs_for_display(status["jobs"][:head], width))
-        else:
-            lines.append("Next jobs: (none)")
-
-    if status["workers"]:
-        lines.append("")
-        lines.append("Workers:")
-        for worker in status["workers"]:
-            base = f"{worker['id']} | {worker['status']} | last ping {worker['age_str']}"
-            lines.extend(wrap_with_prefix(base, "- ", width))
-            if worker["job"]:
-                job_display = elide_middle(worker["job"], max(20, width - 7))
-                lines.extend(wrap_with_prefix(job_display, "  job: ", width))
-    else:
-        lines.append("")
-        lines.append("Workers: (none)")
-
-    return lines
+    rows = build_display_rows(status, head, width, now_str)
+    return [fit_line(text, width) for text, _style in rows]
 
 
 def render_plain(status: dict, head: int) -> None:
@@ -200,21 +164,57 @@ def watch_curses(args: argparse.Namespace) -> None:
     def _run(stdscr) -> None:
         curses.curs_set(0)
         stdscr.nodelay(True)
+        has_colors = False
+        if curses.has_colors():
+            curses.start_color()
+            curses.use_default_colors()
+            has_colors = True
+            curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+            curses.init_pair(2, curses.COLOR_CYAN, -1)
+            curses.init_pair(3, curses.COLOR_GREEN, -1)
+            curses.init_pair(4, curses.COLOR_YELLOW, -1)
+            curses.init_pair(5, curses.COLOR_RED, -1)
 
         while True:
             status = collect_status(args.file, args.state_file, args.stale_after)
             height, width = stdscr.getmaxyx()
             now_str = time.strftime("%Y-%m-%d %H:%M:%S")
-            lines = format_status_lines(status, args.head, width, now_str)
+            rows = build_display_rows(status, args.head, width, now_str)
             hint = "Press q to quit"
             if height > 0:
-                lines = lines[: max(0, height - 1)]
-                if len(lines) < height:
-                    lines.append(hint)
+                rows = rows[: max(0, height - 1)]
+                if len(rows) < height:
+                    rows.append((hint, "hint"))
 
             stdscr.erase()
-            for idx, line in enumerate(lines[:height]):
-                stdscr.addnstr(idx, 0, line, max(0, width - 1))
+            for idx, (line, style) in enumerate(rows[:height]):
+                attr = curses.A_NORMAL
+                if style == "header":
+                    attr = curses.A_REVERSE | curses.A_BOLD
+                    if has_colors:
+                        attr = curses.color_pair(1) | curses.A_BOLD
+                elif style == "section":
+                    attr = curses.A_BOLD
+                    if has_colors:
+                        attr = curses.color_pair(2) | curses.A_BOLD
+                elif style == "dim":
+                    attr = curses.A_DIM
+                elif style == "worker_running":
+                    attr = curses.A_BOLD
+                    if has_colors:
+                        attr = curses.color_pair(3) | curses.A_BOLD
+                elif style == "worker_stale":
+                    attr = curses.A_BOLD
+                    if has_colors:
+                        attr = curses.color_pair(5) | curses.A_BOLD
+                elif style == "worker_idle":
+                    attr = curses.A_BOLD
+                    if has_colors:
+                        attr = curses.color_pair(4) | curses.A_BOLD
+                elif style == "hint":
+                    attr = curses.A_DIM
+
+                stdscr.addnstr(idx, 0, fit_line(line, max(0, width - 1)), max(0, width - 1), attr)
             stdscr.refresh()
 
             steps = max(1, int(args.interval / 0.1))
