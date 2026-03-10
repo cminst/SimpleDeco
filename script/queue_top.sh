@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-QUEUE_FILE="${QUEUE_FILE:-$ROOT_DIR/jobs/hmmt25_jobs.txt}"
+QUEUE_FILE="${QUEUE_FILE:-}"
 QUEUE_HOST="${QUEUE_HOST:-}"
 QUEUE_STATUS_SCRIPT="${QUEUE_STATUS_SCRIPT:-$ROOT_DIR/script/queue_status.py}"
 WORKER_STATE_FILE="${WORKER_STATE_FILE:-$ROOT_DIR/jobs/worker_state.json}"
@@ -19,6 +19,11 @@ show_status() {
     python3 "$QUEUE_STATUS_SCRIPT" --file "$QUEUE_FILE" --head "$HEAD" --state-file "$WORKER_STATE_FILE" --stale-after "$STALE_AFTER"
   fi
 }
+
+if [[ -z "$QUEUE_FILE" ]]; then
+  echo "Error: QUEUE_FILE must be set." >&2
+  exit 1
+fi
 
 while true; do
   clear

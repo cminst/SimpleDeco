@@ -22,7 +22,16 @@ STALE_AFTER=1200 \
 bash script/queue_top.sh
 ```
 
-## What to run on the worker node
+## Host Node
+
+```
+QUEUE_FILE="jobs/gpqa_diamond_jobs.txt" \
+WORKER_ID="host_pro6000" \
+GPU_ID=0 \
+bash script/queue_worker.sh
+```
+
+## Worker Node
 
 ```
 QUEUE_HOST="zli@100.84.104.59" \
