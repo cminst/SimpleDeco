@@ -11,12 +11,22 @@ STALE_AFTER="${STALE_AFTER:-1800}"
 SSH_OPTS="${SSH_OPTS:-}"
 INTERVAL="${INTERVAL:-10}"
 HEAD="${HEAD:-5}"
+USE_CURSES="${USE_CURSES:-1}"
 
 show_status() {
-  if [[ -n "$QUEUE_HOST" ]]; then
-    ssh $SSH_OPTS "$QUEUE_HOST" "python3 '$QUEUE_STATUS_SCRIPT' --file '$QUEUE_FILE' --head '$HEAD' --state-file '$WORKER_STATE_FILE' --stale-after '$STALE_AFTER'"
+  local cmd
+  cmd=(python3 "$QUEUE_STATUS_SCRIPT" --file "$QUEUE_FILE" --head "$HEAD" --state-file "$WORKER_STATE_FILE" --stale-after "$STALE_AFTER" --watch --interval "$INTERVAL")
+  if [[ "$USE_CURSES" == "0" ]]; then
+    cmd+=(--no-curses)
   else
-    python3 "$QUEUE_STATUS_SCRIPT" --file "$QUEUE_FILE" --head "$HEAD" --state-file "$WORKER_STATE_FILE" --stale-after "$STALE_AFTER"
+    cmd+=(--curses)
+  fi
+  if [[ -n "$QUEUE_HOST" ]]; then
+    local cmd_str
+    cmd_str=$(printf '%q ' "${cmd[@]}")
+    ssh $SSH_OPTS "$QUEUE_HOST" "$cmd_str"
+  else
+    "${cmd[@]}"
   fi
 }
 
@@ -25,10 +35,4 @@ if [[ -z "$QUEUE_FILE" ]]; then
   exit 1
 fi
 
-while true; do
-  clear
-  date +"%Y-%m-%d %H:%M:%S"
-  echo
-  show_status
-  sleep "$INTERVAL"
-done
+show_status
