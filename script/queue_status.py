@@ -71,6 +71,83 @@ def wrap_with_prefix(text: str, prefix: str, width: int):
     return lines
 
 
+def common_prefix(strings):
+    if not strings:
+        return ""
+    prefix = strings[0]
+    for item in strings[1:]:
+        limit = min(len(prefix), len(item))
+        idx = 0
+        while idx < limit and prefix[idx] == item[idx]:
+            idx += 1
+        prefix = prefix[:idx]
+        if not prefix:
+            break
+    return prefix
+
+
+def common_suffix(strings):
+    if not strings:
+        return ""
+    suffix = strings[0]
+    for item in strings[1:]:
+        limit = min(len(suffix), len(item))
+        idx = 0
+        while idx < limit and suffix[-(idx + 1)] == item[-(idx + 1)]:
+            idx += 1
+        suffix = suffix[len(suffix) - idx :] if idx else ""
+        if not suffix:
+            break
+    return suffix
+
+
+def elide_middle(text: str, max_len: int):
+    if max_len <= 3:
+        return text[:max_len]
+    if len(text) <= max_len:
+        return text
+    keep = max_len - 3
+    keep_start = max(8, keep // 2)
+    keep_end = keep - keep_start
+    if keep_end < 4:
+        keep_start = max(4, keep_start - (4 - keep_end))
+        keep_end = keep - keep_start
+    return f"{text[:keep_start]}...{text[-keep_end:]}"
+
+
+def summarize_jobs_for_display(jobs, width: int):
+    lines = []
+    if not jobs:
+        return lines
+
+    if len(jobs) == 1:
+        lines.extend(wrap_with_prefix(jobs[0], "- ", width))
+        return lines
+
+    prefix = common_prefix(jobs)
+    suffix = common_suffix(jobs)
+    min_len = min(len(job) for job in jobs)
+    usable_prefix = len(prefix) >= 16
+    usable_suffix = len(suffix) >= 16
+    has_middle = len(prefix) + len(suffix) + 6 < min_len
+
+    if (usable_prefix or usable_suffix) and has_middle:
+        template = f"{prefix}...{suffix}"
+        lines.extend(
+            wrap_with_prefix(elide_middle(template, max(10, width - 10)), "Template: ", width)
+        )
+        lines.append("  (showing only differing segments)")
+        for job in jobs:
+            middle = job[len(prefix) : len(job) - len(suffix) if suffix else None]
+            middle = middle.strip() or "(no diff)"
+            lines.extend(wrap_with_prefix(middle, "  - ", width))
+        return lines
+
+    for job in jobs:
+        lines.extend(wrap_with_prefix(job, "- ", width))
+    return lines
+
+
 def format_status_lines(status: dict, head: int, width: int, now_str: str):
     lines = []
     lines.append(now_str)
@@ -81,8 +158,7 @@ def format_status_lines(status: dict, head: int, width: int, now_str: str):
     if head > 0:
         if status["jobs"]:
             lines.append("Next jobs:")
-            for job in status["jobs"][:head]:
-                lines.extend(wrap_with_prefix(job, "- ", width))
+            lines.extend(summarize_jobs_for_display(status["jobs"][:head], width))
         else:
             lines.append("Next jobs: (none)")
 
@@ -93,7 +169,8 @@ def format_status_lines(status: dict, head: int, width: int, now_str: str):
             base = f"{worker['id']} | {worker['status']} | last ping {worker['age_str']}"
             lines.extend(wrap_with_prefix(base, "- ", width))
             if worker["job"]:
-                lines.extend(wrap_with_prefix(worker["job"], "  job: ", width))
+                job_display = elide_middle(worker["job"], max(20, width - 7))
+                lines.extend(wrap_with_prefix(job_display, "  job: ", width))
     else:
         lines.append("")
         lines.append("Workers: (none)")
