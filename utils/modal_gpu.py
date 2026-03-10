@@ -1,6 +1,7 @@
 import os
-import subprocess
 import pathlib
+import shutil
+import subprocess
 import modal
 
 image = (
@@ -57,17 +58,38 @@ def runwithgpu():
     repo = pathlib.Path("/root/SimpleDeco")
     token = "modal"
 
-    if not repo.exists():
+    temp_clone_path = pathlib.Path("/tmp/SimpleDeco_temp_clone")
+
+    if not (repo / ".git").exists():
+        # Ensure temporary clone path is clean before cloning
+        if temp_clone_path.exists():
+            shutil.rmtree(temp_clone_path)
+
         subprocess.run(
             [
                 "git",
                 "clone",
                 "https://github.com/cminst/SimpleDeco.git",
                 "--recurse-submodules",
-                str(repo),
+                str(temp_clone_path),
             ],
             check=True,
         )
+
+        # Clear existing contents of the target volume mount point (`repo`)
+        repo.mkdir(parents=True, exist_ok=True)
+        if repo.exists():
+            for item in repo.iterdir():
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+
+        # `/root/SimpleDeco` is a mounted Modal volume, so moving the cloned
+        # directory onto it fails. Copy the repo contents into the mount instead.
+        shutil.copytree(temp_clone_path, repo, dirs_exist_ok=True, symlinks=True)
+        shutil.rmtree(temp_clone_path)
+
         autodeco_volume.commit()
 
     os.chdir("/root")

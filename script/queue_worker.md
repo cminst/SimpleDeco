@@ -35,7 +35,7 @@ bash script/queue_worker.sh
 
 ```
 QUEUE_HOST="zli@100.84.104.59" \
-QUEUE_FILE="jobs/gpqa_diamond_jobs.txt" \
+QUEUE_FILE="/home/zli/SimpleDeco/jobs/gpqa_diamond_jobs.txt" \
 WORKER_ID="modal_h200_1" \
 GPU_ID=0 \
 bash script/queue_worker.sh --ssh-pass "test1234"
