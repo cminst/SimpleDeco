@@ -167,12 +167,14 @@ def watch_curses(args: argparse.Namespace) -> None:
         has_colors = False
         if curses.has_colors():
             curses.start_color()
+            try:
+                curses.use_default_colors()
+            except Exception:
+                pass
             has_colors = True
-            curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
-            curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
-            curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_WHITE)
-            curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_WHITE)
-            curses.init_pair(5, curses.COLOR_RED, curses.COLOR_WHITE)
+            curses.init_pair(3, curses.COLOR_GREEN, -1)
+            curses.init_pair(4, curses.COLOR_YELLOW, -1)
+            curses.init_pair(5, curses.COLOR_RED, -1)
 
         while True:
             status = collect_status(args.file, args.state_file, args.stale_after)
@@ -185,18 +187,14 @@ def watch_curses(args: argparse.Namespace) -> None:
                 if len(rows) < height:
                     rows.append((hint, "hint"))
 
-            stdscr.bkgd(" ", curses.color_pair(1) if has_colors else curses.A_NORMAL)
+            stdscr.bkgd(" ", curses.A_NORMAL)
             stdscr.erase()
             for idx, (line, style) in enumerate(rows[:height]):
                 attr = curses.A_NORMAL
                 if style == "header":
-                    attr = curses.A_NORMAL
-                    if has_colors:
-                        attr = curses.color_pair(1)
+                    attr = curses.A_BOLD
                 elif style == "section":
                     attr = curses.A_BOLD
-                    if has_colors:
-                        attr = curses.color_pair(2) | curses.A_BOLD
                 elif style == "dim":
                     attr = curses.A_DIM
                 elif style == "worker_running":
