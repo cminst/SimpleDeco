@@ -3,6 +3,35 @@ import argparse
 import fcntl
 import os
 import sys
+import tempfile
+
+
+def _lock_path(path: str) -> str:
+    return f"{path}.lock"
+
+
+def _read_lines(path: str) -> list[str]:
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read().splitlines()
+
+
+def _write_lines_atomic(path: str, lines: list[str]) -> None:
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=".queue_tmp_", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            if lines:
+                handle.write("\n".join(lines))
+                handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def pop_job(path: str) -> str:
@@ -10,10 +39,10 @@ def pop_job(path: str) -> str:
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    with open(path, "a+") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        handle.seek(0)
-        lines = handle.read().splitlines()
+    lock_path = _lock_path(path)
+    with open(lock_path, "a+") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        lines = _read_lines(path)
 
         job = ""
         idx = None
@@ -29,11 +58,7 @@ def pop_job(path: str) -> str:
             return ""
 
         del lines[idx]
-        handle.seek(0)
-        handle.truncate(0)
-        if lines:
-            handle.write("\n".join(lines))
-            handle.write("\n")
+        _write_lines_atomic(path, lines)
 
     return job
 

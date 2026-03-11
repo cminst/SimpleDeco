@@ -3,6 +3,35 @@ import argparse
 import fcntl
 import os
 import sys
+import tempfile
+
+
+def _lock_path(path: str) -> str:
+    return f"{path}.lock"
+
+
+def _read_lines(path: str) -> list[str]:
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read().splitlines()
+
+
+def _write_lines_atomic(path: str, lines: list[str]) -> None:
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=".queue_tmp_", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            if lines:
+                handle.write("\n".join(lines))
+                handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def append_job(path: str, job: str, prepend: bool = False) -> None:
@@ -14,29 +43,15 @@ def append_job(path: str, job: str, prepend: bool = False) -> None:
     if not job:
         return
 
-    if prepend:
-        mode = "r+" if os.path.exists(path) else "w+"
-    else:
-        mode = "a+"
-
-    with open(path, mode) as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    lock_path = _lock_path(path)
+    with open(lock_path, "a+") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        lines = _read_lines(path)
         if prepend:
-            handle.seek(0)
-            existing = handle.read().rstrip("\n")
-            handle.seek(0)
-            handle.truncate(0)
-            handle.write(job)
-            handle.write("\n")
-            if existing:
-                handle.write(existing)
-                handle.write("\n")
+            lines = [job] + lines
         else:
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() > 0:
-                handle.write("\n")
-            handle.write(job)
-            handle.write("\n")
+            lines = lines + [job]
+        _write_lines_atomic(path, lines)
 
 
 def main() -> None:

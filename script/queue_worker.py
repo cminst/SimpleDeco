@@ -179,14 +179,17 @@ class QueueWorker:
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(self.gpu_id)
         env["VLLM_DISABLE_COMPILE_CACHE"] = "1"
-        command = f'cd "{self.root_dir}" && {job_line}'
+        command = f'cd "{self.root_dir}" && set -o pipefail && {job_line}'
 
         with self._lock:
             self._current_job = job_line
             self._job_running = True
             self._job_started = time.time()
 
-        self._send_ping("running", job_line=job_line)
+        try:
+            self._send_ping("running", job_line=job_line)
+        except KeyboardInterrupt:
+            pass
 
         proc = subprocess.Popen(["bash", "-lc", command], env=env)
         interrupted = False
@@ -205,7 +208,10 @@ class QueueWorker:
             self._current_job = ""
             self._job_running = False
             self._job_started = None
-        self._send_ping("idle")
+        try:
+            self._send_ping("idle")
+        except KeyboardInterrupt:
+            pass
         return returncode, interrupted
 
     def _clear_worker(self):
@@ -274,7 +280,10 @@ class QueueWorker:
         finally:
             self._stop_event.set()
             if self.clear_on_exit:
-                self._clear_worker()
+                try:
+                    self._clear_worker()
+                except KeyboardInterrupt:
+                    pass
 
 
 def main() -> None:
