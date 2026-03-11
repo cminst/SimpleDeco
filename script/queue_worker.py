@@ -261,8 +261,11 @@ class QueueWorker:
                         else:
                             print("Max retries reached. Recording failure.")
                             self._append_job(job, failed=True)
-                    if self.stop_on_fail:
-                        break
+                    else:
+                        print("Re-queue disabled; recording failure.")
+                        self._append_job(job, failed=True)
+                    print("Exiting after failure.")
+                    break
 
                 self._run_count += 1
                 if self.max_jobs_to_run > 0 and self._run_count >= self.max_jobs_to_run:
