@@ -101,15 +101,59 @@ def _extract_score(row: Dict[str, Any]) -> float | None:
     return None
 
 
-def _load_scores(path: Path) -> Dict[str, List[float]]:
+def _extract_response_and_gt(row: Dict[str, Any]) -> Tuple[str | None, Any | None]:
+    meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    response = None
+    for key in ("response", "completion", "solution", "output", "generated", "answer"):
+        if key in row and isinstance(row[key], str):
+            response = row[key]
+            break
+    ground_truth = None
+    for key in ("ground_truth", "gt", "answer"):
+        if key in meta:
+            ground_truth = meta[key]
+            break
+        if key in row:
+            ground_truth = row[key]
+            break
+    return response, ground_truth
+
+
+def _compute_score_from_row(row: Dict[str, Any]) -> float | None:
+    response, ground_truth = _extract_response_and_gt(row)
+    if response is None or ground_truth is None:
+        return None
+    try:
+        return float(compute_score(response, ground_truth))
+    except Exception:
+        return None
+
+
+def _load_scores(
+    path: Path,
+    recompute_score: bool = False,
+    update_jsonl: bool = False,
+    progress: bool = False,
+) -> Dict[str, List[float]]:
     problems: Dict[str, List[Tuple[int, int, float]]] = defaultdict(list)
     per_problem_counter: Dict[str, int] = defaultdict(int)
+    rows = list(_read_jsonl(path))
+    changed = False
 
-    for row_idx, row in enumerate(_read_jsonl(path)):
+    for row_idx, row in enumerate(rows):
         if isinstance(row.get("solutions"), list) and row.get("ground_truth") is not None:
             problem_id = _extract_problem_id(row, row_idx)
             ground_truth = row.get("ground_truth")
             scores_list = row.get("scores")
+            if recompute_score:
+                new_scores = [
+                    float(compute_score(str(solution), ground_truth))
+                    for solution in row["solutions"]
+                ]
+                if scores_list != new_scores:
+                    row["scores"] = new_scores
+                    changed = True
+                scores_list = new_scores
             for sol_idx, solution in enumerate(row["solutions"]):
                 score = None
                 if isinstance(scores_list, list) and sol_idx < len(scores_list):
@@ -129,10 +173,30 @@ def _load_scores(path: Path) -> Dict[str, List[float]]:
         sample_idx_default = per_problem_counter[problem_id]
         sample_idx = _extract_sample_index(row, sample_idx_default)
         per_problem_counter[problem_id] += 1
-        score = _extract_score(row)
+        if recompute_score:
+            recomputed = _compute_score_from_row(row)
+            if recomputed is not None:
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                if meta.get("score") != recomputed:
+                    meta["score"] = recomputed
+                    row["metadata"] = meta
+                    changed = True
+                score = recomputed
+            else:
+                score = _extract_score(row)
+        else:
+            score = _extract_score(row)
         if score is None:
             continue
         problems[problem_id].append((sample_idx, sample_idx_default, score))
+
+    if recompute_score and update_jsonl and changed:
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        tmp_path.replace(path)
+        _log(progress, f"Updated scores in {path}")
 
     ordered_scores: Dict[str, List[float]] = {}
     for problem_id, triples in problems.items():
@@ -818,6 +882,14 @@ def main() -> None:
         help="Optional output path for a PDF/PNG plot.",
     )
     parser.add_argument(
+        "--recompute-score",
+        action="store_true",
+        help=(
+            "Recompute scores from response + ground_truth using boxed_extract.compute_score "
+            "and overwrite JSONL files in place."
+        ),
+    )
+    parser.add_argument(
         "--maj-avg",
         choices=("pairs", "odd", "all"),
         default="pairs",
@@ -1000,7 +1072,14 @@ def main() -> None:
         scores_list: List[Dict[str, List[float]]] = []
         for idx, path in enumerate(paths, 1):
             _log(args.progress, f"  [{idx}/{len(paths)}] {path}")
-            scores_list.append(_load_scores(path))
+            scores_list.append(
+                _load_scores(
+                    path,
+                    recompute_score=args.recompute_score,
+                    update_jsonl=args.recompute_score,
+                    progress=args.progress,
+                )
+            )
         pooled = _merge_scores(paths)
         if not pooled:
             raise RuntimeError(f"Failed to load scores for {label}.")

@@ -23,6 +23,13 @@ def compute_score(solution_str, ground_truth) -> float:
             answer = remove_boxed(string_in_last_boxed)
             if is_equiv(answer, ground_truth):
                 retval = 1.0
+        else:
+            # Fallback for MCQ-style datasets (e.g., GPQA) where models may not use \\boxed{}.
+            gt_choice = normalize_multiple_choice_answer(str(ground_truth))
+            if gt_choice is not None:
+                pred_choice = extract_mcq_letter(solution_str)
+                if pred_choice is not None and pred_choice == gt_choice:
+                    retval = 1.0
     except Exception as e:
         print(e)
 
@@ -59,6 +66,36 @@ def normalize_multiple_choice_answer(string):
 
     string = string.rstrip(".,;:!")
     return string if re.fullmatch(r"[A-J]", string) else None
+
+
+def extract_mcq_letter(text: str):
+    """Extract a single multiple-choice letter (A-J) from a model response."""
+    if not text:
+        return None
+
+    # Prefer explicit "answer"/"option"/"choice" patterns near the end.
+    patterns = [
+        r"(?:final\s+answer|answer|option|choice)\s*[:\-]?\s*\\?\(?\s*([A-J])\s*\\?\)?",
+        r"(?:final\s+answer|answer|option|choice)\s+is\s+\\?\(?\s*([A-J])\s*\\?\)?",
+    ]
+    for pat in patterns:
+        matches = re.findall(pat, text, flags=re.IGNORECASE)
+        if matches:
+            return matches[-1].upper()
+
+    # Try last non-empty line as a compact answer line.
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if lines:
+        cand = normalize_multiple_choice_answer(lines[-1])
+        if cand is not None:
+            return cand
+
+    # As a last resort, take the last standalone letter token.
+    token_matches = re.findall(r"(?:^|\\b)([A-J])(?:\\b|$)", text, flags=re.IGNORECASE)
+    if token_matches:
+        return token_matches[-1].upper()
+
+    return None
 
 
 def remove_boxed(s):
