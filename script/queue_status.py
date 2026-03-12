@@ -55,6 +55,7 @@ def collect_status(queue_file: str, state_file, stale_after: int) -> dict:
                         "status": status_name,
                         "age_str": age_str,
                         "job": job,
+                        "progress": info.get("progress") or "",
                     }
                 )
     return status
@@ -129,6 +130,8 @@ def build_display_rows(status: dict, head: int, width: int, now_str: str):
             if worker["job"]:
                 label = job_display(worker["job"], max(10, width - 10))
                 base = f"{base} | {label}"
+            if worker.get("progress"):
+                base = f"{base} | {worker['progress']}"
             style = f"worker_{worker['status']}"
             rows.append((base, style))
     else:

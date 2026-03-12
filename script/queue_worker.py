@@ -26,6 +26,10 @@ def _build_cmd(parts):
     return " ".join(shlex.quote(part) for part in parts)
 
 
+PROGRESS_RE = re.compile(r"Processed prompts:\s*(\d+)%.*?(\d+)\s*/\s*(\d+)")
+SPEED_RE = re.compile(r"input:\s*([0-9.]+)\s*toks/s,\s*output:\s*([0-9.]+)\s*toks/s")
+
+
 class QueueWorker:
     def __init__(self, args):
         self.root_dir = args.root_dir
@@ -50,10 +54,14 @@ class QueueWorker:
         self.ping_interval = args.ping_interval
         self.stale_after = args.stale_after
         self.clear_on_exit = args.clear_on_exit
+        self.progress_ping_interval = args.progress_ping_interval
+        self.prune_after = args.prune_after
 
         self._current_job = ""
         self._job_started = None
         self._job_running = False
+        self._progress = ""
+        self._last_progress_ping = 0.0
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._run_count = 0
@@ -122,7 +130,7 @@ class QueueWorker:
         cmd.append("--stdin")
         self._run_cmd(cmd, input_text=job_line, check=True)
 
-    def _send_ping(self, status, job_line=None):
+    def _send_ping(self, status, job_line=None, progress=None):
         if not self.queue_worker_state_script:
             return
         cmd = [
@@ -141,6 +149,8 @@ class QueueWorker:
             "--reap-stale",
             "--stale-after",
             str(self.stale_after),
+            "--prune-after",
+            str(self.prune_after),
             "--queue-file",
             self.queue_file,
             "--queue-append-script",
@@ -151,6 +161,8 @@ class QueueWorker:
         if job_line:
             cmd.append("--job-stdin")
             input_text = job_line
+        if progress:
+            cmd.extend(["--progress", progress])
         try:
             self._run_cmd(cmd, input_text=input_text, capture=False, check=True)
         except subprocess.CalledProcessError as exc:
@@ -161,7 +173,8 @@ class QueueWorker:
             with self._lock:
                 status = "running" if self._job_running else "idle"
                 job_line = self._current_job if self._job_running else None
-            self._send_ping(status, job_line=job_line)
+                progress = self._progress if self._job_running else None
+            self._send_ping(status, job_line=job_line, progress=progress)
             self._stop_event.wait(self.ping_interval)
 
     @staticmethod
@@ -175,6 +188,67 @@ class QueueWorker:
             job_line = job_line.split("# retry=")[0]
         return job_line.rstrip()
 
+    @staticmethod
+    def _extract_progress(line):
+        match = PROGRESS_RE.search(line)
+        if not match:
+            return None
+        percent, done, total = match.groups()
+        speed = SPEED_RE.search(line)
+        if speed:
+            return f"{percent}% {done}/{total} in {speed.group(1)} out {speed.group(2)} toks/s"
+        return f"{percent}% {done}/{total}"
+
+    def _maybe_update_progress(self, line):
+        progress = self._extract_progress(line)
+        if not progress:
+            return
+        now = time.time()
+        should_ping = False
+        with self._lock:
+            if progress == self._progress:
+                return
+            self._progress = progress
+            if (
+                self.progress_ping_interval > 0
+                and now - self._last_progress_ping >= self.progress_ping_interval
+                and self._job_running
+            ):
+                self._last_progress_ping = now
+                should_ping = True
+                job_line = self._current_job
+            else:
+                job_line = None
+        if should_ping:
+            self._send_ping("running", job_line=job_line, progress=progress)
+
+    def _stream_output(self, proc):
+        buffer = b""
+        while True:
+            chunk = proc.stdout.read(1024)
+            if not chunk:
+                break
+            sys.stdout.buffer.write(chunk)
+            sys.stdout.buffer.flush()
+            buffer += chunk
+            while True:
+                idx_r = buffer.find(b"\r")
+                idx_n = buffer.find(b"\n")
+                if idx_r == -1 and idx_n == -1:
+                    break
+                if idx_r == -1:
+                    idx = idx_n
+                elif idx_n == -1:
+                    idx = idx_r
+                else:
+                    idx = min(idx_r, idx_n)
+                line = buffer[:idx]
+                buffer = buffer[idx + 1 :]
+                if line:
+                    self._maybe_update_progress(line.decode(errors="ignore"))
+        if buffer:
+            self._maybe_update_progress(buffer.decode(errors="ignore"))
+
     def _run_job(self, job_line):
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(self.gpu_id)
@@ -185,13 +259,21 @@ class QueueWorker:
             self._current_job = job_line
             self._job_running = True
             self._job_started = time.time()
+            self._progress = ""
 
         try:
             self._send_ping("running", job_line=job_line)
         except KeyboardInterrupt:
             pass
 
-        proc = subprocess.Popen(["bash", "-lc", command], env=env)
+        proc = subprocess.Popen(
+            ["bash", "-lc", command],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        stream_thread = threading.Thread(target=self._stream_output, args=(proc,), daemon=True)
+        stream_thread.start()
         interrupted = False
         try:
             returncode = proc.wait()
@@ -203,11 +285,13 @@ class QueueWorker:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 returncode = 130
+        stream_thread.join(timeout=5)
 
         with self._lock:
             self._current_job = ""
             self._job_running = False
             self._job_started = None
+            self._progress = ""
         try:
             self._send_ping("idle")
         except KeyboardInterrupt:
@@ -329,6 +413,16 @@ def main() -> None:
     )
     parser.add_argument("--ping-interval", type=int, default=_env_int("PING_INTERVAL", 600))
     parser.add_argument("--stale-after", type=int, default=_env_int("STALE_AFTER", 0))
+    parser.add_argument(
+        "--progress-ping-interval",
+        type=int,
+        default=_env_int("PROGRESS_PING_INTERVAL", 60),
+    )
+    parser.add_argument(
+        "--prune-after",
+        type=int,
+        default=_env_int("PRUNE_AFTER", 7200),
+    )
     parser.add_argument("--clear-on-exit", type=int, default=_env_int("CLEAR_ON_EXIT", 1))
     args = parser.parse_args()
 

@@ -70,6 +70,21 @@ def _reap_stale(state, now, stale_after, queue_file, queue_append_script, prepen
         info["status"] = "stale"
 
 
+def _prune_workers(state, now, prune_after):
+    if prune_after <= 0:
+        return
+    workers = state.get("workers", {})
+    stale_ids = []
+    for worker_id, info in workers.items():
+        last_ping = info.get("last_ping")
+        if last_ping is None:
+            continue
+        if now - last_ping > prune_after:
+            stale_ids.append(worker_id)
+    for worker_id in stale_ids:
+        workers.pop(worker_id, None)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Track worker status and requeue stale jobs.")
     parser.add_argument("--state-file", required=True, help="Path to worker state JSON.")
@@ -77,11 +92,13 @@ def main() -> None:
     parser.add_argument("--status", choices=["idle", "running", "stale", "offline"], help="Worker status.")
     parser.add_argument("--job", help="Job line.")
     parser.add_argument("--job-stdin", action="store_true", help="Read job line from stdin.")
+    parser.add_argument("--progress", help="Progress string for the current job.")
     parser.add_argument("--hostname", help="Worker hostname.")
     parser.add_argument("--pid", type=int, help="Worker process id.")
     parser.add_argument("--clear", action="store_true", help="Remove worker entry from state.")
     parser.add_argument("--reap-stale", action="store_true", help="Requeue stale workers.")
     parser.add_argument("--stale-after", type=int, default=0, help="Seconds before a worker is stale.")
+    parser.add_argument("--prune-after", type=int, default=0, help="Seconds before removing a worker entry.")
     parser.add_argument("--queue-file", help="Queue file path for requeue.")
     parser.add_argument("--queue-append-script", help="queue_append_job.py path for requeue.")
     parser.add_argument(
@@ -121,9 +138,12 @@ def main() -> None:
                     info["job"] = job.rstrip("\n")
                 if not info.get("job_started"):
                     info["job_started"] = now
+                if args.progress is not None:
+                    info["progress"] = args.progress
             else:
                 info.pop("job", None)
                 info.pop("job_started", None)
+                info.pop("progress", None)
                 info.pop("requeued", None)
                 info.pop("requeued_at", None)
                 info.pop("requeue_error", None)
@@ -140,6 +160,8 @@ def main() -> None:
                 args.queue_append_script,
                 prepend=args.prepend_stale,
             )
+
+        _prune_workers(state, now, args.prune_after)
 
         _save_state(handle, state)
 
