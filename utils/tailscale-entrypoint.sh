@@ -10,6 +10,7 @@ tailscaled \
 
 # Give the daemon a moment to come up
 sleep 2
+echo $TAILSCALE_AUTHKEY
 
 tailscale up \
   --authkey="${TAILSCALE_AUTHKEY}" \

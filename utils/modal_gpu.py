@@ -32,6 +32,7 @@ image = (
     .run_commands( # Additional apt installations after everything else
         "apt install openssh-client netcat-openbsd tmux sshpass -y"
     )
+    .run_commands("echo 'STARTING TAILSCALE'")
     .add_local_file("utils/tailscale-entrypoint.sh", "/root/entrypoint.sh", copy=True)
     .run_commands(
         "mkdir -p ~/.ssh",
@@ -41,6 +42,7 @@ image = (
         'echo "    ProxyCommand nc -X 5 -x localhost:1080 %h %p" >> ~/.ssh/config',
         "chmod 600 ~/.ssh/config",
     )
+    .run_commands("echo 'STARTING TAILSCALE'")
     .run_commands("chmod +x /root/entrypoint.sh")
     .entrypoint(["/root/entrypoint.sh"])
 )
