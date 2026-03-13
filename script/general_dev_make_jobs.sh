@@ -21,6 +21,7 @@ MODES=(${MODES:-pass@k})
 
 SEEDS_2=(42 43)
 SEEDS=("${SEEDS_2[@]}")
+EXTRA_SEEDS_6=(${EXTRA_SEEDS_6:-44 45 46 47 48 49})
 
 # Static baseline sweep grid.
 STATIC_TEMPS=(0.7 0.8 0.9)
@@ -129,5 +130,39 @@ for threshold in "${CONF_THRESHOLDS[@]}"; do
       --dynamic_sampling_kwargs "$dyn_kwargs"
   done
 done
+
+# Extra seeds for specific configs to reach 8 total.
+if [[ "${#EXTRA_SEEDS_6[@]}" -gt 0 ]]; then
+  SEEDS=("${EXTRA_SEEDS_6[@]}")
+
+  # Static baseline: temp 0.7, top-p 0.90.
+  for mode in "${MODES[@]}"; do
+    tag="${TAG_PREFIX_STATIC}-t0.7-p0.9"
+    if [[ "${#MODES[@]}" -gt 1 ]]; then
+      tag="${tag}-$(mode_tag_for "$mode")"
+    fi
+    emit_eval_jobs "$tag" "$MODEL_BASE" 0.7 0.90 "$mode" "$NUM_SAMPLES"
+  done
+
+  # ConfGate: tau 0.518 and 0.441 with T_high=0.9.
+  for threshold in 0.518 0.441; do
+    for mode in "${MODES[@]}"; do
+      tag="${TAG_PREFIX_CONFGATE}-tau${threshold}-Thigh${CONF_T_HIGH}"
+      if [[ "${#MODES[@]}" -gt 1 ]]; then
+        tag="${tag}-$(mode_tag_for "$mode")"
+      fi
+      dyn_kwargs=$(printf '{"maxprob_threshold": %s, "T_high": %s}' "$threshold" "$CONF_T_HIGH")
+      emit_eval_jobs \
+        "$tag" \
+        "$MODEL_BASE" \
+        1.0 \
+        0.95 \
+        "$mode" \
+        "$NUM_SAMPLES" \
+        --dynamic_sampling_policy confidence_gated \
+        --dynamic_sampling_kwargs "$dyn_kwargs"
+    done
+  done
+fi
 
 echo "Wrote queue jobs to $JOB_FILE"
