@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """Download several public benchmarks from Hugging Face and convert them to the
-same JSONL schema as the user's AIME24 file:
+following JSONL schema:
 
     {"problem": <string>, "gt": <string>}
 
@@ -20,7 +19,7 @@ For multiple-choice datasets, the output keeps the same two keys only:
 
 Examples:
     python build_same_format_jsonl.py
-    python build_same_format_jsonl.py --outdir ./bench_jsonl
+    python build_same_format_jsonl.py --outdir data/TempTest
     python build_same_format_jsonl.py --mmlu-gt text
     python build_same_format_jsonl.py --gpqa-gt text
 """
@@ -28,10 +27,12 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import re
 from pathlib import Path
-from typing import Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from datasets import load_dataset
 
@@ -50,12 +51,12 @@ def _clean(s: str) -> str:
     return s
 
 
-def _normalize_gt(value) -> str:
-    gt = _clean(_as_str(value))
-    if re.fullmatch(r"\d+", gt):
-        gt = gt.lstrip("0")
-        return gt or "0"
-    return gt
+def _normalize_gt(answer: str) -> str:
+    answer = _clean(answer)
+    if re.fullmatch(r"\d+", answer):
+        answer = answer.lstrip("0")
+        return answer or "0"
+    return answer
 
 
 def _looks_like_choices_already_present(question: str, min_labels: int = 4) -> bool:
@@ -94,7 +95,9 @@ def _write_jsonl(records: Iterable[Mapping[str, str]], path: Path) -> int:
     count = 0
     with path.open("w", encoding="utf-8") as f:
         for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            rec_to_write = dict(rec)
+            rec_to_write["gt"] = _normalize_gt(_as_str(rec_to_write.get("gt")))
+            f.write(json.dumps(rec_to_write, ensure_ascii=False) + "\n")
             count += 1
     return count
 
@@ -107,7 +110,7 @@ def convert_aime24() -> List[MutableMapping[str, str]]:
         gt = row.get("answer") or row.get("gt") or row.get("Answer")
         if problem is None or gt is None:
             raise KeyError(f"Unexpected AIME24 row keys: {list(row.keys())}")
-        out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
+        out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
     return out
 
 
@@ -120,7 +123,7 @@ def convert_aime25() -> List[MutableMapping[str, str]]:
             gt = row.get("answer") or row.get("gt")
             if problem is None or gt is None:
                 raise KeyError(f"Unexpected AIME25 row keys: {list(row.keys())}")
-            out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
+            out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
     return out
 
 
@@ -158,7 +161,7 @@ def convert_gpqa(gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
                     "Use --gpqa-gt letter instead."
                 )
 
-        out.append({"problem": problem, "gt": _normalize_gt(gt)})
+        out.append({"problem": problem, "gt": gt})
     return out
 
 
@@ -187,7 +190,7 @@ def _convert_mmlu_style(repo_id: str, split: str, gt_mode: str = "letter") -> Li
             else:
                 raise KeyError(f"Could not infer {repo_id} answer text from row keys: {list(row.keys())}")
 
-        out.append({"problem": problem, "gt": _normalize_gt(gt)})
+        out.append({"problem": problem, "gt": gt})
     return out
 
 
@@ -199,6 +202,153 @@ def convert_mmlu_pro_lite(gt_mode: str = "letter") -> List[MutableMapping[str, s
     return _convert_mmlu_style("koiwave/100MMLUpro", split="train", gt_mode=gt_mode)
 
 
+def _normalize_category(category: str) -> str:
+    cat = _clean(_as_str(category)).lower()
+    aliases = {
+        "others": "other",
+        "computer science": "computer science",
+    }
+    return aliases.get(cat, cat)
+
+
+def _mmlu_fingerprint(row: Mapping[str, object]) -> str:
+    question = _clean(_as_str(row.get("question") or row.get("problem")))
+    options = row.get("options") or []
+    options_text = "\n".join(_clean(_as_str(x)) for x in options)
+    category = _normalize_category(_as_str(row.get("category")))
+    answer = _clean(_as_str(row.get("answer")))
+    src = _clean(_as_str(row.get("src")))
+    return "\u241f".join([question, options_text, category, answer, src])
+
+
+def _stable_sort_key(seed: int, fingerprint: str) -> str:
+    return hashlib.sha256(f"{seed}::{fingerprint}".encode("utf-8")).hexdigest()
+
+
+def _allocate_proportional_counts(counts: Mapping[str, int], total: int) -> Dict[str, int]:
+    if total < 0:
+        raise ValueError("total must be non-negative")
+    total_available = sum(int(v) for v in counts.values())
+    if total_available <= 0:
+        raise ValueError("counts must sum to a positive number")
+
+    raw = {k: (float(v) / total_available) * total for k, v in counts.items()}
+    alloc = {k: int(math.floor(v)) for k, v in raw.items()}
+    remaining = total - sum(alloc.values())
+
+    # Largest-remainder apportionment to hit the requested total exactly.
+    # Ties are broken deterministically by category name.
+    order = sorted(raw.keys(), key=lambda k: (-(raw[k] - alloc[k]), k))
+    for k in order[:remaining]:
+        alloc[k] += 1
+    return alloc
+
+
+def convert_general_dev(mmlu_gt_mode: str = "letter", seed: int = 1337) -> List[MutableMapping[str, str]]:
+    """Build a 60-question mixed dev set:
+
+    - 30 questions from BRUMO25
+    - 30 questions from TIGER-Lab/MMLU-Pro test, excluding any question that appears
+      in koiwave/100MMLUpro, with category proportions matched to the *observed*
+      koiwave/100MMLUpro category histogram.
+
+    This mirrors the lite subset's effective stratification while avoiding the minor
+    inconsistencies in the dataset card's written quota table.
+    """
+    full_ds = load_dataset("TIGER-Lab/MMLU-Pro", split="test")
+    lite_ds = load_dataset("koiwave/100MMLUpro", split="train")
+
+    lite_fingerprints = {_mmlu_fingerprint(row) for row in lite_ds}
+    lite_category_counts: Dict[str, int] = {}
+    for row in lite_ds:
+        cat = _normalize_category(_as_str(row.get("category")))
+        lite_category_counts[cat] = lite_category_counts.get(cat, 0) + 1
+
+    remaining_by_category: Dict[str, List[Mapping[str, object]]] = {}
+    for row in full_ds:
+        fp = _mmlu_fingerprint(row)
+        if fp in lite_fingerprints:
+            continue
+        cat = _normalize_category(_as_str(row.get("category")))
+        remaining_by_category.setdefault(cat, []).append(row)
+
+    target_counts = _allocate_proportional_counts(lite_category_counts, total=30)
+
+    # Safety: if a category is exhausted after exclusion, reallocate shortfall by the
+    # same largest-remainder logic over categories with spare capacity.
+    sampled_rows: List[Tuple[str, Mapping[str, object]]] = []
+    deficits = 0
+    spare_capacities: Dict[str, int] = {}
+
+    for cat, target in target_counts.items():
+        candidates = remaining_by_category.get(cat, [])
+        ordered = sorted(candidates, key=lambda r: _stable_sort_key(seed, _mmlu_fingerprint(r)))
+        take = min(target, len(ordered))
+        sampled_rows.extend((cat, row) for row in ordered[:take])
+        deficits += target - take
+        spare_capacities[cat] = max(0, len(ordered) - take)
+
+    if deficits > 0:
+        spare_order = sorted(
+            [cat for cat, spare in spare_capacities.items() if spare > 0],
+            key=lambda cat: (-(lite_category_counts.get(cat, 0)), cat),
+        )
+        for cat in spare_order:
+            if deficits <= 0:
+                break
+            candidates = remaining_by_category.get(cat, [])
+            ordered = sorted(candidates, key=lambda r: _stable_sort_key(seed, _mmlu_fingerprint(r)))
+            already_taken = sum(1 for taken_cat, _ in sampled_rows if taken_cat == cat)
+            available_extra = len(ordered) - already_taken
+            extra_take = min(deficits, available_extra)
+            if extra_take > 0:
+                sampled_rows.extend((cat, row) for row in ordered[already_taken:already_taken + extra_take])
+                deficits -= extra_take
+
+    if deficits != 0:
+        raise RuntimeError(f"Could not allocate 30 MMLU-Pro dev questions after excluding lite subset; short by {deficits}.")
+
+    # Drop category labels and convert to the same JSONL schema.
+    mmlu_rows = [row for _, row in sampled_rows]
+    # Keep deterministic overall ordering by category then hashed fingerprint.
+    mmlu_rows = sorted(
+        mmlu_rows,
+        key=lambda r: (
+            _normalize_category(_as_str(r.get("category"))),
+            _stable_sort_key(seed, _mmlu_fingerprint(r)),
+        ),
+    )
+
+    mmlu_out: List[MutableMapping[str, str]] = []
+    for row in mmlu_rows:
+        question = row.get("question") or row.get("problem")
+        options = row.get("options")
+        if question is None or options is None:
+            raise KeyError(f"Unexpected MMLU-Pro row keys in general_dev: {list(row.keys())}")
+        problem = _append_choices(_as_str(question), options)
+        if mmlu_gt_mode == "letter":
+            if row.get("answer") is not None:
+                gt = _clean(_as_str(row["answer"]))
+            elif row.get("answer_index") is not None:
+                gt = _option_letter_from_index(int(row["answer_index"]))
+            else:
+                raise KeyError(f"Could not infer MMLU-Pro answer from row keys: {list(row.keys())}")
+        else:
+            if row.get("answer_index") is not None:
+                gt = _clean(_as_str(options[int(row["answer_index"])]))
+            elif row.get("answer") is not None:
+                gt = _answer_text_from_letter(_as_str(row["answer"]), options)
+            else:
+                raise KeyError(f"Could not infer MMLU-Pro answer text from row keys: {list(row.keys())}")
+        mmlu_out.append({"problem": problem, "gt": gt})
+
+    brumo_out = convert_matharena("MathArena/brumo_2025", split="train")
+    if len(brumo_out) != 30:
+        raise RuntimeError(f"Expected 30 BRUMO25 rows, got {len(brumo_out)}")
+
+    return mmlu_out + brumo_out
+
+
 def convert_matharena(repo_id: str, split: str = "train") -> List[MutableMapping[str, str]]:
     ds = load_dataset(repo_id, split=split)
     out: List[MutableMapping[str, str]] = []
@@ -207,7 +357,7 @@ def convert_matharena(repo_id: str, split: str = "train") -> List[MutableMapping
         gt = row.get("answer") or row.get("gt")
         if problem is None or gt is None:
             raise KeyError(f"Unexpected {repo_id} row keys: {list(row.keys())}")
-        out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
+        out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
     return out
 
 
@@ -219,7 +369,7 @@ def convert_beyondaime() -> List[MutableMapping[str, str]]:
         gt = row.get("answer") or row.get("gt")
         if problem is None or gt is None:
             raise KeyError(f"Unexpected BeyondAIME row keys: {list(row.keys())}")
-        out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
+        out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
     return out
 
 
@@ -228,6 +378,7 @@ def main() -> None:
     parser.add_argument("--outdir", type=Path, default=Path("same_format_jsonl"))
     parser.add_argument("--gpqa-gt", choices=["letter", "text"], default="letter")
     parser.add_argument("--mmlu-gt", choices=["letter", "text"], default="letter")
+    parser.add_argument("--general-dev-seed", type=int, default=1337)
     args = parser.parse_args()
 
     args.outdir.mkdir(parents=True, exist_ok=True)
@@ -238,6 +389,7 @@ def main() -> None:
         ("gpqa_diamond.jsonl", lambda: convert_gpqa(gt_mode=args.gpqa_gt)),
         ("mmlu_pro.jsonl", lambda: convert_mmlu_pro(gt_mode=args.mmlu_gt)),
         ("mmlu_pro_lite.jsonl", lambda: convert_mmlu_pro_lite(gt_mode=args.mmlu_gt)),
+        ("general_dev.jsonl", lambda: convert_general_dev(mmlu_gt_mode=args.mmlu_gt, seed=args.general_dev_seed)),
         ("brumo25.jsonl", lambda: convert_matharena("MathArena/brumo_2025", split="train")),
         ("hmmt25.jsonl", lambda: convert_matharena("MathArena/hmmt_feb_2025", split="train")),
         ("beyondaime.jsonl", convert_beyondaime),
