@@ -10,3 +10,4 @@ __pycache__/
 local_run.sh
 **/__pycache__/
 **/.ipynb_checkpoints/
+arXiv*

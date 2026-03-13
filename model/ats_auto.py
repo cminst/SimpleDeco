@@ -650,6 +650,8 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
         if self.llm is not None and config.freeze_base_model:
             for param in self.llm.parameters():
                 param.requires_grad = False
+        if self.llm is not None:
+            self.llm.config.output_hidden_states = True
         if self.llm is not None and hasattr(self.llm.config, "attn_implementation"):
             self.llm.config.attn_implementation = getattr(
                 config,
@@ -845,9 +847,22 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(self, *args: Any, **kwargs: Any):
         return self.llm.prepare_inputs_for_generation(*args, **kwargs)
 
+    def get_decoder(self):
+        if hasattr(self.llm, "get_decoder"):
+            return self.llm.get_decoder()
+        return self.llm.model if hasattr(self.llm, "model") else self.llm
+
     def _filtered_llm_kwargs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         try:
             signature = inspect.signature(self.llm.forward)
+        except (TypeError, ValueError):
+            return kwargs
+        return {key: value for key, value in kwargs.items() if key in signature.parameters}
+
+    @staticmethod
+    def _filtered_kwargs_for(module: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            signature = inspect.signature(module.forward)
         except (TypeError, ValueError):
             return kwargs
         return {key: value for key, value in kwargs.items() if key in signature.parameters}
@@ -880,6 +895,7 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
     ) -> ATSOutputWithPast:
+        return_hidden_states = bool(output_hidden_states)
         llm_kwargs = dict(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -889,11 +905,34 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=True,
+            return_dict=True,
             cache_position=cache_position,
         )
         llm_kwargs.update(kwargs)
         outputs = self.llm(**self._filtered_llm_kwargs(llm_kwargs))
-        hidden_states = outputs.hidden_states[-1]
+        hidden_states_seq = getattr(outputs, "hidden_states", None)
+        if hidden_states_seq is not None:
+            hidden_states = hidden_states_seq[-1]
+        else:
+            decoder = self.get_decoder()
+            if decoder is self.llm:
+                raise ValueError(
+                    "ATSModelForCausalLM requires hidden states from the base model, "
+                    "but the loaded model returned outputs.hidden_states=None even with "
+                    "output_hidden_states=True."
+                )
+            decoder_kwargs = dict(llm_kwargs)
+            decoder_kwargs["output_hidden_states"] = True
+            if "return_dict" not in decoder_kwargs:
+                decoder_kwargs["return_dict"] = True
+            decoder_outputs = decoder(**self._filtered_kwargs_for(decoder, decoder_kwargs))
+            hidden_states = getattr(decoder_outputs, "last_hidden_state", None)
+            if hidden_states is None and isinstance(decoder_outputs, tuple) and len(decoder_outputs) > 0:
+                hidden_states = decoder_outputs[0]
+            if hidden_states is None:
+                raise ValueError(
+                    "ATSModelForCausalLM could not recover final hidden states from the base decoder."
+                )
         logits = outputs.logits if getattr(outputs, "logits", None) is not None else self.llm.lm_head(hidden_states)
         if position_ids is None:
             seq_len = hidden_states.size(1)
@@ -909,7 +948,10 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
         )
         loss = self._compute_loss(calibrated_logits, labels) if labels is not None else None
         final_logits = calibrated_logits if self.overwrite_logits else logits
-        hidden_states_to_return = outputs.hidden_states if output_hidden_states else None
+        if return_hidden_states:
+            hidden_states_to_return = hidden_states_seq if hidden_states_seq is not None else (hidden_states,)
+        else:
+            hidden_states_to_return = None
         return ATSOutputWithPast(
             loss=loss,
             logits=final_logits,

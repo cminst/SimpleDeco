@@ -13,7 +13,9 @@ from safetensors.torch import load_file
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import Whitespace
+from torch import nn
 from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
+from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 
 ROOT = Path(__file__).resolve().parents[1]
 from model.ats_auto import ATSModelForCausalLM, LinearATSHead, MLPATSHead, TransformerATSHead
@@ -89,6 +91,48 @@ def _ats_config_namespace(calibration_type: str, hidden_size: int) -> SimpleName
         hidden_act="silu",
         rms_norm_eps=1e-6,
     )
+
+
+class _FakeDecoder(nn.Module):
+    def __init__(self, embed_tokens: nn.Embedding):
+        super().__init__()
+        self.embed_tokens = embed_tokens
+
+    def forward(self, input_ids=None, inputs_embeds=None, **kwargs):
+        del kwargs
+        hidden_states = inputs_embeds if inputs_embeds is not None else self.embed_tokens(input_ids)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states)
+
+
+class _FakeCausalLM(nn.Module):
+    def __init__(self, vocab_size: int = 11, hidden_size: int = 8):
+        super().__init__()
+        self.embed_tokens = nn.Embedding(vocab_size, hidden_size)
+        self.lm_head = nn.Linear(hidden_size, vocab_size, bias=False)
+        self.model = _FakeDecoder(self.embed_tokens)
+        self.config = SimpleNamespace(output_hidden_states=False)
+
+    def forward(self, input_ids=None, inputs_embeds=None, **kwargs):
+        del kwargs
+        hidden_states = inputs_embeds if inputs_embeds is not None else self.embed_tokens(input_ids)
+        logits = self.lm_head(hidden_states)
+        return CausalLMOutputWithPast(logits=logits, hidden_states=None)
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        return {"args": args, **kwargs}
 
 
 @pytest.mark.parametrize("calibration_type", ["linear", "mlp", "transformer"])
@@ -191,6 +235,36 @@ def test_ats_vllm_head_matches_hf_head(calibration_type: str) -> None:
     torch.testing.assert_close(vllm_logits, hf_logits, atol=1e-5, rtol=1e-5)
 
 
+def test_ats_falls_back_to_decoder_hidden_states() -> None:
+    config = ATSModelForCausalLM._to_ats_config(
+        GPT2Config(
+            vocab_size=11,
+            n_positions=64,
+            n_ctx=64,
+            n_embd=8,
+            n_layer=1,
+            n_head=2,
+        ),
+        pretrained_model_name_or_path="dummy-base",
+        calibration_type="linear",
+        feature_key="hidden_states",
+    )
+    model = ATSModelForCausalLM(config, load_base_model=False)
+    model.llm = _FakeCausalLM(vocab_size=11, hidden_size=8)
+    model.llm.config.output_hidden_states = True
+    input_ids = torch.tensor([[1, 2, 3]])
+    outputs = model(
+        input_ids=input_ids,
+        attention_mask=torch.ones_like(input_ids),
+        labels=input_ids,
+        output_hidden_states=True,
+    )
+    assert outputs.loss is not None
+    assert outputs.hidden_states is not None
+    assert outputs.hidden_states[0].shape == (1, 3, 8)
+    assert outputs.calibrated_logits.shape == outputs.logits.shape
+
+
 def test_ats_collator_masks_assistant_tokens() -> None:
     collator = DataCollatorForLanguageModeling(
         pad_token_id=0,
@@ -256,6 +330,7 @@ def test_trl_train_ats_smoke(tmp_path: Path) -> None:
         "none",
         "--train_ats",
         "true",
+        "--gradient_checkpointing",
     ]
     subprocess.run(cmd, check=True, cwd=ROOT)
     assert (output_dir / "config.json").exists()

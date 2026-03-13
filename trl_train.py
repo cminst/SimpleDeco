@@ -654,6 +654,18 @@ def _load_and_prepare_dataset(script_args, training_args):
     return dataset
 
 
+def _enable_input_require_grads(model) -> None:
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+        return
+
+    def make_inputs_require_grad(module, args, output):
+        del module, args
+        output.requires_grad_(True)
+
+    model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
+
+
 def main(script_args, training_args, model_args):
     ################
     # Model init kwargs & Tokenizer
@@ -812,6 +824,12 @@ def main(script_args, training_args, model_args):
             else:
                 param.requires_grad = False
                 print(f"[!] Freezing parameter: {name}")
+
+    if script_args.train_ats and training_args.gradient_checkpointing:
+        _enable_input_require_grads(model)
+        if hasattr(model, "config"):
+            model.config.use_cache = False
+        print("[!] ATS head training: enabled input grads for gradient checkpointing.")
 
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
