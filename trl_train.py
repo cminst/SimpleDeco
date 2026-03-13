@@ -17,6 +17,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 
 from model import ATSModelForCausalLM, AutoDecoModelForCausalLM
+from trainer.trl_ats import ATSTrainer
 from trainer.trl_autodeco import AutoDecoLLMTrainer
 
 import numpy as np
@@ -979,7 +980,7 @@ def main(script_args, training_args, model_args):
                     f"[!] Requested eval split '{script_args.dataset_test_split}' not found. "
                     f"Available splits: {list(dataset.keys())}. Skipping eval dataset."
                 )
-        trainer = SFTTrainer(
+        trainer = ATSTrainer(
             model=model,
             args=training_args,
             processing_class=tokenizer,

@@ -10,7 +10,7 @@ accelerate launch trl_train.py \
   --ats_calibration_type transformer \
   --ats_feature_key hidden_states \
   --ats_loss_type selective_smoothing \
-  --ats_label_smoothing 1.0 \
+  --ats_label_smoothing 0.3 \
   --ats_smooth_loss_weight 0.5 \
   --ats_label_smoothing_type uniform \
   --ats_max_temperature 10.0 \

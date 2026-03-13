@@ -184,6 +184,14 @@ def test_ats_hf_head_roundtrip(calibration_type: str, tmp_path: Path) -> None:
     assert outputs.loss is not None
     assert torch.isfinite(outputs.loss)
     assert outputs.calibrated_logits.shape == outputs.logits.shape
+    assert outputs.ats_mean_temperature is not None
+    assert outputs.ats_incorrect_token_fraction is not None
+    assert outputs.ats_hard_loss is not None
+    assert outputs.ats_smooth_loss is not None
+    assert outputs.ats_ok is not None
+    assert torch.isfinite(outputs.ats_mean_temperature)
+    assert torch.isfinite(outputs.ats_incorrect_token_fraction)
+    assert outputs.ats_ok.item() in {0.0, 1.0}
     llm_trainable = [name for name, param in model.named_parameters() if name.startswith("llm.") and param.requires_grad]
     ats_trainable = [name for name, param in model.named_parameters() if name.startswith("ats_head.") and param.requires_grad]
     assert not llm_trainable

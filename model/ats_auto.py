@@ -43,6 +43,11 @@ class ATSOutputWithPast(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     calibrated_logits: Optional[torch.FloatTensor] = None
     ats_temperature_scale: Optional[torch.FloatTensor] = None
+    ats_mean_temperature: Optional[torch.FloatTensor] = None
+    ats_incorrect_token_fraction: Optional[torch.FloatTensor] = None
+    ats_hard_loss: Optional[torch.FloatTensor] = None
+    ats_smooth_loss: Optional[torch.FloatTensor] = None
+    ats_ok: Optional[torch.FloatTensor] = None
     past_key_values: Optional[tuple[tuple[torch.FloatTensor, ...], ...]] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -881,6 +886,64 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
         flat_labels = shift_labels[valid_mask].to(flat_logits.device)
         return self.loss_fn(flat_logits, flat_labels)
 
+    def _compute_ats_metrics(
+        self,
+        calibrated_logits: torch.Tensor,
+        temperature_scale: torch.Tensor,
+        labels: Optional[torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        metrics: dict[str, torch.Tensor] = {}
+        if labels is None:
+            return metrics
+
+        shift_logits = calibrated_logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+        valid_mask = shift_labels.ne(-100)
+        if not valid_mask.any():
+            zero = calibrated_logits.new_zeros(())
+            metrics["ats_mean_temperature"] = zero
+            metrics["ats_incorrect_token_fraction"] = zero
+            metrics["ats_hard_loss"] = zero
+            metrics["ats_smooth_loss"] = zero
+            metrics["ats_ok"] = calibrated_logits.new_tensor(0.0)
+            return metrics
+
+        flat_logits = shift_logits[valid_mask]
+        flat_labels = shift_labels[valid_mask].to(flat_logits.device)
+        shift_scale = temperature_scale[..., :-1, :].contiguous()
+        flat_scale = shift_scale[valid_mask]
+        mean_temperature = flat_scale.mean()
+
+        predictions = flat_logits.argmax(dim=-1)
+        correct_mask = predictions.eq(flat_labels)
+        incorrect_fraction = (~correct_mask).float().mean()
+
+        hard_loss = flat_logits.new_zeros(())
+        smooth_loss = flat_logits.new_zeros(())
+        if isinstance(self.loss_fn, SelectiveSmoothingLoss):
+            if correct_mask.any():
+                hard_loss = self.loss_fn.hard_loss(
+                    flat_logits[correct_mask],
+                    flat_labels[correct_mask],
+                ).mean()
+            if (~correct_mask).any():
+                smooth_loss = self.loss_fn.smooth_loss(
+                    flat_logits[~correct_mask],
+                    flat_labels[~correct_mask],
+                ).mean()
+
+        ok = torch.isfinite(mean_temperature) & torch.isfinite(incorrect_fraction)
+        ok = ok & torch.isfinite(hard_loss) & torch.isfinite(smooth_loss)
+        ok = ok & (mean_temperature > 0)
+        ok = ok & (mean_temperature < float(self.config.max_temperature))
+
+        metrics["ats_mean_temperature"] = mean_temperature
+        metrics["ats_incorrect_token_fraction"] = incorrect_fraction
+        metrics["ats_hard_loss"] = hard_loss
+        metrics["ats_smooth_loss"] = smooth_loss
+        metrics["ats_ok"] = ok.to(mean_temperature.dtype)
+        return metrics
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -947,6 +1010,11 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
             position_ids=position_ids,
         )
         loss = self._compute_loss(calibrated_logits, labels) if labels is not None else None
+        ats_metrics = self._compute_ats_metrics(
+            calibrated_logits=calibrated_logits,
+            temperature_scale=temperature_scale,
+            labels=labels,
+        )
         final_logits = calibrated_logits if self.overwrite_logits else logits
         if return_hidden_states:
             hidden_states_to_return = hidden_states_seq if hidden_states_seq is not None else (hidden_states,)
@@ -957,6 +1025,11 @@ class ATSModelForCausalLM(PreTrainedModel, GenerationMixin):
             logits=final_logits,
             calibrated_logits=calibrated_logits,
             ats_temperature_scale=temperature_scale,
+            ats_mean_temperature=ats_metrics.get("ats_mean_temperature"),
+            ats_incorrect_token_fraction=ats_metrics.get("ats_incorrect_token_fraction"),
+            ats_hard_loss=ats_metrics.get("ats_hard_loss"),
+            ats_smooth_loss=ats_metrics.get("ats_smooth_loss"),
+            ats_ok=ats_metrics.get("ats_ok"),
             past_key_values=getattr(outputs, "past_key_values", None),
             hidden_states=hidden_states_to_return,
             attentions=getattr(outputs, "attentions", None),
