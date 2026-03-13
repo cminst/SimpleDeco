@@ -16,7 +16,7 @@ from datasets import load_dataset, DatasetDict
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 
-from model import AutoDecoModelForCausalLM
+from model import ATSModelForCausalLM, AutoDecoModelForCausalLM
 from trainer.trl_autodeco import AutoDecoLLMTrainer
 
 import numpy as np
@@ -40,6 +40,7 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     """Script arguments for AutoDecoLLM training."""
     train_temp: bool = False
     train_top_p: bool = False
+    train_ats: bool = False
     temp_objective: str = "legacy_ce"
     min_p_ratio: float = 0.1
     temp_hinge_weight: float = 1.0
@@ -54,6 +55,22 @@ class AutoDecoLLMScriptArguments(ScriptArguments):
     temp_diag_examples: int = 3
     temp_diag_topk: int = 5
     temp_diag_dir: str = "temp_diagnostics"
+    ats_calibration_type: str = "transformer"
+    ats_feature_key: str = "hidden_states"
+    ats_freeze_base_model: bool = True
+    ats_normalize_logits: bool = False
+    ats_max_temperature: float = 10.0
+    ats_loss_type: str = "selective_smoothing"
+    ats_label_smoothing: float = 1.0
+    ats_smooth_loss_weight: float = 0.5
+    ats_label_smoothing_type: str = "uniform"
+    ats_smoothing_topk: int = 5
+    ats_intermediate_size: Optional[int] = None
+    ats_attention_dropout: float = 0.0
+    ats_num_attention_heads: Optional[int] = None
+    ats_num_key_value_heads: Optional[int] = None
+    ats_hidden_act: str = "silu"
+    ats_max_position_embeddings: Optional[int] = None
 
 def pad(
     tensors: list[torch.Tensor],
@@ -653,11 +670,16 @@ def main(script_args, training_args, model_args):
     )
 
     # If we only train heads, avoid saving full model checkpoints during training
-    if script_args.train_temp or script_args.train_top_p:
+    if script_args.train_temp or script_args.train_top_p or script_args.train_ats:
         try:
             training_args.save_strategy = "no"
         except Exception:
             pass
+
+    if script_args.train_ats and (script_args.train_temp or script_args.train_top_p):
+        raise ValueError("train_ats is mutually exclusive with train_temp and train_top_p.")
+    if script_args.train_ats and not script_args.ats_freeze_base_model:
+        raise ValueError("train_ats currently supports head-only checkpoints, so ats_freeze_base_model must be true.")
 
     valid_temp_objectives = {"legacy_ce", "analytic_min_p_hinge"}
     if script_args.temp_objective not in valid_temp_objectives:
@@ -692,20 +714,58 @@ def main(script_args, training_args, model_args):
     if script_args.temp_diag_topk < 1:
         raise ValueError(f"temp_diag_topk must be >= 1, got {script_args.temp_diag_topk}")
 
-    model = AutoDecoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        **model_kwargs,
-    )
+    peft_config = get_peft_config(model_args)
+    if script_args.train_ats and peft_config is not None:
+        raise ValueError("train_ats does not support PEFT/LoRA wrapping in trl_train.py.")
 
-    # Sync model-internal training flags with CLI selection.
-    model.train_temp = script_args.train_temp
-    model.train_top_p = script_args.train_top_p
-    if hasattr(model, "config"):
-        model.config.enable_temperature_head = script_args.train_temp
-        model.config.enable_top_p_head = script_args.train_top_p
+    if script_args.train_ats:
+        model = ATSModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            calibration_type=script_args.ats_calibration_type,
+            feature_key=script_args.ats_feature_key,
+            freeze_base_model=script_args.ats_freeze_base_model,
+            normalize_logits=script_args.ats_normalize_logits,
+            max_temperature=script_args.ats_max_temperature,
+            loss_type=script_args.ats_loss_type,
+            label_smoothing=script_args.ats_label_smoothing,
+            smooth_loss_weight=script_args.ats_smooth_loss_weight,
+            label_smoothing_type=script_args.ats_label_smoothing_type,
+            smoothing_topk=script_args.ats_smoothing_topk,
+            intermediate_size=script_args.ats_intermediate_size,
+            attention_dropout=script_args.ats_attention_dropout,
+            num_attention_heads=script_args.ats_num_attention_heads,
+            num_key_value_heads=script_args.ats_num_key_value_heads,
+            hidden_act=script_args.ats_hidden_act,
+            max_position_embeddings=script_args.ats_max_position_embeddings,
+            **model_kwargs,
+        )
+    else:
+        model = AutoDecoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            **model_kwargs,
+        )
+
+        # Sync model-internal training flags with CLI selection.
+        model.train_temp = script_args.train_temp
+        model.train_top_p = script_args.train_top_p
+        if hasattr(model, "config"):
+            model.config.enable_temperature_head = script_args.train_temp
+            model.config.enable_top_p_head = script_args.train_top_p
 
     # Configure which heads to train based on script arguments
-    if script_args.train_temp or script_args.train_top_p:
+    if script_args.train_ats:
+        print(
+            "[!] ATS Training configuration: "
+            f"calibration_type={script_args.ats_calibration_type}, "
+            f"feature_key={script_args.ats_feature_key}, "
+            f"loss_type={script_args.ats_loss_type}, "
+            f"label_smoothing={script_args.ats_label_smoothing}, "
+            f"smooth_loss_weight={script_args.ats_smooth_loss_weight}, "
+            f"label_smoothing_type={script_args.ats_label_smoothing_type}, "
+            f"normalize_logits={script_args.ats_normalize_logits}, "
+            f"max_temperature={script_args.ats_max_temperature}"
+        )
+    elif script_args.train_temp or script_args.train_top_p:
         print(f"[!] Training configuration: train_temp={script_args.train_temp}, train_top_p={script_args.train_top_p}")
         if script_args.train_temp:
             print(
@@ -727,6 +787,14 @@ def main(script_args, training_args, model_args):
     else:
         print(f"[!] Training the LLM model itself. No AutoDeco training.")
     for name, param in model.named_parameters():
+        if script_args.train_ats:
+            if name.startswith("ats_head"):
+                param.requires_grad = True
+                print(f"[!] Training parameter: {name}")
+            else:
+                param.requires_grad = False
+                print(f"[!] Freezing parameter: {name}")
+            continue
         if 'temp_head' in name:
             param.requires_grad = script_args.train_temp
             status = "Training" if script_args.train_temp else "Freezing"
@@ -807,7 +875,7 @@ def main(script_args, training_args, model_args):
                 padding_free=training_args.padding_free,
                 pad_to_multiple_of=training_args.pad_to_multiple_of,
             ),
-            peft_config=get_peft_config(model_args),
+            peft_config=peft_config,
             temp_objective=script_args.temp_objective,
             min_p_ratio=script_args.min_p_ratio,
             temp_hinge_weight=script_args.temp_hinge_weight,
@@ -822,6 +890,32 @@ def main(script_args, training_args, model_args):
             temp_diag_examples=script_args.temp_diag_examples,
             temp_diag_topk=script_args.temp_diag_topk,
             temp_diag_dir=script_args.temp_diag_dir,
+        )
+    elif script_args.train_ats:
+        print("[!] ATS head training with SFTTrainer")
+        eval_dataset = None
+        if training_args.eval_strategy != "no":
+            if script_args.dataset_test_split in dataset:
+                eval_dataset = dataset[script_args.dataset_test_split]
+            else:
+                print(
+                    f"[!] Requested eval split '{script_args.dataset_test_split}' not found. "
+                    f"Available splits: {list(dataset.keys())}. Skipping eval dataset."
+                )
+        trainer = SFTTrainer(
+            model=model,
+            args=training_args,
+            processing_class=tokenizer,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=eval_dataset,
+            data_collator=DataCollatorForLanguageModeling(
+                pad_token_id=tokenizer.pad_token_id,
+                completion_only_loss=training_args.completion_only_loss,
+                require_assistant_masks=training_args.assistant_only_loss,
+                padding_free=training_args.padding_free,
+                pad_to_multiple_of=training_args.pad_to_multiple_of,
+            ),
+            peft_config=None,
         )
     else:
         print(f"[!] Normal SFT Training")
@@ -840,7 +934,7 @@ def main(script_args, training_args, model_args):
             processing_class=tokenizer,
             train_dataset=dataset[script_args.dataset_train_split],
             eval_dataset=eval_dataset,
-            peft_config=get_peft_config(model_args),
+            peft_config=peft_config,
         )
 
     trainer.train()
