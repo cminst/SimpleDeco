@@ -15,6 +15,14 @@
     "rows": 12032,
     "path": "data/TempTest/mmlu_pro.jsonl"
   },
+  "mmlu_pro_lite.jsonl": {
+    "rows": 100,
+    "path": "data/TempTest/mmlu_pro_lite.jsonl"
+  },
+  "general_dev.jsonl": {
+    "rows": 60,
+    "path": "data/TempTest/general_dev.jsonl"
+  },
   "brumo25.jsonl": {
     "rows": 30,
     "path": "data/TempTest/brumo25.jsonl"
