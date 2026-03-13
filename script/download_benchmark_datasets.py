@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """Download several public benchmarks from Hugging Face and convert them to the
-following JSONL schema:
+same JSONL schema as the user's AIME24 file:
 
     {"problem": <string>, "gt": <string>}
 
@@ -8,6 +9,7 @@ Benchmarks:
 - AIME25            -> opencompass/AIME2025 (AIME2025-I + AIME2025-II, test)
 - GPQA-Diamond      -> fingertap/GPQA-Diamond (test)
 - MMLU-Pro          -> TIGER-Lab/MMLU-Pro (test)
+- MMLU-Pro Lite     -> koiwave/100MMLUpro (train)
 - BRUMO25           -> MathArena/brumo_2025 (train)
 - HMMT25            -> MathArena/hmmt_feb_2025 (train)
 - BeyondAIME        -> ByteDance-Seed/BeyondAIME (test)
@@ -29,7 +31,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Iterable, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Iterable, List, Mapping, MutableMapping, Sequence
 
 from datasets import load_dataset
 
@@ -46,6 +48,14 @@ def _clean(s: str) -> str:
     s = s.replace("\r\n", "\n").replace("\r", "\n").strip()
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s
+
+
+def _normalize_gt(value) -> str:
+    gt = _clean(_as_str(value))
+    if re.fullmatch(r"\d+", gt):
+        gt = gt.lstrip("0")
+        return gt or "0"
+    return gt
 
 
 def _looks_like_choices_already_present(question: str, min_labels: int = 4) -> bool:
@@ -89,7 +99,6 @@ def _write_jsonl(records: Iterable[Mapping[str, str]], path: Path) -> int:
     return count
 
 
-
 def convert_aime24() -> List[MutableMapping[str, str]]:
     ds = load_dataset("HuggingFaceH4/aime_2024", split="train")
     out: List[MutableMapping[str, str]] = []
@@ -98,8 +107,9 @@ def convert_aime24() -> List[MutableMapping[str, str]]:
         gt = row.get("answer") or row.get("gt") or row.get("Answer")
         if problem is None or gt is None:
             raise KeyError(f"Unexpected AIME24 row keys: {list(row.keys())}")
-        out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
+        out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
     return out
+
 
 def convert_aime25() -> List[MutableMapping[str, str]]:
     out: List[MutableMapping[str, str]] = []
@@ -110,7 +120,7 @@ def convert_aime25() -> List[MutableMapping[str, str]]:
             gt = row.get("answer") or row.get("gt")
             if problem is None or gt is None:
                 raise KeyError(f"Unexpected AIME25 row keys: {list(row.keys())}")
-            out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
+            out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
     return out
 
 
@@ -148,12 +158,12 @@ def convert_gpqa(gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
                     "Use --gpqa-gt letter instead."
                 )
 
-        out.append({"problem": problem, "gt": gt})
+        out.append({"problem": problem, "gt": _normalize_gt(gt)})
     return out
 
 
-def convert_mmlu_pro(gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
-    ds = load_dataset("TIGER-Lab/MMLU-Pro", split="test")
+def _convert_mmlu_style(repo_id: str, split: str, gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
+    ds = load_dataset(repo_id, split=split)
     out: List[MutableMapping[str, str]] = []
     for row in ds:
         question = row.get("question") or row.get("problem")
@@ -168,17 +178,25 @@ def convert_mmlu_pro(gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
             elif row.get("answer_index") is not None:
                 gt = _option_letter_from_index(int(row["answer_index"]))
             else:
-                raise KeyError(f"Could not infer MMLU-Pro answer from row keys: {list(row.keys())}")
+                raise KeyError(f"Could not infer {repo_id} answer from row keys: {list(row.keys())}")
         else:
             if row.get("answer_index") is not None:
                 gt = _clean(_as_str(options[int(row["answer_index"])]))
             elif row.get("answer") is not None:
                 gt = _answer_text_from_letter(_as_str(row["answer"]), options)
             else:
-                raise KeyError(f"Could not infer MMLU-Pro answer text from row keys: {list(row.keys())}")
+                raise KeyError(f"Could not infer {repo_id} answer text from row keys: {list(row.keys())}")
 
-        out.append({"problem": problem, "gt": gt})
+        out.append({"problem": problem, "gt": _normalize_gt(gt)})
     return out
+
+
+def convert_mmlu_pro(gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
+    return _convert_mmlu_style("TIGER-Lab/MMLU-Pro", split="test", gt_mode=gt_mode)
+
+
+def convert_mmlu_pro_lite(gt_mode: str = "letter") -> List[MutableMapping[str, str]]:
+    return _convert_mmlu_style("koiwave/100MMLUpro", split="train", gt_mode=gt_mode)
 
 
 def convert_matharena(repo_id: str, split: str = "train") -> List[MutableMapping[str, str]]:
@@ -189,7 +207,7 @@ def convert_matharena(repo_id: str, split: str = "train") -> List[MutableMapping
         gt = row.get("answer") or row.get("gt")
         if problem is None or gt is None:
             raise KeyError(f"Unexpected {repo_id} row keys: {list(row.keys())}")
-        out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
+        out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
     return out
 
 
@@ -201,7 +219,7 @@ def convert_beyondaime() -> List[MutableMapping[str, str]]:
         gt = row.get("answer") or row.get("gt")
         if problem is None or gt is None:
             raise KeyError(f"Unexpected BeyondAIME row keys: {list(row.keys())}")
-        out.append({"problem": _clean(_as_str(problem)), "gt": _clean(_as_str(gt))})
+        out.append({"problem": _clean(_as_str(problem)), "gt": _normalize_gt(gt)})
     return out
 
 
@@ -219,6 +237,7 @@ def main() -> None:
         ("aime25.jsonl", convert_aime25),
         ("gpqa_diamond.jsonl", lambda: convert_gpqa(gt_mode=args.gpqa_gt)),
         ("mmlu_pro.jsonl", lambda: convert_mmlu_pro(gt_mode=args.mmlu_gt)),
+        ("mmlu_pro_lite.jsonl", lambda: convert_mmlu_pro_lite(gt_mode=args.mmlu_gt)),
         ("brumo25.jsonl", lambda: convert_matharena("MathArena/brumo_2025", split="train")),
         ("hmmt25.jsonl", lambda: convert_matharena("MathArena/hmmt_feb_2025", split="train")),
         ("beyondaime.jsonl", convert_beyondaime),
