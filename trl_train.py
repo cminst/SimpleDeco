@@ -214,6 +214,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     return_position_ids: bool = True
     pad_to_multiple_of: Optional[int] = None
     return_tensors: str = "pt"
+    warned_zero_assistant_mask: bool = False
 
     def torch_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         # Convert to tensor
@@ -267,9 +268,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                         f"{mask_tensor.numel()} vs input_ids {ids_tensor.numel()}."
                     )
                 if self.require_assistant_masks and int(mask_tensor.sum().item()) <= 0:
-                    raise ValueError(
-                        f"assistant_masks for batch example {idx} contains no assistant tokens."
-                    )
+                    if not self.warned_zero_assistant_mask:
+                        print(
+                            "[!] assistant_only_loss: encountered a tokenized example with no assistant "
+                            "tokens after masking/truncation. This example will contribute zero loss."
+                        )
+                        self.warned_zero_assistant_mask = True
 
         # Pad
         output = {}
@@ -504,6 +508,48 @@ def _probe_assistant_mask_support(
         f"assistant masks unavailable on {checked}/{checked} probed rows "
         f"(mask key present on {with_mask}/{checked}, positive masks on {with_positive_mask}/{checked}).{detail}"
     )
+
+
+def _row_has_positive_assistant_mask(tokenizer, convo: Any) -> bool:
+    if not (isinstance(convo, list) and len(convo) > 0):
+        return False
+    if not all(_is_conversation_turn(x) for x in convo):
+        return False
+    try:
+        processed = tokenizer.apply_chat_template(
+            convo,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+            tokenize=True,
+        )
+    except Exception:
+        return False
+    assistant_masks = processed.get("assistant_masks")
+    return assistant_masks is not None and any(int(x) == 1 for x in assistant_masks)
+
+
+def _filter_split_for_positive_assistant_masks(dataset_split, tokenizer, text_field: str, split_name: str):
+    if text_field not in {"messages", "conversations"}:
+        return dataset_split
+
+    keep_indices = []
+    original_size = len(dataset_split)
+    for idx, row in enumerate(dataset_split):
+        if _row_has_positive_assistant_mask(tokenizer, row.get(text_field, None)):
+            keep_indices.append(idx)
+
+    filtered_split = dataset_split.select(keep_indices)
+    removed = original_size - len(filtered_split)
+    if removed > 0:
+        print(
+            f"[!] assistant_only_loss: removed {removed}/{original_size} rows from split "
+            f"'{split_name}' because they produced no assistant tokens under the chat template."
+        )
+    if len(filtered_split) == 0:
+        raise ValueError(
+            f"assistant_only_loss=True but split '{split_name}' has no rows with positive assistant masks."
+        )
+    return filtered_split
 
 
 def _normalize_chat_split_for_trl(dataset_split, selected_text_field: str):
@@ -874,6 +920,19 @@ def main(script_args, training_args, model_args):
                 "assistant_only_loss=True but assistant-mask preflight failed. "
                 f"Reason: {assistant_mask_reason}. "
                 "Aborting instead of auto-disabling assistant_only_loss."
+            )
+        dataset[script_args.dataset_train_split] = _filter_split_for_positive_assistant_masks(
+            dataset[script_args.dataset_train_split],
+            tokenizer=tokenizer,
+            text_field=script_args.dataset_text_field,
+            split_name=script_args.dataset_train_split,
+        )
+        if script_args.dataset_test_split in dataset:
+            dataset[script_args.dataset_test_split] = _filter_split_for_positive_assistant_masks(
+                dataset[script_args.dataset_test_split],
+                tokenizer=tokenizer,
+                text_field=script_args.dataset_text_field,
+                split_name=script_args.dataset_test_split,
             )
 
     # FOR DEBUGGING

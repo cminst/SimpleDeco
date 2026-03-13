@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+from datasets import Dataset
 from safetensors.torch import load_file
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
@@ -19,7 +20,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 
 ROOT = Path(__file__).resolve().parents[1]
 from model.ats_auto import ATSModelForCausalLM, LinearATSHead, MLPATSHead, TransformerATSHead
-from trl_train import DataCollatorForLanguageModeling
+from trl_train import DataCollatorForLanguageModeling, _filter_split_for_positive_assistant_masks
 
 ATS_HEAD_SPEC = importlib.util.spec_from_file_location(
     "simpledeco_ats_head_test_module",
@@ -72,6 +73,34 @@ def _write_tiny_base_model(model_dir: Path) -> None:
     model = GPT2LMHeadModel(config)
     model.save_pretrained(model_dir)
     tokenizer.save_pretrained(model_dir)
+
+
+def _build_generation_mask_tokenizer() -> PreTrainedTokenizerFast:
+    vocab = {
+        "<pad>": 0,
+        "<bos>": 1,
+        "<eos>": 2,
+        "<unk>": 3,
+        "hi": 4,
+        "ans": 5,
+    }
+    tokenizer_obj = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
+    tokenizer_obj.pre_tokenizer = Whitespace()
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=tokenizer_obj,
+        bos_token="<bos>",
+        eos_token="<eos>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+    )
+    tokenizer.chat_template = (
+        "{% for message in messages %}"
+        "{% if message['role'] == 'assistant' %}"
+        "{% generation %}{{ message['content'] }}{% endgeneration %}"
+        "{% else %}{{ message['content'] }}{% endif %}"
+        "{% endfor %}"
+    )
+    return tokenizer
 
 
 def _ats_config_namespace(calibration_type: str, hidden_size: int) -> SimpleNamespace:
@@ -281,6 +310,51 @@ def test_ats_collator_masks_assistant_tokens() -> None:
     )
     assert batch["labels"].tolist()[0][:2] == [-100, -100]
     assert batch["labels"].tolist()[0][2:] == [5, 2]
+
+
+def test_ats_collator_allows_zero_assistant_mask_examples() -> None:
+    collator = DataCollatorForLanguageModeling(
+        pad_token_id=0,
+        completion_only_loss=False,
+        require_assistant_masks=True,
+    )
+    batch = collator(
+        [
+            {
+                "input_ids": [1, 4, 5, 2],
+                "assistant_masks": [0, 0, 0, 0],
+            }
+        ]
+    )
+    assert batch["labels"].tolist()[0] == [-100, -100, -100, -100]
+
+
+def test_filter_split_for_positive_assistant_masks_removes_empty_rows() -> None:
+    tokenizer = _build_generation_mask_tokenizer()
+    dataset = Dataset.from_list(
+        [
+            {
+                "messages": [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": "ans"},
+                ]
+            },
+            {
+                "messages": [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": ""},
+                ]
+            },
+        ]
+    )
+    filtered = _filter_split_for_positive_assistant_masks(
+        dataset,
+        tokenizer=tokenizer,
+        text_field="messages",
+        split_name="train",
+    )
+    assert len(filtered) == 1
+    assert filtered[0]["messages"][-1]["content"] == "ans"
 
 
 def test_trl_train_ats_smoke(tmp_path: Path) -> None:
