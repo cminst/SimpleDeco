@@ -10,11 +10,11 @@ FILTER_EXISTING="${FILTER_EXISTING:-1}"
 # Update if your model paths differ.
 MODEL_BASE="${MODEL_BASE:-ckpt/DeepSeek-R1-Distill-Qwen-7B}"
 
-TAG_CONFGATE="confgate-0.6-0.9-r1-distill-qwen7b"
 TAG_MEANSHIFT2="meanshift2-r1-distill-qwen7b"
 
+# Remaining 12 seeds after 42-45.
+SEEDS_12=(46 47 48 49 50 51 52 53 54 55 56 57)
 SEEDS_8=(42 43 44 45 46 47 48 49)
-SEEDS_4=(42 43 44 45)
 
 mkdir -p "$(dirname "$JOB_FILE")"
 
@@ -77,21 +77,8 @@ emit_eval_jobs() {
   done
 }
 
-# 1) AIME24: Confgate 0.6-0.9, 8 seeds.
-SEEDS=("${SEEDS_8[@]}")
-emit_eval_jobs \
-  "aime24" \
-  "$TAG_CONFGATE" \
-  "$MODEL_BASE" \
-  1.0 \
-  0.95 \
-  "pass@k" \
-  16 \
-  --dynamic_sampling_policy confidence_gated \
-  --dynamic_sampling_kwargs '{"maxprob_threshold": 0.6, "T_high": 0.9}'
-
-# 2) HMMT25: Meanshift2 (temp/top-p adjusted), 4 seeds.
-SEEDS=("${SEEDS_4[@]}")
+# 1) HMMT25: Meanshift2 for remaining 12 seeds (46-57).
+SEEDS=("${SEEDS_12[@]}")
 emit_eval_jobs \
   "hmmt25" \
   "$TAG_MEANSHIFT2" \
@@ -101,8 +88,8 @@ emit_eval_jobs \
   "maj@k" \
   16
 
-# 3) GPQA-Diamond: Meanshift2, 1 seed.
-SEEDS=(42)
+# 2) GPQA-Diamond: Meanshift2 for 8 seeds.
+SEEDS=("${SEEDS_8[@]}")
 emit_eval_jobs \
   "gpqa_diamond" \
   "$TAG_MEANSHIFT2" \
