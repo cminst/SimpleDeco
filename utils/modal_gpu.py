@@ -93,6 +93,12 @@ def runwithgpu():
         shutil.rmtree(temp_clone_path)
 
         autodeco_volume.commit()
+    else:
+        subprocess.run(
+            ["git", "pull"],
+            check=True,
+            cwd=repo,
+        )
 
     os.chdir("/root")
 
