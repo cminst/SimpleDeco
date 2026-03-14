@@ -18,7 +18,7 @@ and reported metrics always use hard top-p.
 
 Usage example
 -------------
-python shadow_controller_dist_match.py \
+python3 script/shadow_controller_dist_match.py \
     --path ckpt/pertoken_diagnostics/autodeco_qwen7b_dolci_val_balanced/ \
     --profile-k 64 \
     --dist-k 200 \
@@ -268,29 +268,36 @@ class FeatureBundle:
     feature_names: Dict[str, List[str]]
 
 
+@dataclass
+class PreparedFeatureSet:
+    name: str
+    X: Optional[np.ndarray]
+    mu: np.ndarray
+    sd: np.ndarray
+    n_binary: int
+    feature_names: List[str]
+
+
+FEATURE_SET_N_BINARY = {
+    "mean": 0,
+    "scalar": 0,
+    "scalar_bits": 5,
+    "scalar_bits_topk": 5,
+}
+
+
 def _as_2d_float32(arr) -> np.ndarray:
     if isinstance(arr, np.ndarray) and arr.dtype != object and arr.ndim == 2:
         return arr.astype(np.float32)
     return np.stack([np.asarray(x, dtype=np.float32) for x in arr], axis=0)
 
 
-def build_feature_bundle(ds_path: str, profile_k: int, dist_k: int, logger: logging.Logger) -> FeatureBundle:
-    ds = load_from_disk(ds_path)
-    tok = ds["tokens"]
-
-    cols = [
-        "seq_id", "T_hat", "p_hat",
-        "H_norm", "gap12", "p_max", "mass10", "mass50", "mass200", "expH", "t",
-        "is_boundary", "is_punct", "is_whitespace", "is_newline", "in_code_block",
-        "topk_logits",
-    ]
-    missing = [c for c in cols if c not in tok.features]
-    if missing:
-        raise ValueError(f"Dataset is missing required columns: {missing}")
-
-    tok = tok.select_columns(cols).with_format("numpy")
-    data = tok[:]
-
+def build_feature_bundle_from_token_data(
+    data: Dict[str, np.ndarray],
+    profile_k: int,
+    dist_k: int,
+    logger: logging.Logger,
+) -> FeatureBundle:
     seq_id = data["seq_id"].astype(np.int64)
     yT = data["T_hat"].astype(np.float32)
     yp = data["p_hat"].astype(np.float32)
@@ -369,6 +376,25 @@ def build_feature_bundle(ds_path: str, profile_k: int, dist_k: int, logger: logg
     )
 
 
+def build_feature_bundle(ds_path: str, profile_k: int, dist_k: int, logger: logging.Logger) -> FeatureBundle:
+    ds = load_from_disk(ds_path)
+    tok = ds["tokens"]
+
+    cols = [
+        "seq_id", "T_hat", "p_hat",
+        "H_norm", "gap12", "p_max", "mass10", "mass50", "mass200", "expH", "t",
+        "is_boundary", "is_punct", "is_whitespace", "is_newline", "in_code_block",
+        "topk_logits",
+    ]
+    missing = [c for c in cols if c not in tok.features]
+    if missing:
+        raise ValueError(f"Dataset is missing required columns: {missing}")
+
+    tok = tok.select_columns(cols).with_format("numpy")
+    data = tok[:]
+    return build_feature_bundle_from_token_data(data, profile_k=profile_k, dist_k=dist_k, logger=logger)
+
+
 def split_by_seq_mod(seq_id: np.ndarray, val_mod: int) -> Tuple[np.ndarray, np.ndarray]:
     val_mask = (seq_id % val_mod) == 0
     tr_mask = ~val_mask
@@ -394,6 +420,106 @@ def apply_standardize(X: np.ndarray, mu: np.ndarray, sd: np.ndarray, n_binary: i
     if n_cont > 0:
         X[:, :n_cont] = (X[:, :n_cont] - mu) / sd
     return X
+
+
+def get_feature_matrix(bundle: FeatureBundle, feature_set: str) -> Optional[np.ndarray]:
+    if feature_set == "mean":
+        return None
+    if feature_set == "scalar":
+        return bundle.X_scalar
+    if feature_set == "scalar_bits":
+        return bundle.X_scalar_bits
+    if feature_set == "scalar_bits_topk":
+        return bundle.X_scalar_bits_topk
+    raise ValueError(f"Unknown feature_set '{feature_set}'.")
+
+
+def prepare_feature_sets(bundle: FeatureBundle, tr_mask: np.ndarray) -> Dict[str, PreparedFeatureSet]:
+    prepared: Dict[str, PreparedFeatureSet] = {
+        "mean": PreparedFeatureSet(
+            name="mean",
+            X=None,
+            mu=np.zeros((0,), dtype=np.float32),
+            sd=np.ones((0,), dtype=np.float32),
+            n_binary=0,
+            feature_names=[],
+        )
+    }
+
+    for name in ("scalar", "scalar_bits", "scalar_bits_topk"):
+        X_raw = get_feature_matrix(bundle, name)
+        assert X_raw is not None
+        n_binary = FEATURE_SET_N_BINARY[name]
+        mu, sd = standardize_inplace(X_raw, tr_mask, n_binary=n_binary)
+        prepared[name] = PreparedFeatureSet(
+            name=name,
+            X=apply_standardize(X_raw, mu, sd, n_binary=n_binary),
+            mu=mu.astype(np.float32),
+            sd=sd.astype(np.float32),
+            n_binary=n_binary,
+            feature_names=list(bundle.feature_names[name]),
+        )
+    return prepared
+
+
+def instantiate_controller(
+    feature_set: str,
+    feature_dim: int,
+    hidden: int,
+    dropout: float,
+    tmin: float,
+    tmax: float,
+    pmin: float,
+    pmax: float,
+) -> nn.Module:
+    if feature_set == "mean":
+        return MeanController(tmin, tmax, pmin, pmax)
+    return MLPController(feature_dim, hidden, tmin, tmax, pmin, pmax, dropout=dropout)
+
+
+def build_checkpoint_payload(
+    model: nn.Module,
+    *,
+    feature_set: str,
+    prepared: PreparedFeatureSet,
+    source_path: str,
+    hidden: int,
+    dropout: float,
+    profile_k: int,
+    dist_k: int,
+    val_mod: int,
+    quant_step: float,
+    tmin: float,
+    tmax: float,
+    pmin: float,
+    pmax: float,
+) -> Dict[str, object]:
+    state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+    return {
+        "format": "shadow_controller_checkpoint_v1",
+        "state_dict": state_dict,
+        "metadata": {
+            "model_name": feature_set,
+            "feature_set": feature_set,
+            "model_type": "mean" if feature_set == "mean" else "mlp",
+            "source_path": str(source_path),
+            "feature_dim": 0 if prepared.X is None else int(prepared.X.shape[1]),
+            "hidden": int(hidden),
+            "dropout": float(dropout),
+            "profile_k": int(profile_k),
+            "dist_k": int(dist_k),
+            "val_mod": int(val_mod),
+            "quant_step": float(quant_step),
+            "tmin": float(tmin),
+            "tmax": float(tmax),
+            "pmin": float(pmin),
+            "pmax": float(pmax),
+            "n_binary": int(prepared.n_binary),
+            "mu": prepared.mu.tolist(),
+            "sd": prepared.sd.tolist(),
+            "feature_names": list(prepared.feature_names),
+        },
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -728,19 +854,7 @@ def main() -> None:
             },
         )
 
-    # Standardize features using train rows only.
-    X_scalar = bundle.X_scalar.copy()
-    X_scalar_bits = bundle.X_scalar_bits.copy()
-    X_scalar_bits_topk = bundle.X_scalar_bits_topk.copy()
-
-    mu_s, sd_s = standardize_inplace(X_scalar, tr_mask, n_binary=0)
-    X_scalar = apply_standardize(X_scalar, mu_s, sd_s, n_binary=0)
-
-    mu_sb, sd_sb = standardize_inplace(X_scalar_bits, tr_mask, n_binary=5)
-    X_scalar_bits = apply_standardize(X_scalar_bits, mu_sb, sd_sb, n_binary=5)
-
-    mu_sbt, sd_sbt = standardize_inplace(X_scalar_bits_topk, tr_mask, n_binary=5)
-    X_scalar_bits_topk = apply_standardize(X_scalar_bits_topk, mu_sbt, sd_sbt, n_binary=5)
+    prepared = prepare_feature_sets(bundle, tr_mask)
 
     tmin, tmax = float(bundle.yT[tr_idx].min()), float(bundle.yT[tr_idx].max())
     pmin, pmax = float(bundle.yp[tr_idx].min()), float(bundle.yp[tr_idx].max())
@@ -763,14 +877,45 @@ def main() -> None:
         quant_step=args.quant_step,
     )
 
-    models: List[Tuple[str, Optional[np.ndarray], nn.Module]] = [
-        ("mean", None, MeanController(tmin, tmax, pmin, pmax)),
-        ("scalar", X_scalar, MLPController(X_scalar.shape[1], cfg.hidden, tmin, tmax, pmin, pmax, dropout=cfg.dropout)),
-        ("scalar_bits", X_scalar_bits, MLPController(X_scalar_bits.shape[1], cfg.hidden, tmin, tmax, pmin, pmax, dropout=cfg.dropout)),
-        ("scalar_bits_topk", X_scalar_bits_topk, MLPController(X_scalar_bits_topk.shape[1], cfg.hidden, tmin, tmax, pmin, pmax, dropout=cfg.dropout)),
-    ]
+    models: List[Tuple[str, Optional[np.ndarray], nn.Module]] = []
+    for name in ("mean", "scalar", "scalar_bits", "scalar_bits_topk"):
+        prepared_set = prepared[name]
+        feature_dim = 0 if prepared_set.X is None else prepared_set.X.shape[1]
+        models.append(
+            (
+                name,
+                prepared_set.X,
+                instantiate_controller(
+                    feature_set=name,
+                    feature_dim=feature_dim,
+                    hidden=cfg.hidden,
+                    dropout=cfg.dropout,
+                    tmin=tmin,
+                    tmax=tmax,
+                    pmin=pmin,
+                    pmax=pmax,
+                ),
+            )
+        )
 
     all_results: Dict[str, EvalResult] = {}
+    checkpoint_manifest: Dict[str, object] = {
+        "format": "shadow_controller_checkpoint_manifest_v1",
+        "shared": {
+            "source_path": str(args.path),
+            "profile_k": int(args.profile_k),
+            "dist_k": int(args.dist_k),
+            "val_mod": int(args.val_mod),
+            "hidden": int(args.hidden),
+            "dropout": float(args.dropout),
+            "quant_step": float(args.quant_step),
+            "tmin": float(tmin),
+            "tmax": float(tmax),
+            "pmin": float(pmin),
+            "pmax": float(pmax),
+        },
+        "models": {},
+    }
     for name, X, model in models:
         logger.info("\n===== Training model: %s =====", name)
         trained_model, res = train_controller(
@@ -787,7 +932,28 @@ def main() -> None:
             logger=logger,
         )
         all_results[name] = res
-        torch.save(trained_model.state_dict(), os.path.join(args.out_dir, f"{name}_state_dict.pt"))
+        state_dict_path = os.path.join(args.out_dir, f"{name}_state_dict.pt")
+        checkpoint_path = os.path.join(args.out_dir, f"{name}_checkpoint.pt")
+        torch.save(trained_model.state_dict(), state_dict_path)
+        checkpoint_payload = build_checkpoint_payload(
+            trained_model,
+            feature_set=name,
+            prepared=prepared[name],
+            source_path=args.path,
+            hidden=args.hidden,
+            dropout=args.dropout,
+            profile_k=args.profile_k,
+            dist_k=args.dist_k,
+            val_mod=args.val_mod,
+            quant_step=args.quant_step,
+            tmin=tmin,
+            tmax=tmax,
+            pmin=pmin,
+            pmax=pmax,
+        )
+        torch.save(checkpoint_payload, checkpoint_path)
+        checkpoint_manifest["models"][name] = checkpoint_payload["metadata"]
+        logger.info("Saved %s checkpoint to %s", name, checkpoint_path)
 
     # Hypothesis tests.
     mean_res = all_results["mean"]
@@ -888,6 +1054,10 @@ def main() -> None:
     with open(os.path.join(args.out_dir, "metrics_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
     logger.info("Saved metrics summary to %s", os.path.join(args.out_dir, "metrics_summary.json"))
+
+    with open(os.path.join(args.out_dir, "checkpoint_manifest.json"), "w") as f:
+        json.dump(checkpoint_manifest, f, indent=2)
+    logger.info("Saved checkpoint manifest to %s", os.path.join(args.out_dir, "checkpoint_manifest.json"))
 
 
 if __name__ == "__main__":
