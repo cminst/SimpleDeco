@@ -9,6 +9,7 @@ from tokenizers.pre_tokenizers import Whitespace
 from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
 
 from model.templlm_auto import AutoDecoModelForCausalLM
+from trainer.trl_autodeco import AutoDecoLLMTrainer
 
 
 def _write_tiny_base_model(model_dir: Path) -> None:
@@ -68,3 +69,11 @@ def test_autodeco_from_base_model_without_construct(tmp_path: Path) -> None:
         torch.testing.assert_close(reloaded.temp_head.state_dict()[key], value)
     for key, value in model.top_p_head.state_dict().items():
         torch.testing.assert_close(reloaded.top_p_head.state_dict()[key], value)
+
+
+def test_autodeco_mean_head_prediction_uses_supervised_tokens_only() -> None:
+    head_logits = torch.tensor([[[0.2], [0.4], [0.6], [0.8]]], dtype=torch.float32)
+    labels = torch.tensor([[1, -100, 3, 4]], dtype=torch.long)
+    mean_value = AutoDecoLLMTrainer._mean_head_prediction(head_logits, labels)
+    assert mean_value is not None
+    assert abs(mean_value - 0.5) < 1e-6

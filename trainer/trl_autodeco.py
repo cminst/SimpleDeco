@@ -88,6 +88,34 @@ class AutoDecoLLMTrainer(SFTTrainer):
         if self.temp_diag_enabled and self.is_world_process_zero():
             os.makedirs(self._temp_diag_output_dir, exist_ok=True)
 
+    def _should_emit_autodeco_status(self) -> bool:
+        if not self.is_world_process_zero():
+            return False
+        logging_steps = getattr(self.args, "logging_steps", 0) or 0
+        if logging_steps <= 0:
+            return False
+        next_step = self.state.global_step + 1
+        return next_step % int(logging_steps) == 0
+
+    @staticmethod
+    def _mean_head_prediction(
+        head_logits: Optional[torch.Tensor],
+        labels: Optional[torch.Tensor],
+    ) -> Optional[float]:
+        if head_logits is None:
+            return None
+        values = head_logits.detach()
+        if values.ndim == 3 and values.size(-1) == 1:
+            values = values.squeeze(-1)
+        if labels is not None and values.ndim >= 2 and values.size(1) > 1 and labels.size(1) > 1:
+            valid_mask = labels[:, 1:].ne(-100)
+            values = values[:, :-1]
+            if valid_mask.any():
+                values = values[valid_mask]
+        if values.numel() == 0:
+            return None
+        return float(values.float().mean().item())
+
     def _is_main_process_safe(self) -> bool:
         args = getattr(self, "args", None)
         if args is not None:
@@ -802,7 +830,34 @@ class AutoDecoLLMTrainer(SFTTrainer):
         temp_loss = outputs.temp_loss.item() if outputs.temp_loss is not None else 0
         lm_loss = outputs.lm_loss.item() if outputs.lm_loss is not None else 0
         top_p_loss = outputs.top_p_loss.item() if outputs.top_p_loss is not None else 0
-        self.log({"loss": outputs.loss.item(), "temp_loss": temp_loss, "lm_loss": lm_loss, "top_p_loss": top_p_loss})
+        metrics = {"loss": outputs.loss.item(), "temp_loss": temp_loss, "lm_loss": lm_loss, "top_p_loss": top_p_loss}
+        labels = inputs.get("labels")
+        mean_temp = None
+        mean_top_p = None
+        if getattr(model, "train_temp", False):
+            mean_temp = self._mean_head_prediction(outputs.temp_logits, labels)
+            if mean_temp is not None:
+                metrics["autodeco_mean_temp_prediction"] = mean_temp
+        if getattr(model, "train_top_p", False):
+            mean_top_p = self._mean_head_prediction(outputs.top_p_logits, labels)
+            if mean_top_p is not None:
+                metrics["autodeco_mean_top_p_prediction"] = mean_top_p
+        ok = 1.0
+        if mean_temp is not None:
+            ok *= float(torch.isfinite(torch.tensor(mean_temp)) and 0.0 < mean_temp <= 2.0)
+        if mean_top_p is not None:
+            ok *= float(torch.isfinite(torch.tensor(mean_top_p)) and 0.0 < mean_top_p < 1.0)
+        if mean_temp is not None or mean_top_p is not None:
+            metrics["autodeco_ok"] = ok
+        self.log(metrics)
+        if self._should_emit_autodeco_status() and (mean_temp is not None or mean_top_p is not None):
+            parts = ["[AutoDeco]"]
+            if mean_temp is not None:
+                parts.append(f"mean_temp={mean_temp:.4f}")
+            if mean_top_p is not None:
+                parts.append(f"mean_top_p={mean_top_p:.4f}")
+            parts.append(f"OK: {'Yes' if ok >= 0.5 else 'No'}")
+            print(" ".join(parts))
         if return_outputs:
             return outputs["loss"], outputs
         return outputs["loss"]
