@@ -14,8 +14,7 @@ import html
 import json
 import logging
 import os
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import matplotlib
 matplotlib.use("Agg")
@@ -26,16 +25,12 @@ from datasets import load_from_disk
 from transformers import AutoTokenizer
 
 from shadow_controller_dist_match import (
-    FEATURE_SET_N_BINARY,
     apply_standardize,
-    build_feature_bundle,
     build_feature_bundle_from_token_data,
     get_feature_matrix,
     hard_top_p_from_sorted_logits_torch,
     instantiate_controller,
     pick_device,
-    prepare_feature_sets,
-    split_by_seq_mod,
 )
 
 TEMP_COLOR_MIN = 0.0
@@ -105,42 +100,14 @@ def display_token(token: str) -> str:
     return token.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
 
 
-def infer_model_name_from_checkpoint_path(path: str) -> str:
-    stem = Path(path).stem
-    for suffix in ("_checkpoint", "_state_dict"):
-        if stem.endswith(suffix):
-            return stem[: -len(suffix)]
-    return stem
-
-
-def load_checkpoint_metadata(
-    checkpoint_path: str,
-    model_name_override: Optional[str],
-    logger: logging.Logger,
-) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any], bool]:
+def load_checkpoint_metadata(checkpoint_path: str) -> tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
     raw = torch.load(checkpoint_path, map_location="cpu")
     if isinstance(raw, dict) and "state_dict" in raw and isinstance(raw.get("metadata"), dict):
-        return raw["state_dict"], dict(raw["metadata"]), False
-
-    if not isinstance(raw, dict):
-        raise ValueError(f"Unsupported checkpoint payload type: {type(raw).__name__}.")
-
-    state_dict = raw
-    model_name = model_name_override or infer_model_name_from_checkpoint_path(checkpoint_path)
-    manifest_path = os.path.join(os.path.dirname(checkpoint_path), "checkpoint_manifest.json")
-    if os.path.isfile(manifest_path):
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
-        models = manifest.get("models") if isinstance(manifest, dict) else None
-        if isinstance(models, dict) and isinstance(models.get(model_name), dict):
-            metadata = dict(models[model_name])
-            return state_dict, metadata, False
-
-    logger.warning(
-        "Checkpoint metadata not found for %s. Falling back to legacy reconstruction.",
-        checkpoint_path,
+        return raw["state_dict"], dict(raw["metadata"])
+    raise ValueError(
+        f"{checkpoint_path} is not a supported shadow controller checkpoint. "
+        "Expected a *_checkpoint.pt file with embedded metadata."
     )
-    return state_dict, {"model_name": model_name, "feature_set": model_name}, True
 
 
 def resolve_sequence_info(
@@ -227,56 +194,6 @@ def load_sequence_token_data(tokens_ds: Any, seq_id: int) -> Dict[str, np.ndarra
     order = np.argsort(data["t"], kind="stable")
     return {key: np.asarray(value)[order] for key, value in data.items()}
 
-
-def metadata_is_complete(metadata: Dict[str, Any]) -> bool:
-    base_keys = {"feature_set", "profile_k", "dist_k", "hidden", "dropout", "quant_step", "tmin", "tmax", "pmin", "pmax"}
-    if not base_keys.issubset(metadata):
-        return False
-    feature_set = str(metadata["feature_set"])
-    if feature_set == "mean":
-        return True
-    return {"mu", "sd", "n_binary"}.issubset(metadata)
-
-
-def derive_legacy_metadata(
-    diagnostics_path: str,
-    metadata: Dict[str, Any],
-    logger: logging.Logger,
-    profile_k: int,
-    dist_k: int,
-    val_mod: int,
-    hidden: int,
-    dropout: float,
-    quant_step: float,
-) -> Dict[str, Any]:
-    feature_set = str(metadata["feature_set"])
-    full_bundle = build_feature_bundle(diagnostics_path, profile_k=profile_k, dist_k=dist_k, logger=logger)
-    tr_mask, _ = split_by_seq_mod(full_bundle.seq_id, val_mod)
-    prepared = prepare_feature_sets(full_bundle, tr_mask)
-    tr_idx = np.flatnonzero(tr_mask)
-    if len(tr_idx) == 0:
-        raise ValueError("Legacy checkpoint reconstruction failed because the training split is empty.")
-
-    prepared_set = prepared[feature_set]
-    return {
-        "model_name": feature_set,
-        "feature_set": feature_set,
-        "hidden": int(hidden),
-        "dropout": float(dropout),
-        "profile_k": int(profile_k),
-        "dist_k": int(dist_k),
-        "quant_step": float(quant_step),
-        "tmin": float(full_bundle.yT[tr_idx].min()),
-        "tmax": float(full_bundle.yT[tr_idx].max()),
-        "pmin": float(full_bundle.yp[tr_idx].min()),
-        "pmax": float(full_bundle.yp[tr_idx].max()),
-        "n_binary": int(prepared_set.n_binary),
-        "mu": prepared_set.mu.tolist(),
-        "sd": prepared_set.sd.tolist(),
-        "feature_names": list(prepared_set.feature_names),
-    }
-
-
 def load_tokenizer(name_or_path: Optional[str], trust_remote_code: bool, logger: logging.Logger) -> Any | None:
     if not name_or_path:
         return None
@@ -299,11 +216,11 @@ def decode_tokens(token_ids: List[int], tokenizer: Any | None) -> List[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, help="Path to shadow controller checkpoint or state_dict.")
+    parser.add_argument("--checkpoint_path", required=True, help="Path to shadow controller *_checkpoint.pt file.")
     parser.add_argument(
         "--diagnostics_path",
         default=None,
-        help="Path to diagnostics dataset saved with load_from_disk. Optional for new rich checkpoints that record source_path.",
+        help="Optional override for the diagnostics dataset path stored in checkpoint metadata.",
     )
     parser.add_argument("--row_index", type=int, default=None, help="Original dataset row index stored in sequences.dataset_index.")
     parser.add_argument("--seq_id", type=int, default=None, help="Direct sequence id from the diagnostics dataset.")
@@ -313,40 +230,15 @@ def main() -> None:
     parser.add_argument("--output_dir", default="figure/shadow_controller_trace")
     parser.add_argument("--trust_remote_code", action="store_true")
     parser.add_argument("--hide_targets", action="store_true", help="Do not overlay the AutoDeco target T_hat/p_hat curves.")
-    parser.add_argument("--model_name", default=None, help="Only needed for legacy state_dict checkpoints without metadata.")
-    parser.add_argument("--profile_k", type=int, default=64, help="Legacy fallback only.")
-    parser.add_argument("--dist_k", type=int, default=200, help="Legacy fallback only.")
-    parser.add_argument("--val_mod", type=int, default=10, help="Legacy fallback only.")
-    parser.add_argument("--hidden", type=int, default=128, help="Legacy fallback only.")
-    parser.add_argument("--dropout", type=float, default=0.05, help="Legacy fallback only.")
-    parser.add_argument("--quant_step", type=float, default=1.0 / 128.0, help="Legacy fallback only.")
     args = parser.parse_args()
 
     logger = setup_logger()
     os.makedirs(args.output_dir, exist_ok=True)
 
-    state_dict, metadata, needs_legacy_rebuild = load_checkpoint_metadata(
-        args.checkpoint_path,
-        args.model_name,
-        logger,
-    )
+    state_dict, metadata = load_checkpoint_metadata(args.checkpoint_path)
     diagnostics_path = args.diagnostics_path or metadata.get("source_path")
     if not diagnostics_path:
-        raise ValueError(
-            "--diagnostics_path is required for legacy checkpoints without embedded source_path metadata."
-        )
-    if needs_legacy_rebuild or not metadata_is_complete(metadata):
-        metadata = derive_legacy_metadata(
-            diagnostics_path=diagnostics_path,
-            metadata=metadata,
-            logger=logger,
-            profile_k=args.profile_k,
-            dist_k=args.dist_k,
-            val_mod=args.val_mod,
-            hidden=args.hidden,
-            dropout=args.dropout,
-            quant_step=args.quant_step,
-        )
+        raise ValueError("Checkpoint metadata is missing source_path; pass --diagnostics_path explicitly.")
 
     feature_set = str(metadata["feature_set"])
     profile_k = int(metadata["profile_k"])
@@ -371,7 +263,7 @@ def main() -> None:
     if feature_matrix is not None:
         mu = np.asarray(metadata["mu"], dtype=np.float32)
         sd = np.asarray(metadata["sd"], dtype=np.float32)
-        n_binary = int(metadata.get("n_binary", FEATURE_SET_N_BINARY[feature_set]))
+        n_binary = int(metadata["n_binary"])
         feature_matrix = apply_standardize(feature_matrix, mu, sd, n_binary=n_binary)
 
     device = pick_device(args.device)

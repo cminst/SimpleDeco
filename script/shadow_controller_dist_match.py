@@ -899,23 +899,6 @@ def main() -> None:
         )
 
     all_results: Dict[str, EvalResult] = {}
-    checkpoint_manifest: Dict[str, object] = {
-        "format": "shadow_controller_checkpoint_manifest_v1",
-        "shared": {
-            "source_path": str(args.path),
-            "profile_k": int(args.profile_k),
-            "dist_k": int(args.dist_k),
-            "val_mod": int(args.val_mod),
-            "hidden": int(args.hidden),
-            "dropout": float(args.dropout),
-            "quant_step": float(args.quant_step),
-            "tmin": float(tmin),
-            "tmax": float(tmax),
-            "pmin": float(pmin),
-            "pmax": float(pmax),
-        },
-        "models": {},
-    }
     for name, X, model in models:
         logger.info("\n===== Training model: %s =====", name)
         trained_model, res = train_controller(
@@ -932,9 +915,7 @@ def main() -> None:
             logger=logger,
         )
         all_results[name] = res
-        state_dict_path = os.path.join(args.out_dir, f"{name}_state_dict.pt")
         checkpoint_path = os.path.join(args.out_dir, f"{name}_checkpoint.pt")
-        torch.save(trained_model.state_dict(), state_dict_path)
         checkpoint_payload = build_checkpoint_payload(
             trained_model,
             feature_set=name,
@@ -952,7 +933,6 @@ def main() -> None:
             pmax=pmax,
         )
         torch.save(checkpoint_payload, checkpoint_path)
-        checkpoint_manifest["models"][name] = checkpoint_payload["metadata"]
         logger.info("Saved %s checkpoint to %s", name, checkpoint_path)
 
     # Hypothesis tests.
@@ -1054,10 +1034,6 @@ def main() -> None:
     with open(os.path.join(args.out_dir, "metrics_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
     logger.info("Saved metrics summary to %s", os.path.join(args.out_dir, "metrics_summary.json"))
-
-    with open(os.path.join(args.out_dir, "checkpoint_manifest.json"), "w") as f:
-        json.dump(checkpoint_manifest, f, indent=2)
-    logger.info("Saved checkpoint manifest to %s", os.path.join(args.out_dir, "checkpoint_manifest.json"))
 
 
 if __name__ == "__main__":
