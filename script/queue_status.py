@@ -1,67 +1,17 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
-import json
 import os
 import re
 import shutil
 import sys
 import time
 
-
-def load_jobs(path: str):
-    if not os.path.exists(path):
-        return []
-    with open(path, "r") as handle:
-        lines = handle.read().splitlines()
-    jobs = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        jobs.append(line)
-    return jobs
+from queue_backend import collect_status
 
 
-def collect_status(queue_file: str, state_file, stale_after: int) -> dict:
-    jobs = load_jobs(queue_file)
-    status = {
-        "queue_file": queue_file,
-        "remaining": len(jobs),
-        "jobs": jobs,
-        "workers": [],
-    }
-
-    if state_file and os.path.exists(state_file):
-        with open(state_file, "r") as handle:
-            try:
-                state = json.load(handle)
-            except json.JSONDecodeError:
-                state = {}
-        workers = state.get("workers", {})
-        if workers:
-            now = time.time()
-            for worker_id in sorted(workers):
-                info = workers[worker_id]
-                last_ping = info.get("last_ping")
-                age = None if last_ping is None else int(now - last_ping)
-                status_name = info.get("status", "unknown")
-                if age is not None and stale_after > 0 and age > stale_after:
-                    status_name = "stale"
-                age_str = "unknown" if age is None else f"{age}s"
-                job = info.get("job") or ""
-                status["workers"].append(
-                    {
-                        "id": worker_id,
-                        "status": status_name,
-                        "age_str": age_str,
-                        "job": job,
-                        "progress": info.get("progress") or "",
-                    }
-                )
-    return status
-
-
-def elide_middle(text: str, max_len: int):
+def elide_middle(text: str, max_len: int) -> str:
     if max_len <= 3:
         return text[:max_len]
     if len(text) <= max_len:
@@ -75,7 +25,7 @@ def elide_middle(text: str, max_len: int):
     return f"{text[:keep_start]}...{text[-keep_end:]}"
 
 
-def extract_job_label(job: str):
+def extract_job_label(job: str) -> str:
     patterns = [
         r"--save_outputs\s+(\S+)",
         r"\btee\s+(\S+)",
@@ -86,61 +36,62 @@ def extract_job_label(job: str):
         if match:
             return match.group(1).strip("\"'")
 
-    matches = re.findall(
-        r"([A-Za-z0-9_./-]+\.(?:jsonl|log|txt|json|yaml|yml|csv))", job
-    )
+    matches = re.findall(r"([A-Za-z0-9_./-]+\.(?:jsonl|log|txt|json|yaml|yml|csv))", job)
     if matches:
         return matches[-1]
 
     return job.strip()
 
 
-def job_display(job: str, width: int):
-    label = extract_job_label(job)
-    return elide_middle(label, max(12, width))
+def job_display(job: str, width: int) -> str:
+    return elide_middle(extract_job_label(job), max(12, width))
 
 
-def fit_line(text: str, width: int):
+def fit_line(text: str, width: int) -> str:
     if width <= 0:
         return ""
     return elide_middle(text, width)
 
 
-def build_display_rows(status: dict, head: int, width: int, now_str: str):
-    rows = []
-    rows.append(("Queue Status " + now_str, "header"))
+def build_display_rows(status: dict, head: int, width: int, now_str: str) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    rows.append((f"Queue Status {now_str}", "header"))
     rows.append(("", "blank"))
     rows.append((f"Queue file: {status['queue_file']}", "meta"))
-    rows.append((f"Remaining jobs: {status['remaining']}", "meta"))
+    rows.append((f"Queue dir:  {status['queue_dir']}", "meta"))
+    rows.append((f"Pending jobs:   {status['remaining']}", "meta"))
+    rows.append((f"Completed jobs: {status['completed']}", "meta"))
+    rows.append((f"Failed jobs:    {status['failed']}", "meta"))
     rows.append(("", "blank"))
     rows.append(("Next jobs:", "section"))
 
     if status["jobs"] and head > 0:
         for idx, job in enumerate(status["jobs"][:head], 1):
-            label = job_display(job, max(10, width - 6))
-            rows.append((f"{idx:>2}. {label}", "job"))
+            label = job_display(job["job"], max(10, width - 6))
+            retries = int(job.get("retries", 0))
+            suffix = f" (retries={retries})" if retries else ""
+            rows.append((f"{idx:>2}. {label}{suffix}", "job"))
     else:
         rows.append(("  (none)", "dim"))
 
     rows.append(("", "blank"))
-    rows.append(("Workers:", "section"))
-    if status["workers"]:
-        for worker in status["workers"]:
-            base = f"{worker['id']} | {worker['status']} | last ping {worker['age_str']}"
-            if worker["job"]:
-                label = job_display(worker["job"], max(10, width - 10))
-                base = f"{base} | {label}"
+    rows.append(("Running leases:", "section"))
+    workers = status.get("workers", [])
+    if workers:
+        for worker in workers:
+            label = job_display(worker["job"], max(10, width - 24))
+            state = "stale" if worker.get("stale") else "running"
+            base = f"{worker.get('worker_id') or 'unknown'} | {state} | age {worker.get('age_seconds', 0)}s | {label}"
             if worker.get("progress"):
                 base = f"{base} | {worker['progress']}"
-            style = f"worker_{worker['status']}"
-            rows.append((base, style))
+            rows.append((base, f"worker_{state}"))
     else:
         rows.append(("  (none)", "dim"))
 
     return rows
 
 
-def format_status_lines(status: dict, head: int, width: int, now_str: str):
+def format_status_lines(status: dict, head: int, width: int, now_str: str) -> list[str]:
     rows = build_display_rows(status, head, width, now_str)
     return [fit_line(text, width) for text, _style in rows]
 
@@ -154,7 +105,7 @@ def render_plain(status: dict, head: int) -> None:
 
 def watch_plain(args: argparse.Namespace) -> None:
     while True:
-        status = collect_status(args.file, args.state_file, args.stale_after)
+        status = collect_status(args.file, stale_after=args.stale_after, head=args.head)
         if sys.stdout.isatty():
             print("\033[2J\033[H", end="")
         render_plain(status, args.head)
@@ -176,11 +127,10 @@ def watch_curses(args: argparse.Namespace) -> None:
                 pass
             has_colors = True
             curses.init_pair(3, curses.COLOR_GREEN, -1)
-            curses.init_pair(4, curses.COLOR_YELLOW, -1)
             curses.init_pair(5, curses.COLOR_RED, -1)
 
         while True:
-            status = collect_status(args.file, args.state_file, args.stale_after)
+            status = collect_status(args.file, stale_after=args.stale_after, head=args.head)
             height, width = stdscr.getmaxyx()
             now_str = time.strftime("%Y-%m-%d %H:%M:%S")
             rows = build_display_rows(status, args.head, width, now_str)
@@ -194,27 +144,16 @@ def watch_curses(args: argparse.Namespace) -> None:
             stdscr.erase()
             for idx, (line, style) in enumerate(rows[:height]):
                 attr = curses.A_NORMAL
-                if style == "header":
-                    attr = curses.A_BOLD
-                elif style == "section":
+                if style in {"header", "section"}:
                     attr = curses.A_BOLD
                 elif style == "dim":
                     attr = curses.A_DIM
                 elif style == "worker_running":
-                    attr = curses.A_BOLD
-                    if has_colors:
-                        attr = curses.color_pair(3) | curses.A_BOLD
+                    attr = curses.color_pair(3) | curses.A_BOLD if has_colors else curses.A_BOLD
                 elif style == "worker_stale":
-                    attr = curses.A_BOLD
-                    if has_colors:
-                        attr = curses.color_pair(5) | curses.A_BOLD
-                elif style == "worker_idle":
-                    attr = curses.A_BOLD
-                    if has_colors:
-                        attr = curses.color_pair(4) | curses.A_BOLD
+                    attr = curses.color_pair(5) | curses.A_BOLD if has_colors else curses.A_BOLD
                 elif style == "hint":
                     attr = curses.A_DIM
-
                 stdscr.addnstr(idx, 0, fit_line(line, max(0, width - 1)), max(0, width - 1), attr)
             stdscr.refresh()
 
@@ -229,15 +168,17 @@ def watch_curses(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Show queue status.")
-    parser.add_argument("--file", required=True, help="Path to the queue file.")
-    parser.add_argument("--head", type=int, default=5, help="Show next N jobs.")
-    parser.add_argument("--state-file", help="Worker state JSON file.")
-    parser.add_argument("--stale-after", type=int, default=0, help="Seconds before worker is stale.")
+    parser = argparse.ArgumentParser(description="Show durable queue status.")
+    parser.add_argument("--file", required=True, help="Queue inbox file.")
+    parser.add_argument("--head", type=int, default=5, help="Show next N pending jobs.")
+    parser.add_argument("--state-file", help="Ignored legacy flag.")
+    parser.add_argument("--completed-file", help="Ignored legacy flag.")
+    parser.add_argument("--failed-file", help="Ignored legacy flag.")
+    parser.add_argument("--stale-after", type=int, default=0, help="Seconds before a running lease is shown as stale.")
     parser.add_argument("--watch", action="store_true", help="Refresh display continuously.")
     parser.add_argument("--interval", type=float, default=10, help="Seconds between refreshes.")
     parser.add_argument("--curses", action="store_true", help="Use curses UI (implies --watch).")
-    parser.add_argument("--no-curses", action="store_true", help="Disable curses UI.")
+    parser.add_argument("--no-curses", action="store_true", help="Force plain-text watch mode.")
     args = parser.parse_args()
 
     if args.curses:
@@ -246,19 +187,17 @@ def main() -> None:
     use_curses = False
     if args.watch and not args.no_curses and sys.stdout.isatty():
         term = os.environ.get("TERM", "")
-        use_curses = term not in ("", "dumb", "unknown")
+        if term and term.lower() != "dumb":
+            use_curses = args.curses or True
 
     if args.watch:
         if use_curses:
-            try:
-                watch_curses(args)
-                return
-            except Exception as exc:
-                print(f"Warning: curses UI failed ({exc}); falling back to plain output.", file=sys.stderr)
-        watch_plain(args)
+            watch_curses(args)
+        else:
+            watch_plain(args)
         return
 
-    status = collect_status(args.file, args.state_file, args.stale_after)
+    status = collect_status(args.file, stale_after=args.stale_after, head=args.head)
     render_plain(status, args.head)
 
 
