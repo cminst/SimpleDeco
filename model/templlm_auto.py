@@ -142,17 +142,24 @@ class AutoDecoModelForCausalLMConfig(PretrainedConfig):
         enable_top_p_head: bool=True,
         use_enhanced_features: bool=True,
         base_model_name_or_path: str=None,
+        base_model_type: str=None,
         **kwargs  # All base model config parameters
     ):
         super().__init__(**kwargs)
+        hidden_size = kwargs.get('hidden_size', None)
+        if hidden_size is None:
+            hidden_size = kwargs.get('n_embd', None)
         self.enable_temperature_head = enable_temperature_head
         self.enable_top_p_head = enable_top_p_head
-        self.top_p_hidden_size = kwargs.get('hidden_size', None)
-        self.temperature_hidden_size = kwargs.get('hidden_size', None)
+        self.hidden_size = hidden_size
+        self.top_p_hidden_size = hidden_size
+        self.temperature_hidden_size = hidden_size
         self.use_enhanced_features = use_enhanced_features
         self.base_model_name_or_path = base_model_name_or_path
         self._name_or_path = base_model_name_or_path
-        self.base_model_type = kwargs.get('base_model_type', None) if kwargs.get('base_model_type', None) is not None else kwargs.get('model_type', None)
+        self.base_model_type = base_model_type if base_model_type is not None else kwargs.get('base_model_type', None)
+        if self.base_model_type is None:
+            self.base_model_type = kwargs.get('model_type', None)
 
 
 
@@ -251,6 +258,46 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
 
     # whole model only
     @classmethod
+    def _to_autodeco_config(
+        cls,
+        config: PretrainedConfig,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        **overrides,
+    ) -> AutoDecoModelForCausalLMConfig:
+        if isinstance(config, AutoDecoModelForCausalLMConfig):
+            autodeco_config = config
+        else:
+            config_dict = config.to_dict() if hasattr(config, "to_dict") else {}
+            base_model_type = config_dict.get("model_type", getattr(config, "model_type", None))
+            autodeco_config = AutoDecoModelForCausalLMConfig(
+                **config_dict,
+                base_model_name_or_path=str(pretrained_model_name_or_path),
+                base_model_type=base_model_type,
+            )
+        if autodeco_config.base_model_name_or_path is None:
+            autodeco_config.base_model_name_or_path = str(pretrained_model_name_or_path)
+            autodeco_config._name_or_path = str(pretrained_model_name_or_path)
+        for key, value in overrides.items():
+            if value is not None and hasattr(autodeco_config, key):
+                setattr(autodeco_config, key, value)
+        return autodeco_config
+
+    @staticmethod
+    def _load_head_state_dict(checkpoint_path: Union[str, os.PathLike]) -> dict[str, torch.Tensor]:
+        if not os.path.isdir(checkpoint_path):
+            return {}
+
+        head_state_dict: dict[str, torch.Tensor] = {}
+        for fname in os.listdir(checkpoint_path):
+            if not fname.endswith(".safetensors"):
+                continue
+            state_dict = load_file(filename=os.path.join(checkpoint_path, fname))
+            head_state_dict.update({
+                k: v for k, v in state_dict.items() if k.startswith("temp_head") or k.startswith("top_p_head")
+            })
+        return head_state_dict
+
+    @classmethod
     def from_pretrained(
             cls: type[SpecificPreTrainedModelType],
             pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
@@ -258,26 +305,44 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
             **kwargs,
     ) -> "AutoDecoModelForCausalLM":
-        config = AutoDecoModelForCausalLMConfig.from_pretrained(
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
-            **kwargs
+        if pretrained_model_name_or_path is None:
+            raise ValueError("pretrained_model_name_or_path must be provided")
+
+        config_load_keys = (
+            "cache_dir",
+            "force_download",
+            "local_files_only",
+            "proxies",
+            "revision",
+            "subfolder",
+            "token",
+            "trust_remote_code",
+            "use_auth_token",
         )
-        autodeco_model: AutoDecoModelForCausalLM = cls(config, **kwargs)
+        config_kwargs = {key: kwargs[key] for key in config_load_keys if key in kwargs}
+        if config is None:
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **config_kwargs)
+        elif isinstance(config, (str, os.PathLike)):
+            config = AutoConfig.from_pretrained(config, **config_kwargs)
 
-        head_state_dict = {}
-        for fname in os.listdir(pretrained_model_name_or_path):
-            if fname.endswith(".safetensors"):
-                state_dict = load_file(filename=os.path.join(pretrained_model_name_or_path, fname))
-                head_state_dict.update({
-                    k: v for k, v in state_dict.items() if k.startswith("temp_head") or k.startswith("top_p_head")
-                })
+        raw_model_type = getattr(config, "model_type", None)
+        autodeco_config = cls._to_autodeco_config(
+            config,
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            enable_temperature_head=kwargs.get("enable_temperature_head"),
+            enable_top_p_head=kwargs.get("enable_top_p_head"),
+            use_enhanced_features=kwargs.get("use_enhanced_features"),
+        )
+        autodeco_model: AutoDecoModelForCausalLM = cls(autodeco_config, **kwargs)
 
-        if len(head_state_dict) > 0:
-            for k in head_state_dict:
-                print(f"Load {k}")
-            autodeco_model.load_state_dict(state_dict=head_state_dict, strict=False)
-        else:
-            print("no head state dict found...")
+        if raw_model_type == AutoDecoModelForCausalLMConfig.model_type:
+            head_state_dict = cls._load_head_state_dict(pretrained_model_name_or_path)
+            if len(head_state_dict) > 0:
+                for k in head_state_dict:
+                    print(f"Load {k}")
+                autodeco_model.load_state_dict(state_dict=head_state_dict, strict=False)
+            else:
+                print("no head state dict found...")
         return autodeco_model
 
     def get_input_embeddings(self):

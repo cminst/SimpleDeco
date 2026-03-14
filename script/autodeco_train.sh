@@ -4,7 +4,7 @@ TS=$(date +%Y%m%d%H%M%S)
 export WANDB_RUN_ID="AutoDeco-Thinking-$TS"
 
 accelerate launch trl_train.py \
-  --model_name_or_path ckpt/autodeco-qwen3-4b-thinking \
+  --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
   --output_dir ./autodeco_2heads_dolci \
   --train_temp true \
