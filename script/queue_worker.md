@@ -37,10 +37,10 @@ Remote workers claim leases over SSH from the host queue.
 ```bash
 QUEUE_HOST="zli@100.84.104.59" \
 QUEUE_FILE="/home/zli/SimpleDeco/jobs/patches_jobs.txt" \
-WORKER_ID="research_evcc_h200" \
+WORKER_ID="grufaller_h200" \
 GPU_ID=0 \
 PING_INTERVAL=30 \
-bash script/queue_worker.sh --ssh-pass "test1234"
+bash script/queue_worker.sh --ssh-pass "test1234" --ssh-accept-new
 ```
 
 When `QUEUE_HOST` is set, `QUEUE_BACKEND_SCRIPT` defaults to:

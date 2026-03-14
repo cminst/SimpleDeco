@@ -92,6 +92,29 @@ def runwithgpu():
         shutil.copytree(temp_clone_path, repo, dirs_exist_ok=True, symlinks=True)
         shutil.rmtree(temp_clone_path)
 
+        subprocess.run(
+            [
+                "hf",
+                "download",
+                "cminst/AutoDeco-R1-Distill-Qwen-7B-Merged",
+                "--local-dir",
+                "ckpt/AutoDeco-R1-Distill-Qwen-7B-merged",
+            ],
+            check=True,
+            cwd=repo,
+        )
+        subprocess.run(
+            [
+                "hf",
+                "download",
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "--local-dir",
+                "ckpt/DeepSeek-R1-Distill-Qwen-7B",
+            ],
+            check=True,
+            cwd=repo,
+        )
+
         autodeco_volume.commit()
     else:
         subprocess.run(
