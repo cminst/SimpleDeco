@@ -23,7 +23,7 @@ Each job stays in one of those directories until it is explicitly completed or f
 Use a host worker as the durable queue owner. It should stay up and keep reaping stale leases.
 
 ```bash
-QUEUE_FILE="jobs/gpqa_diamond_jobs.txt" \
+QUEUE_FILE="jobs/patches_jobs.txt" \
 WORKER_ID="host_pro6000" \
 GPU_ID=0 \
 EXIT_ON_EMPTY=0 \
@@ -36,9 +36,10 @@ Remote workers claim leases over SSH from the host queue.
 
 ```bash
 QUEUE_HOST="zli@100.84.104.59" \
-QUEUE_FILE="/home/zli/SimpleDeco/jobs/gpqa_diamond_jobs.txt" \
-WORKER_ID="modal_h200_1" \
+QUEUE_FILE="/home/zli/SimpleDeco/jobs/patches_jobs.txt" \
+WORKER_ID="research_evcc_h200" \
 GPU_ID=0 \
+PING_INTERVAL=30 \
 bash script/queue_worker.sh --ssh-pass "test1234"
 ```
 
