@@ -765,6 +765,17 @@ def train_controller(
 # -----------------------------------------------------------------------------
 
 
+def _format_evidence_value(value: float | int | str) -> str:
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return str(value)
+        abs_value = abs(value)
+        if abs_value >= 1000.0 or (0.0 < abs_value < 1e-4):
+            return f"{value:.3e}"
+        return f"{value:.6f}".rstrip("0").rstrip(".")
+    return str(value)
+
+
 def log_hypothesis(logger: logging.Logger, hid: str, statement: str, holds: bool, evidence: Dict[str, float | int | str]) -> None:
     payload = {
         "hypothesis_id": hid,
@@ -772,7 +783,14 @@ def log_hypothesis(logger: logging.Logger, hid: str, statement: str, holds: bool
         "supported": bool(holds),
         "evidence": evidence,
     }
-    logger.info("HYPOTHESIS %s", json.dumps(payload, sort_keys=True))
+    verdict = "SUPPORTED" if holds else "NOT SUPPORTED"
+    evidence_text = ", ".join(
+        f"{key}={_format_evidence_value(value)}"
+        for key, value in evidence.items()
+    ) if evidence else "(none)"
+    logger.info("HYPOTHESIS %s [%s] %s", hid, verdict, statement)
+    logger.info("HYPOTHESIS_EVIDENCE %s | %s", hid, evidence_text)
+    logger.info("HYPOTHESIS_JSON %s", json.dumps(payload, sort_keys=True))
 
 
 # -----------------------------------------------------------------------------
