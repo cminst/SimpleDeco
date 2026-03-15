@@ -496,6 +496,29 @@ def _per_problem_estimates(
     return estimates
 
 
+def _summarize_group_metric(
+    scores_list: List[Dict[str, List[float]]],
+    pooled: Dict[str, List[float]],
+    common: List[str],
+    mode: str,
+    k: int,
+) -> Tuple[float | None, float | None, int]:
+    pooled_mean, used = _metric_for_scores(pooled, common, mode, k)
+    seed_vals, used_list = _seed_metrics(scores_list, common, mode, k)
+    seed_mean = sum(seed_vals) / len(seed_vals) if seed_vals else None
+    if len(seed_vals) > 1:
+        stdev = statistics.stdev(seed_vals)
+        t_critical = _t_critical_975(len(seed_vals) - 1)
+        ci = t_critical * stdev / math.sqrt(len(seed_vals))
+    else:
+        ci = None
+    mean = seed_mean if seed_mean is not None else pooled_mean
+    used_count = used if used else (min(used_list) if used_list else 0)
+    mean_pct = mean * 100.0 if mean is not None else None
+    ci_pct = ci * 100.0 if ci is not None else None
+    return mean_pct, ci_pct, used_count
+
+
 def _compute_metrics(
     groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
     configs: List[Tuple[str, int]],
@@ -513,19 +536,16 @@ def _compute_metrics(
         cis: List[float | None] = []
 
         for _, scores_list, pooled in groups:
-            pooled_mean, used = _metric_for_scores(pooled, common, mode, k)
-            seed_vals, used_list = _seed_metrics(scores_list, common, mode, k)
-            seed_mean = sum(seed_vals) / len(seed_vals) if seed_vals else None
-            if len(seed_vals) > 1:
-                stdev = statistics.stdev(seed_vals)
-                t_critical = _t_critical_975(len(seed_vals) - 1)
-                ci = t_critical * stdev / math.sqrt(len(seed_vals))
-            else:
-                ci = None
-            mean = seed_mean if seed_mean is not None else pooled_mean
-            means.append(mean * 100.0 if mean is not None else None)
-            cis.append(ci * 100.0 if ci is not None else None)
-            used_counts.append(used if used else (min(used_list) if used_list else 0))
+            mean_pct, ci_pct, used_count = _summarize_group_metric(
+                scores_list,
+                pooled,
+                common,
+                mode,
+                k,
+            )
+            means.append(mean_pct)
+            cis.append(ci_pct)
+            used_counts.append(used_count)
 
         for mean, ci in zip(means, cis):
             row.append(_format_mean_ci(mean, ci))
@@ -634,7 +654,44 @@ def _compute_pairwise_diffs(
     return tables
 
 
-def _plot_results(
+def _pairwise_average(series: List[Tuple[int, float, float | None]]) -> List[Tuple[int, float, float | None]]:
+    by_k = {k: (v, s) for k, v, s in series}
+    averaged: List[Tuple[int, float, float | None]] = []
+    for k in sorted(by_k):
+        if k % 2 == 0 and (k - 1) in by_k:
+            v_even, s_even = by_k[k]
+            v_odd, s_odd = by_k[k - 1]
+            avg_val = (v_even + v_odd) / 2.0
+            if s_even is None or s_odd is None:
+                avg_ci = None
+            else:
+                avg_ci = (s_even + s_odd) / 2.0
+            averaged.append((k, avg_val, avg_ci))
+    return averaged
+
+
+def _prepare_plot_series(
+    mode: str,
+    series: List[Tuple[int, float, float | None]],
+    maj_avg: str,
+) -> List[Tuple[int, float, float | None]]:
+    series_sorted = sorted(series, key=lambda t: t[0])
+    if mode != "maj":
+        return series_sorted
+    if maj_avg == "pairs":
+        return _pairwise_average(series_sorted)
+    if maj_avg == "odd":
+        return [(k, v, s) for (k, v, s) in series_sorted if k % 2 == 1]
+    return series_sorted
+
+
+def _style_rank(idx: int, focus_idx: int | None) -> int:
+    if focus_idx is None:
+        return idx
+    return idx if idx < focus_idx else idx - 1
+
+
+def _plot_curve_results(
     path: Path,
     plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]],
     labels: List[str],
@@ -661,7 +718,6 @@ def _plot_results(
     fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
-    markers = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
     non_focus_styles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1))]
     focus_color = "#004488"
     non_focus_palette = [
@@ -671,21 +727,6 @@ def _plot_results(
         "#999933",
         "#BBBBBB",
     ]
-
-    def _pairwise_average(series: List[Tuple[int, float, float | None]]) -> List[Tuple[int, float, float | None]]:
-        by_k = {k: (v, s) for k, v, s in series}
-        averaged: List[Tuple[int, float, float | None]] = []
-        for k in sorted(by_k):
-            if k % 2 == 0 and (k - 1) in by_k:
-                v_even, s_even = by_k[k]
-                v_odd, s_odd = by_k[k - 1]
-                avg_val = (v_even + v_odd) / 2.0
-                if s_even is None or s_odd is None:
-                    avg_ci = None
-                else:
-                    avg_ci = (s_even + s_odd) / 2.0
-                averaged.append((k, avg_val, avg_ci))
-        return averaged
 
     for ax, (mode, ylabel) in zip(axes, order):
         series_groups = plot_data.get(mode, [])
@@ -707,19 +748,10 @@ def _plot_results(
 
         has_any = False
 
-        total_series = len(series_groups)
-        non_focus_total = (
-            total_series - 1 if focus_idx is not None and total_series > 0 else 0
-        )
         for idx, series in enumerate(series_groups):
-            if mode == "maj":
-                if maj_avg == "pairs":
-                    series = _pairwise_average(series)
-                elif maj_avg == "odd":
-                    series = [(k, v, s) for (k, v, s) in series if k % 2 == 1]
+            series = _prepare_plot_series(mode, series, maj_avg)
             if not series:
                 continue
-            series.sort(key=lambda t: t[0])
             ks = [k for k, _, _ in series]
             vals = [v for _, v, _ in series]
             color_cycle = f"C{idx % 10}"
@@ -739,7 +771,7 @@ def _plot_results(
                 marker = "o"
                 markersize = 4
             else:
-                rank = idx if focus_idx is None else sum(1 for j in range(idx) if j != focus_idx)
+                rank = _style_rank(idx, focus_idx)
                 line_color = (
                     non_focus_palette[rank]
                     if rank < len(non_focus_palette)
@@ -795,6 +827,164 @@ def _plot_results(
     axes[-1].set_xlabel(xlabel)
     axes[-1].xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
     fig.suptitle("Trajectory Comparison", fontsize=14, y=1.02)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _collect_pareto_points(
+    groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
+    common: List[str],
+    k: int,
+) -> List[Tuple[float, float, float | None, float | None]]:
+    points: List[Tuple[float, float, float | None, float | None]] = []
+    for _, scores_list, pooled in groups:
+        maj_mean, maj_ci, _ = _summarize_group_metric(scores_list, pooled, common, "maj", k)
+        pass_mean, pass_ci, _ = _summarize_group_metric(scores_list, pooled, common, "pass", k)
+        if maj_mean is None or pass_mean is None:
+            continue
+        points.append((maj_mean, pass_mean, maj_ci, pass_ci))
+    return points
+
+
+def _bubble_sizes_from_ci(points: List[Tuple[float, float, float | None, float | None]]) -> List[float]:
+    combined_cis: List[float] = []
+    for _, _, x_ci, y_ci in points:
+        ci_values = [ci for ci in (x_ci, y_ci) if ci is not None]
+        if ci_values:
+            combined_cis.append(math.sqrt(sum(ci * ci for ci in ci_values) / len(ci_values)))
+        else:
+            combined_cis.append(0.0)
+
+    min_radius = 10.0
+    max_radius = 24.0
+    if not combined_cis:
+        return []
+    lo_ci = min(combined_cis)
+    hi_ci = max(combined_cis)
+    sizes: List[float] = []
+    for ci in combined_cis:
+        if hi_ci <= lo_ci:
+            radius = 16.0 if hi_ci > 0 else 12.0
+        else:
+            radius = min_radius + (ci - lo_ci) * (max_radius - min_radius) / (hi_ci - lo_ci)
+        sizes.append(radius * radius)
+    return sizes
+
+
+def _plot_pareto_results(
+    path: Path,
+    groups: List[Tuple[str, List[Dict[str, List[float]]], Dict[str, List[float]]]],
+    common: List[str],
+    labels: List[str],
+    focus_idx: int | None,
+    pareto_k: int,
+) -> None:
+    try:
+        import matplotlib.patheffects as pe
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("matplotlib is required for --plot output") from exc
+
+    plt.rcParams.update(
+        {
+            "font.family": ["Times New Roman", "serif"],
+            "font.size": 12,
+            "axes.titleweight": "bold",
+        }
+    )
+
+    points = _collect_pareto_points(groups, common, pareto_k)
+    if len(points) != len(labels):
+        raise ValueError(f"Unable to compute maj@{pareto_k}/pass@{pareto_k} for all labels.")
+
+    sizes = _bubble_sizes_from_ci(points)
+    fig, ax = plt.subplots(figsize=(7.2, 6.1), constrained_layout=True)
+
+    focus_color = "#004488"
+    non_focus_palette = [
+        "#CC6677",
+        "#44AA99",
+        "#DDCC77",
+        "#88CCEE",
+        "#AA4499",
+        "#999933",
+    ]
+
+    x_vals = [x for x, _, _, _ in points]
+    y_vals = [y for _, y, _, _ in points]
+    x_span = max(x_vals) - min(x_vals) if x_vals else 0.0
+    y_span = max(y_vals) - min(y_vals) if y_vals else 0.0
+    x_pad = max(1.5, x_span * 0.12)
+    y_pad = max(1.5, y_span * 0.12)
+
+    for idx, ((x_val, y_val, _, _), size) in enumerate(zip(points, sizes)):
+        if focus_idx is None:
+            color = f"C{idx % 10}"
+            alpha = 0.45
+            edge_color = "#FFFFFF"
+            line_width = 1.0
+            zorder = 3
+        elif idx == focus_idx:
+            color = focus_color
+            alpha = 0.72
+            edge_color = "#0F172A"
+            line_width = 1.25
+            zorder = 4
+        else:
+            rank = _style_rank(idx, focus_idx)
+            color = (
+                non_focus_palette[rank]
+                if rank < len(non_focus_palette)
+                else non_focus_palette[-1]
+            )
+            alpha = 0.35
+            edge_color = "#FFFFFF"
+            line_width = 0.9
+            zorder = 2
+
+        ax.scatter(
+            [x_val],
+            [y_val],
+            s=size,
+            color=color,
+            alpha=alpha,
+            edgecolors=edge_color,
+            linewidths=line_width,
+            zorder=zorder,
+        )
+        text = ax.annotate(
+            labels[idx],
+            (x_val, y_val),
+            xytext=(7, 6),
+            textcoords="offset points",
+            fontsize=10,
+            color="#1F2937",
+            weight="semibold" if focus_idx == idx else "normal",
+            zorder=zorder + 1,
+        )
+        text.set_path_effects([pe.withStroke(linewidth=3, foreground="white", alpha=0.9)])
+
+    ax.set_xlim(max(0.0, min(x_vals) - x_pad), min(100.0, max(x_vals) + x_pad))
+    ax.set_ylim(max(0.0, min(y_vals) - y_pad), min(100.0, max(y_vals) + y_pad))
+    ax.set_xlabel(f"maj@{pareto_k} (%)")
+    ax.set_ylabel(f"pass@{pareto_k} (%)")
+    ax.set_title(f"Method Comparison at k={pareto_k}")
+    ax.text(
+        0.02,
+        0.98,
+        "Bubble radius reflects combined 95% CI",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=9.5,
+        color="#4B5563",
+    )
+    ax.grid(True, alpha=0.22)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -882,6 +1072,21 @@ def main() -> None:
         help="Optional output path for a PDF/PNG plot.",
     )
     parser.add_argument(
+        "--plot-style",
+        choices=("curves", "pareto"),
+        default="curves",
+        help=(
+            "Plot style for --plot. 'curves' keeps the existing maj/pass-vs-k panels "
+            "(default); 'pareto' plots one bubble per method at maj@k vs pass@k."
+        ),
+    )
+    parser.add_argument(
+        "--pareto-k",
+        type=int,
+        default=16,
+        help="Target k for --plot-style pareto (default: 16).",
+    )
+    parser.add_argument(
         "--recompute-score",
         action="store_true",
         help=(
@@ -894,7 +1099,7 @@ def main() -> None:
         choices=("pairs", "odd", "all"),
         default="pairs",
         help=(
-            "Plotting mode for maj@k: 'pairs' averages (2i-1,2i) at even k; "
+            "Curve-plot mode for maj@k: 'pairs' averages (2i-1,2i) at even k; "
             "'odd' shows odd k only; 'all' shows every k (default: pairs)."
         ),
     )
@@ -1119,15 +1324,22 @@ def main() -> None:
     if args.greedy_samples < 1:
         raise ValueError("--greedy-samples must be >= 1.")
     effective_max_k = min(args.max_k, min_samples_pooled)
+    if args.pareto_k < 1:
+        raise ValueError("--pareto-k must be >= 1.")
+    if args.plot and args.plot_style == "pareto" and args.pareto_k > effective_max_k:
+        raise ValueError(
+            f"--pareto-k={args.pareto_k} exceeds the available sample limit ({effective_max_k})."
+        )
     configs = _parse_configs(args.config, max_k=effective_max_k)
     if not configs:
         configs = [("maj", k) for k in range(1, effective_max_k + 1)]
         configs += [("pass", k) for k in range(1, effective_max_k + 1)]
 
     headers = ["Metric"] + labels + ["Problems"]
+    common_sorted = sorted(common)
 
     _log(args.progress, f"Computing metrics for {len(configs)} configs")
-    rows, plot_data = _compute_metrics(groups, configs, sorted(common))
+    rows, plot_data = _compute_metrics(groups, configs, common_sorted)
     table = _format_table(headers, rows)
     print(table)
     if args.diff:
@@ -1135,7 +1347,7 @@ def main() -> None:
         diff_tables = _compute_pairwise_diffs(
             groups,
             configs,
-            sorted(common),
+            common_sorted,
             labels,
             args.diff_test,
             args.bootstrap_iters,
@@ -1146,7 +1358,17 @@ def main() -> None:
             print(title)
             print(diff_table)
     if args.plot:
-        _plot_results(Path(args.plot), plot_data, labels, focus_idx, args.maj_avg)
+        if args.plot_style == "pareto":
+            _plot_pareto_results(
+                Path(args.plot),
+                groups,
+                common_sorted,
+                labels,
+                focus_idx,
+                args.pareto_k,
+            )
+        else:
+            _plot_curve_results(Path(args.plot), plot_data, labels, focus_idx, args.maj_avg)
 
 
 if __name__ == "__main__":

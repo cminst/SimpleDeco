@@ -36,7 +36,7 @@ Remote workers claim leases over SSH from the host queue.
 
 ```bash
 QUEUE_HOST="zli@100.84.104.59" \
-QUEUE_FILE="/home/zli/SimpleDeco/jobs/patches_jobs.txt" \
+QUEUE_FILE="/home/zli/SimpleDeco/jobs/aime24_jobs.txt" \
 WORKER_ID="grufaller_h200" \
 GPU_ID=0 \
 PING_INTERVAL=30 \

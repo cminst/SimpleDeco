@@ -72,6 +72,11 @@
             margin-top: 20px;
         }
         .final-temp .stat-value { color: white; font-size: 32px; }
+        .policy-note {
+            font-size: 12px;
+            margin-top: 10px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -96,6 +101,7 @@
             <select id="policy">
                 <option value="confidence_gated">Confidence Gated</option>
                 <option value="entropy_continuous">Entropy Continuous</option>
+                <option value="entropy_shift">Entropy Shift</option>
                 <option value="entropy_adaptive">Entropy Adaptive</option>
             </select>
 
@@ -121,6 +127,23 @@
                     <label><span>T_max</span> <span id="ec_tmax_val">1.0</span></label>
                     <input type="range" id="ec_tmax" min="0.0" max="2.0" step="0.05" value="1.0">
                 </div>
+            </div>
+
+            <div id="settings-entropy_shift" class="policy-settings">
+                <p><strong>Logic:</strong> Shift temperature around $T_{base}$ using $T = T_{base} + \delta (H_{norm} - H_{mean})$, then clamp to the valid range implied by $H_{mean}$.</p>
+                <div class="control-group">
+                    <label><span>T_base</span> <span id="es_tbase_val">0.8</span></label>
+                    <input type="range" id="es_tbase" min="0.0" max="2.0" step="0.05" value="0.8">
+                </div>
+                <div class="control-group">
+                    <label><span>delta</span> <span id="es_delta_val">0.2</span></label>
+                    <input type="range" id="es_delta" min="0.0" max="2.0" step="0.05" value="0.2">
+                </div>
+                <div class="control-group">
+                    <label><span>H_mean</span> <span id="es_hmean_val">0.5</span></label>
+                    <input type="range" id="es_hmean" min="0.0" max="1.0" step="0.01" value="0.5">
+                </div>
+                <div id="es_validity" class="policy-note"></div>
             </div>
 
             <div id="settings-entropy_adaptive" class="policy-settings">
@@ -233,6 +256,11 @@
             // 3. Apply Policy Logic
             const policy = policySelect.value;
             let temp = 1.0;
+            const entropyShiftTBase = parseFloat(document.getElementById('es_tbase').value);
+            const entropyShiftDelta = parseFloat(document.getElementById('es_delta').value);
+            const entropyShiftHMean = parseFloat(document.getElementById('es_hmean').value);
+            const entropyShiftTempMin = entropyShiftTBase - entropyShiftDelta * entropyShiftHMean;
+            const entropyShiftTempMax = entropyShiftTBase + entropyShiftDelta * (1.0 - entropyShiftHMean);
 
             if (policy === 'confidence_gated') {
                 const tHigh = parseFloat(document.getElementById('cg_thigh').value);
@@ -244,6 +272,10 @@
                 const tMax = parseFloat(document.getElementById('ec_tmax').value);
                 temp = tMin + (tMax - tMin) * entropyNorm;
             } 
+            else if (policy === 'entropy_shift') {
+                temp = entropyShiftTBase + entropyShiftDelta * (entropyNorm - entropyShiftHMean);
+                temp = Math.max(entropyShiftTempMin, Math.min(entropyShiftTempMax, temp));
+            }
             else if (policy === 'entropy_adaptive') {
                 const hThresh = parseFloat(document.getElementById('ea_hthresh').value);
                 const tLow = parseFloat(document.getElementById('ea_tlow').value);
@@ -263,6 +295,14 @@
             document.getElementById('val-maxprob').innerText = maxProb.toFixed(3);
             document.getElementById('val-entropy').innerText = entropyNorm.toFixed(3);
             document.getElementById('val-temp').innerText = temp === GREEDY_TEMPERATURE ? "Greedy (-1.0)" : temp.toFixed(3);
+            const entropyShiftValidity = document.getElementById('es_validity');
+            if (entropyShiftTempMin < 0) {
+                entropyShiftValidity.innerText = `Invalid in dynamic_sampling.py: T_base - delta * H_mean = ${entropyShiftTempMin.toFixed(3)} < 0`;
+                entropyShiftValidity.style.color = '#c0392b';
+            } else {
+                entropyShiftValidity.innerText = `Valid temperature clamp range: [${entropyShiftTempMin.toFixed(3)}, ${entropyShiftTempMax.toFixed(3)}]`;
+                entropyShiftValidity.style.color = '#666';
+            }
 
             // Color-code the temperature box
             const tempBox = document.querySelector('.final-temp');
