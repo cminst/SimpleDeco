@@ -187,22 +187,7 @@ def _wrap_label(label: str, width: int = 18) -> str:
 
 
 def _build_palette(count: int) -> List[str]:
-    base = [
-        "#184E77",
-        "#2A9D8F",
-        "#A44A3F",
-        "#7B6D8D",
-        "#C77D2B",
-        "#2B6F8A",
-        "#8E5572",
-        "#5B8E7D",
-    ]
-    if count <= len(base):
-        return base[:count]
-    palette: List[str] = []
-    for idx in range(count):
-        palette.append(base[idx % len(base)])
-    return palette
+    return [f"C{idx % 10}" for idx in range(count)]
 
 
 def _plot_lengths(
@@ -227,12 +212,9 @@ def _plot_lengths(
 
     plt.rcParams.update(
         {
-            "font.family": ["DejaVu Serif", "Times New Roman", "serif"],
-            "font.size": 11.5,
+            "font.family": ["Times New Roman", "serif"],
+            "font.size": 12,
             "axes.titleweight": "bold",
-            "axes.labelweight": "semibold",
-            "axes.spines.top": False,
-            "axes.spines.right": False,
             "figure.facecolor": "#FFFFFF",
             "savefig.facecolor": "#FFFFFF",
         }
@@ -289,19 +271,14 @@ def _plot_lengths(
         )
         text = ax.text(
             pos,
-            0.975,
+            0.97,
             summary_text,
             transform=blended,
             ha="center",
             va="top",
-            fontsize=8.6,
-            color="#334155",
+            fontsize=9.0,
+            color="#1F2937",
             zorder=5,
-            bbox={
-                "boxstyle": "round,pad=0.28",
-                "facecolor": (1.0, 1.0, 1.0, 0.82),
-                "edgecolor": (1.0, 1.0, 1.0, 0.0),
-            },
         )
         text.set_path_effects([pe.withStroke(linewidth=2.4, foreground="white", alpha=0.9)])
 
@@ -310,30 +287,30 @@ def _plot_lengths(
     ax.set_ylim(0, y_max * 1.12 + 5)
 
     ax.set_xticks(positions)
-    ax.set_xticklabels([_wrap_label(label) for label in labels], fontsize=10.5)
+    ax.set_xticklabels([_wrap_label(label) for label in labels])
     ax.set_ylabel("Tokens per response")
     ax.set_xlabel("Method")
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=7, integer=True))
-    ax.grid(axis="y", color="#D7DCE3", linewidth=0.85, alpha=0.65)
-    ax.grid(axis="x", visible=False)
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
+    ax.grid(True, axis="y", alpha=0.25)
+    ax.grid(False, axis="x")
     ax.tick_params(axis="x", pad=8)
 
     dataset_text = dataset if dataset else "custom inputs"
     title_text = title or f"Response Length Distribution on {dataset_text}"
-    fig.suptitle(title_text, fontsize=16.2, x=0.06, ha="left", y=1.01, color="#102A43")
+    fig.suptitle(title_text, fontsize=14, y=1.02)
     ax.text(
-        0.995,
-        1.025,
-        "Response-only token counts with sampled responses overlaid",
+        0.02,
+        0.98,
+        "Response-only token counts; sampled responses overlaid",
         transform=ax.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=9.2,
+        ha="left",
+        va="top",
+        fontsize=9.5,
         color="#6B7280",
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=320, bbox_inches="tight")
+    fig.savefig(path, dpi=300, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)
