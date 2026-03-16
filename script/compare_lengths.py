@@ -181,13 +181,6 @@ def _default_plot_path(dataset: str | None) -> Path:
     return Path("figure") / f"{stem}.png"
 
 
-def _display_name(name_or_path: str) -> str:
-    stripped = name_or_path.rstrip("/").strip()
-    if not stripped:
-        return name_or_path
-    return stripped.split("/")[-1]
-
-
 def _wrap_label(label: str, width: int = 18) -> str:
     pieces = textwrap.wrap(label, width=width, break_long_words=False, break_on_hyphens=False)
     return "\n".join(pieces) if pieces else label
@@ -215,7 +208,6 @@ def _build_palette(count: int) -> List[str]:
 def _plot_lengths(
     path: Path,
     dataset: str | None,
-    tokenizer_name: str,
     labels: Sequence[str],
     lengths_by_label: Dict[str, List[int]],
     summaries: Dict[str, Dict[str, float]],
@@ -241,8 +233,8 @@ def _plot_lengths(
             "axes.labelweight": "semibold",
             "axes.spines.top": False,
             "axes.spines.right": False,
-            "figure.facecolor": "#F6F2EA",
-            "savefig.facecolor": "#F6F2EA",
+            "figure.facecolor": "#FFFFFF",
+            "savefig.facecolor": "#FFFFFF",
         }
     )
 
@@ -254,7 +246,7 @@ def _plot_lengths(
     palette = _build_palette(len(labels))
     fig_width = max(7.8, 1.45 * len(labels) + 2.8)
     fig, ax = plt.subplots(figsize=(fig_width, 6.7), constrained_layout=True)
-    ax.set_facecolor("#FFFDF8")
+    ax.set_facecolor("#FFFFFF")
 
     box = ax.boxplot(
         ordered_data,
@@ -291,17 +283,6 @@ def _plot_lengths(
                 zorder=1,
             )
 
-        ax.scatter(
-            [pos],
-            [summaries[label]["mean"]],
-            marker="D",
-            s=52,
-            color="#FFFFFF",
-            edgecolors="#0F172A",
-            linewidths=1.0,
-            zorder=4,
-        )
-
         summary_text = (
             f"n={int(summaries[label]['count']):,}\n"
             f"med={summaries[label]['median']:.0f}"
@@ -333,22 +314,17 @@ def _plot_lengths(
     ax.set_ylabel("Tokens per response")
     ax.set_xlabel("Method")
     ax.yaxis.set_major_locator(MaxNLocator(nbins=7, integer=True))
-    ax.grid(axis="y", color="#CFC7BA", linewidth=0.85, alpha=0.42)
+    ax.grid(axis="y", color="#D7DCE3", linewidth=0.85, alpha=0.65)
     ax.grid(axis="x", visible=False)
     ax.tick_params(axis="x", pad=8)
 
     dataset_text = dataset if dataset else "custom inputs"
     title_text = title or f"Response Length Distribution on {dataset_text}"
-    subtitle = (
-        f"Tokenizer: {tokenizer_name}  •  Box = IQR, line = median, diamond = mean  "
-        f"•  Scatter = sampled responses"
-    )
-    ax.set_title(subtitle, fontsize=10.2, color="#5B6472", pad=14)
     fig.suptitle(title_text, fontsize=16.2, x=0.06, ha="left", y=1.01, color="#102A43")
     ax.text(
         0.995,
         1.025,
-        "Response-only token counts",
+        "Response-only token counts with sampled responses overlaid",
         transform=ax.transAxes,
         ha="right",
         va="bottom",
@@ -492,7 +468,6 @@ def main() -> None:
         use_fast=not args.use_slow_tokenizer,
         trust_remote_code=args.trust_remote_code,
     )
-    tokenizer_name = _display_name(getattr(tokenizer, "name_or_path", args.model_name_or_path))
 
     labels: List[str] = []
     lengths_by_label: Dict[str, List[int]] = {}
@@ -549,7 +524,6 @@ def main() -> None:
     _plot_lengths(
         path=plot_path,
         dataset=args.dataset,
-        tokenizer_name=tokenizer_name,
         labels=labels,
         lengths_by_label=lengths_by_label,
         summaries=summaries,
