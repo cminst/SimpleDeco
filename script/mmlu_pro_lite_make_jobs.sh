@@ -123,7 +123,7 @@ emit_eval_jobs \
   "$MODEL_BASE" \
   1.0 \
   0.95 \
-  "pass@k" \
+  "maj@k" \
   16 \
   --dynamic_sampling_policy confidence_gated \
   --dynamic_sampling_kwargs '{"maxprob_threshold": 0.6, "T_high": 0.9}'
