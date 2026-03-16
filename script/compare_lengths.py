@@ -6,7 +6,6 @@ import csv
 import glob
 import json
 import os
-import random
 import statistics
 import sys
 import textwrap
@@ -187,12 +186,21 @@ def _wrap_label(label: str, width: int = 18) -> str:
 
 
 def _build_palette(count: int) -> List[str]:
-    return [f"C{idx % 10}" for idx in range(count)]
+    base = [
+        "#4E79A7",
+        "#59A14F",
+        "#B07AA1",
+        "#E15759",
+        "#76B7B2",
+        "#9C755F",
+        "#F28E2B",
+        "#BAB0AC",
+    ]
+    return [base[idx % len(base)] for idx in range(count)]
 
 
 def _plot_lengths(
     path: Path,
-    dataset: str | None,
     labels: Sequence[str],
     lengths_by_label: Dict[str, List[int]],
     summaries: Dict[str, Dict[str, float]],
@@ -202,13 +210,14 @@ def _plot_lengths(
     title: str | None,
 ) -> None:
     try:
-        import matplotlib.patheffects as pe
         import matplotlib.pyplot as plt
         from matplotlib import colors as mcolors
+        from matplotlib.patches import Rectangle
         from matplotlib.ticker import MaxNLocator
-        from matplotlib.transforms import blended_transform_factory
     except Exception as exc:  # pragma: no cover - optional dependency
         raise RuntimeError("matplotlib is required for compare_lengths.py") from exc
+
+    del point_sample, seed
 
     plt.rcParams.update(
         {
@@ -226,88 +235,78 @@ def _plot_lengths(
         raise ValueError(f"No response lengths available for: {', '.join(missing)}")
 
     palette = _build_palette(len(labels))
-    fig_width = max(7.8, 1.45 * len(labels) + 2.8)
-    fig, ax = plt.subplots(figsize=(fig_width, 6.7), constrained_layout=True)
+    fig_height = max(2.8, 0.82 * len(labels) + 1.2)
+    fig, ax = plt.subplots(figsize=(7.6, fig_height), constrained_layout=True)
     ax.set_facecolor("#FFFFFF")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_color("#9AA4B2")
 
-    box = ax.boxplot(
+    positions = list(range(len(labels), 0, -1))
+    violins = ax.violinplot(
         ordered_data,
-        positions=list(range(1, len(labels) + 1)),
-        widths=0.58,
-        patch_artist=True,
-        showfliers=False,
-        whis=1.5,
-        medianprops={"color": "#102A43", "linewidth": 2.0},
-        whiskerprops={"color": "#6B7280", "linewidth": 1.2},
-        capprops={"color": "#6B7280", "linewidth": 1.2},
-        boxprops={"linewidth": 1.15, "edgecolor": "#334155"},
+        positions=positions,
+        vert=False,
+        widths=0.84,
+        showmeans=False,
+        showmedians=False,
+        showextrema=False,
     )
 
-    for patch, color in zip(box["boxes"], palette):
-        patch.set_facecolor(mcolors.to_rgba(color, 0.33))
-        patch.set_edgecolor(color)
+    for body, pos, color in zip(violins["bodies"], positions, palette):
+        path_obj = body.get_paths()[0]
+        vertices = path_obj.vertices
+        vertices[vertices[:, 1] < pos, 1] = pos
+        body.set_facecolor(mcolors.to_rgba(color, 0.24))
+        body.set_edgecolor(color)
+        body.set_linewidth(1.0)
+        body.set_alpha(1.0)
 
-    rng = random.Random(seed)
-    positions = list(range(1, len(labels) + 1))
-    blended = blended_transform_factory(ax.transData, ax.transAxes)
-
-    for pos, label, color, values in zip(positions, labels, palette, ordered_data):
-        if point_sample > 0:
-            sampled = values if len(values) <= point_sample else rng.sample(values, point_sample)
-            x_coords = [pos + rng.uniform(-0.17, 0.17) for _ in sampled]
-            ax.scatter(
-                x_coords,
-                sampled,
-                s=14,
-                color=mcolors.to_rgba(color, 0.17),
-                edgecolors="none",
-                rasterized=len(sampled) > 400,
-                zorder=1,
-            )
-
-        summary_text = (
-            f"n={int(summaries[label]['count']):,}\n"
-            f"med={summaries[label]['median']:.0f}"
+    box_height = 0.18
+    median_half = box_height / 2.0 + 0.02
+    for pos, label, color in zip(positions, labels, palette):
+        summary = summaries[label]
+        q1 = float(summary["q1"])
+        q3 = float(summary["q3"])
+        median = float(summary["median"])
+        width = max(q3 - q1, 1e-9)
+        box = Rectangle(
+            (q1, pos - box_height / 2.0),
+            width,
+            box_height,
+            facecolor=(1.0, 1.0, 1.0, 0.95),
+            edgecolor=color,
+            linewidth=1.05,
+            zorder=4,
         )
-        text = ax.text(
-            pos,
-            0.97,
-            summary_text,
-            transform=blended,
-            ha="center",
-            va="top",
-            fontsize=9.0,
+        ax.add_patch(box)
+        ax.plot(
+            [median, median],
+            [pos - median_half, pos + median_half],
             color="#1F2937",
+            linewidth=1.2,
             zorder=5,
         )
-        text.set_path_effects([pe.withStroke(linewidth=2.4, foreground="white", alpha=0.9)])
 
     all_values = [value for values in ordered_data for value in values]
-    y_max = max(all_values)
-    ax.set_ylim(0, y_max * 1.12 + 5)
+    x_max = max(all_values)
+    x_pad = max(4.0, x_max * 0.025)
+    ax.set_xlim(0.0, x_max + x_pad)
+    ax.set_ylim(0.45, len(labels) + 0.55)
 
-    ax.set_xticks(positions)
-    ax.set_xticklabels([_wrap_label(label) for label in labels])
-    ax.set_ylabel("Tokens per response")
-    ax.set_xlabel("Method")
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
-    ax.grid(True, axis="y", alpha=0.25)
-    ax.grid(False, axis="x")
-    ax.tick_params(axis="x", pad=8)
+    ax.set_yticks(positions)
+    ax.set_yticklabels([_wrap_label(label) for label in labels])
+    ax.set_xlabel("Tokens per response")
+    ax.set_ylabel("")
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
+    ax.grid(True, axis="x", color="#D7DCE3", linewidth=0.8, alpha=0.55)
+    ax.grid(False, axis="y")
+    ax.tick_params(axis="x", colors="#1F2937")
+    ax.tick_params(axis="y", length=0, pad=8, colors="#1F2937")
 
-    dataset_text = dataset if dataset else "custom inputs"
-    title_text = title or f"Response Length Distribution on {dataset_text}"
-    fig.suptitle(title_text, fontsize=14, y=1.02)
-    ax.text(
-        0.02,
-        0.98,
-        "Response-only token counts; sampled responses overlaid",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9.5,
-        color="#6B7280",
-    )
+    if title:
+        ax.set_title(title, loc="left", pad=8, fontsize=14)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=300, bbox_inches="tight")
@@ -380,13 +379,13 @@ def main() -> None:
         "--point-sample",
         type=int,
         default=900,
-        help="Maximum number of jittered points to draw per method (default: 900).",
+        help="Accepted for CLI compatibility; unused by the paper-style renderer.",
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=0,
-        help="Random seed for point subsampling/jitter (default: 0).",
+        help="Accepted for CLI compatibility; unused by the paper-style renderer.",
     )
     parser.add_argument(
         "--use-slow-tokenizer",
@@ -500,7 +499,6 @@ def main() -> None:
     )
     _plot_lengths(
         path=plot_path,
-        dataset=args.dataset,
         labels=labels,
         lengths_by_label=lengths_by_label,
         summaries=summaries,

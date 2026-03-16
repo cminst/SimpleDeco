@@ -691,6 +691,211 @@ def _style_rank(idx: int, focus_idx: int | None) -> int:
     return idx if idx < focus_idx else idx - 1
 
 
+def _paper_palette(count: int) -> List[str]:
+    base = [
+        "#4E79A7",
+        "#59A14F",
+        "#B07AA1",
+        "#E15759",
+        "#76B7B2",
+        "#9C755F",
+        "#F28E2B",
+        "#BAB0AC",
+    ]
+    return [base[idx % len(base)] for idx in range(count)]
+
+
+def _paper_method_style(
+    idx: int,
+    focus_idx: int | None,
+    palette: List[str],
+) -> Dict[str, Any]:
+    if focus_idx is None:
+        color = palette[idx]
+        return {
+            "color": color,
+            "alpha": 0.96,
+            "linewidth": 1.75,
+            "text_color": color,
+            "weight": "normal",
+            "zorder": 3,
+            "edge_color": "#FFFFFF",
+        }
+    if idx == focus_idx:
+        color = "#1F4E79"
+        return {
+            "color": color,
+            "alpha": 0.99,
+            "linewidth": 2.1,
+            "text_color": color,
+            "weight": "semibold",
+            "zorder": 4,
+            "edge_color": "#0F172A",
+        }
+    return {
+        "color": "#C2C8D0",
+        "alpha": 0.85,
+        "linewidth": 1.35,
+        "text_color": "#98A2B3",
+        "weight": "normal",
+        "zorder": 2,
+        "edge_color": "#FFFFFF",
+    }
+
+
+def _apply_paper_axes_style(ax: Any) -> None:
+    ax.set_facecolor("#FFFFFF")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#98A2B3")
+    ax.spines["bottom"].set_color("#98A2B3")
+
+
+def _resolve_label_positions(
+    items: List[Tuple[int, float]],
+    y_low: float,
+    y_high: float,
+) -> Dict[int, float]:
+    if not items:
+        return {}
+    span = y_high - y_low
+    if span <= 0:
+        return {idx: target for idx, target in items}
+
+    margin = span * 0.04
+    low = y_low + margin
+    high = y_high - margin
+    if high <= low:
+        midpoint = (y_low + y_high) / 2.0
+        return {idx: midpoint for idx, _ in items}
+
+    gap = min(
+        max(span * 0.055, 0.6),
+        max(span * 0.02, (high - low) / max(1, len(items))),
+    )
+    ordered = sorted(items, key=lambda item: (item[1], item[0]))
+    adjusted: Dict[int, float] = {}
+    prev = low - gap
+    for idx, target in ordered:
+        value = max(target, prev + gap)
+        adjusted[idx] = value
+        prev = value
+
+    max_allowed = high
+    for idx, _ in reversed(ordered):
+        adjusted[idx] = min(adjusted[idx], max_allowed)
+        max_allowed = adjusted[idx] - gap
+
+    min_allowed = low
+    for idx, _ in ordered:
+        adjusted[idx] = max(adjusted[idx], min_allowed)
+        min_allowed = adjusted[idx] + gap
+
+    return adjusted
+
+
+def _draw_line_end_labels(ax: Any, entries: List[Dict[str, Any]], pe: Any) -> None:
+    if not entries:
+        return
+
+    x_values = [entry["x"] for entry in entries]
+    x_min = min(x_values)
+    x_max = max(x_values)
+    span = x_max - x_min
+    pad = max(0.6, (span if span > 0 else 1.0) * 0.12)
+    label_x = x_max + pad * 0.42
+    connector_x = label_x - pad * 0.12
+
+    current_left, current_right = ax.get_xlim()
+    ax.set_xlim(min(current_left, x_min), max(current_right, x_max + pad * 1.55))
+
+    y_positions = _resolve_label_positions(
+        [(idx, entry["y"]) for idx, entry in enumerate(entries)],
+        *ax.get_ylim(),
+    )
+    for idx, entry in enumerate(entries):
+        label_y = y_positions[idx]
+        ax.plot(
+            [entry["x"], connector_x],
+            [entry["y"], label_y],
+            color=entry["color"],
+            alpha=min(0.7, entry["alpha"] * 0.7),
+            linewidth=0.8,
+            zorder=entry["zorder"],
+            solid_capstyle="round",
+        )
+        text = ax.text(
+            label_x,
+            label_y,
+            entry["label"],
+            ha="left",
+            va="center",
+            fontsize=9.5,
+            color=entry["text_color"],
+            alpha=entry["alpha"],
+            weight=entry["weight"],
+            zorder=entry["zorder"] + 0.1,
+        )
+        text.set_path_effects([pe.withStroke(linewidth=3, foreground="white", alpha=0.92)])
+
+
+def _draw_point_labels(ax: Any, entries: List[Dict[str, Any]], pe: Any) -> None:
+    if not entries:
+        return
+
+    x_low, x_high = ax.get_xlim()
+    y_low, y_high = ax.get_ylim()
+    span = x_high - x_low
+    y_span = y_high - y_low
+    x_offset = max(0.35, span * 0.018)
+    connector_delta = max(0.16, x_offset * 0.55)
+    y_positions = _resolve_label_positions(
+        [
+            (
+                idx,
+                entry["y"] - y_span * 0.15
+                if entry["x"] <= x_low + span * 0.33 and entry["y"] >= y_high - y_span * 0.12
+                else entry["y"],
+            )
+            for idx, entry in enumerate(entries)
+        ],
+        y_low,
+        y_high,
+    )
+
+    for idx, entry in enumerate(entries):
+        label_y = y_positions[idx]
+        label_x = min(entry["x"] + x_offset, x_high - span * 0.015)
+        ha = "left"
+        connector_x = label_x - connector_delta
+        if label_x >= x_high - span * 0.02:
+            label_x = max(x_low + span * 0.015, entry["x"] - x_offset * 0.7)
+            ha = "right"
+            connector_x = label_x + connector_delta
+        ax.plot(
+            [entry["x"], connector_x],
+            [entry["y"], label_y],
+            color=entry["color"],
+            alpha=min(0.7, entry["alpha"] * 0.7),
+            linewidth=0.8,
+            zorder=entry["zorder"],
+            solid_capstyle="round",
+        )
+        text = ax.text(
+            label_x,
+            label_y,
+            entry["label"],
+            ha=ha,
+            va="center",
+            fontsize=9.7,
+            color=entry["text_color"],
+            alpha=entry["alpha"],
+            weight=entry["weight"],
+            zorder=entry["zorder"] + 0.1,
+        )
+        text.set_path_effects([pe.withStroke(linewidth=3, foreground="white", alpha=0.92)])
+
+
 def _plot_curve_results(
     path: Path,
     plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]],
@@ -699,6 +904,7 @@ def _plot_curve_results(
     maj_avg: str,
 ) -> None:
     try:
+        import matplotlib.patheffects as pe
         import matplotlib.pyplot as plt
         from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
@@ -709,27 +915,39 @@ def _plot_curve_results(
             "font.family": ["Times New Roman", "serif"],
             "font.size": 12,
             "axes.titleweight": "bold",
+            "figure.facecolor": "#FFFFFF",
+            "savefig.facecolor": "#FFFFFF",
         }
     )
 
     if plot_data.get("maj") and len(plot_data["maj"]) != len(labels):
         raise ValueError("Plot data does not match number of labels.")
 
+    prepared_plot_data: Dict[str, List[List[Tuple[int, float, float | None]]]] = {}
+    for mode in ("maj", "pass"):
+        prepared_plot_data[mode] = [
+            _prepare_plot_series(mode, series, maj_avg)
+            for series in plot_data.get(mode, [])
+        ]
+
+    all_ks = [
+        k
+        for series_groups in prepared_plot_data.values()
+        for series in series_groups
+        for k, _, _ in series
+    ]
+    x_min = min(all_ks) if all_ks else 1
+    x_max = max(all_ks) if all_ks else 1
+    x_span = x_max - x_min
+    label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
+    palette = _paper_palette(len(labels))
+
     fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
-    non_focus_styles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1))]
-    focus_color = "#004488"
-    non_focus_palette = [
-        "#EE7733",
-        "#44AA99",
-        "#66CCEE",
-        "#999933",
-        "#BBBBBB",
-    ]
-
     for ax, (mode, ylabel) in zip(axes, order):
-        series_groups = plot_data.get(mode, [])
+        _apply_paper_axes_style(ax)
+        series_groups = prepared_plot_data.get(mode, [])
         if not series_groups:
             ax.text(
                 0.5,
@@ -747,53 +965,35 @@ def _plot_curve_results(
             continue
 
         has_any = False
+        label_entries: List[Dict[str, Any]] = []
 
         for idx, series in enumerate(series_groups):
-            series = _prepare_plot_series(mode, series, maj_avg)
             if not series:
                 continue
             ks = [k for k, _, _ in series]
             vals = [v for _, v, _ in series]
-            color_cycle = f"C{idx % 10}"
-            is_focus = focus_idx is None or idx == focus_idx
-            if focus_idx is None:
-                line_color = color_cycle
-                line_alpha = 0.9
-                line_z = 3
-                line_style = "-"
-                marker = None
-                markersize = 0
-            elif is_focus:
-                line_color = focus_color
-                line_alpha = 0.95
-                line_z = 3
-                line_style = "-"
-                marker = "o"
-                markersize = 4
-            else:
-                rank = _style_rank(idx, focus_idx)
-                line_color = (
-                    non_focus_palette[rank]
-                    if rank < len(non_focus_palette)
-                    else non_focus_palette[-1]
-                )
-                line_alpha = 0.8
-                line_z = 2
-                line_style = non_focus_styles[rank % len(non_focus_styles)]
-                marker = None
-                markersize = 0
+            style = _paper_method_style(idx, focus_idx, palette)
 
             ax.plot(
                 ks,
                 vals,
-                color=line_color,
-                linewidth=1.6,
-                alpha=line_alpha,
-                label=labels[idx],
-                zorder=line_z,
-                linestyle=line_style,
-                marker=marker,
-                markersize=markersize,
+                color=style["color"],
+                linewidth=style["linewidth"],
+                alpha=style["alpha"],
+                zorder=style["zorder"],
+                linestyle="-",
+            )
+            label_entries.append(
+                {
+                    "label": labels[idx],
+                    "x": ks[-1],
+                    "y": vals[-1],
+                    "color": style["color"],
+                    "text_color": style["text_color"],
+                    "alpha": style["alpha"],
+                    "weight": style["weight"],
+                    "zorder": style["zorder"],
+                }
             )
             has_any = True
 
@@ -814,9 +1014,10 @@ def _plot_curve_results(
             continue
 
         ax.set_ylabel(ylabel)
-        ax.grid(True, alpha=0.25)
-        ax.legend(frameon=False)
+        ax.grid(True, color="#D7DCE3", linewidth=0.75, alpha=0.55)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
+        ax.set_xlim(x_min, x_max + label_pad * 1.6)
+        _draw_line_end_labels(ax, label_entries, pe)
 
     if maj_avg == "pairs":
         xlabel = "k (maj: pairwise avg of k-1,k at even k)"
@@ -826,7 +1027,6 @@ def _plot_curve_results(
         xlabel = "k"
     axes[-1].set_xlabel(xlabel)
     axes[-1].xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
-    fig.suptitle("Trajectory Comparison", fontsize=14, y=1.02)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -856,8 +1056,8 @@ def _bubble_sizes_from_ci(points: List[Tuple[float, float, float | None, float |
         else:
             combined_cis.append(0.0)
 
-    min_radius = 10.0
-    max_radius = 24.0
+    min_radius = 7.0
+    max_radius = 16.0
     if not combined_cis:
         return []
     lo_ci = min(combined_cis)
@@ -892,6 +1092,8 @@ def _plot_pareto_results(
             "font.family": ["Times New Roman", "serif"],
             "font.size": 12,
             "axes.titleweight": "bold",
+            "figure.facecolor": "#FFFFFF",
+            "savefig.facecolor": "#FFFFFF",
         }
     )
 
@@ -901,16 +1103,8 @@ def _plot_pareto_results(
 
     sizes = _bubble_sizes_from_ci(points)
     fig, ax = plt.subplots(figsize=(7.2, 6.1), constrained_layout=True)
-
-    focus_color = "#004488"
-    non_focus_palette = [
-        "#CC6677",
-        "#44AA99",
-        "#DDCC77",
-        "#88CCEE",
-        "#AA4499",
-        "#999933",
-    ]
+    _apply_paper_axes_style(ax)
+    palette = _paper_palette(len(labels))
 
     x_vals = [x for x, _, _, _ in points]
     y_vals = [y for _, y, _, _ in points]
@@ -918,72 +1112,52 @@ def _plot_pareto_results(
     y_span = max(y_vals) - min(y_vals) if y_vals else 0.0
     x_pad = max(1.5, x_span * 0.12)
     y_pad = max(1.5, y_span * 0.12)
+    label_entries: List[Dict[str, Any]] = []
 
     for idx, ((x_val, y_val, _, _), size) in enumerate(zip(points, sizes)):
-        if focus_idx is None:
-            color = f"C{idx % 10}"
-            alpha = 0.45
-            edge_color = "#FFFFFF"
-            line_width = 1.0
-            zorder = 3
-        elif idx == focus_idx:
-            color = focus_color
-            alpha = 0.72
-            edge_color = "#0F172A"
-            line_width = 1.25
-            zorder = 4
-        else:
-            rank = _style_rank(idx, focus_idx)
-            color = (
-                non_focus_palette[rank]
-                if rank < len(non_focus_palette)
-                else non_focus_palette[-1]
-            )
-            alpha = 0.35
-            edge_color = "#FFFFFF"
-            line_width = 0.9
-            zorder = 2
+        style = _paper_method_style(idx, focus_idx, palette)
 
         ax.scatter(
             [x_val],
             [y_val],
             s=size,
-            color=color,
-            alpha=alpha,
-            edgecolors=edge_color,
-            linewidths=line_width,
-            zorder=zorder,
+            color=style["color"],
+            alpha=0.46 if focus_idx is None else style["alpha"] * 0.62,
+            edgecolors=style["edge_color"],
+            linewidths=1.0 if focus_idx is None else style["linewidth"] * 0.55,
+            zorder=style["zorder"],
         )
-        text = ax.annotate(
-            labels[idx],
-            (x_val, y_val),
-            xytext=(7, 6),
-            textcoords="offset points",
-            fontsize=10,
-            color="#1F2937",
-            weight="semibold" if focus_idx == idx else "normal",
-            zorder=zorder + 1,
+        label_entries.append(
+            {
+                "label": labels[idx],
+                "x": x_val,
+                "y": y_val,
+                "color": style["color"],
+                "text_color": style["text_color"],
+                "alpha": style["alpha"],
+                "weight": style["weight"],
+                "zorder": style["zorder"] + 1,
+            }
         )
-        text.set_path_effects([pe.withStroke(linewidth=3, foreground="white", alpha=0.9)])
 
-    ax.set_xlim(max(0.0, min(x_vals) - x_pad), min(100.0, max(x_vals) + x_pad))
-    ax.set_ylim(max(0.0, min(y_vals) - y_pad), min(100.0, max(y_vals) + y_pad))
+    ax.set_xlim(max(0.0, min(x_vals) - x_pad), min(100.8, max(x_vals) + x_pad))
+    ax.set_ylim(max(0.0, min(y_vals) - y_pad), min(100.8, max(y_vals) + y_pad))
     ax.set_xlabel(f"maj@{pareto_k} (%)")
     ax.set_ylabel(f"pass@{pareto_k} (%)")
-    ax.set_title(f"Method Comparison at k={pareto_k}")
     ax.text(
         0.02,
-        0.98,
-        "Bubble radius reflects combined 95% CI",
+        0.965,
+        "Bubble area reflects\ncombined 95% CI",
         transform=ax.transAxes,
         ha="left",
         va="top",
-        fontsize=9.5,
+        fontsize=9.0,
         color="#4B5563",
     )
-    ax.grid(True, alpha=0.22)
+    ax.grid(True, color="#D7DCE3", linewidth=0.75, alpha=0.55)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
+    _draw_point_labels(ax, label_entries, pe)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=300, bbox_inches="tight")
