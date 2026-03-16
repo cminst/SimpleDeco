@@ -939,6 +939,7 @@ def _plot_curve_results(
     x_min = min(all_ks) if all_ks else 1
     x_max = max(all_ks) if all_ks else 1
     x_span = x_max - x_min
+    left_pad = min(0.4, max(0.18, (x_span if x_span > 0 else 1.0) * 0.05))
     label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
     palette = _paper_palette(len(labels))
 
@@ -1016,7 +1017,7 @@ def _plot_curve_results(
         ax.set_ylabel(ylabel)
         ax.grid(True, color="#D7DCE3", linewidth=0.75, alpha=0.55)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
-        ax.set_xlim(x_min, x_max + label_pad * 1.6)
+        ax.set_xlim(max(0.0, x_min - left_pad), x_max + label_pad * 1.6)
         _draw_line_end_labels(ax, label_entries, pe)
 
     if maj_avg == "pairs":
