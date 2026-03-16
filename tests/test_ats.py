@@ -19,8 +19,17 @@ from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 
 ROOT = Path(__file__).resolve().parents[1]
+VLLM_ROOT = ROOT / "simpledeco_vllm"
+if str(VLLM_ROOT) not in sys.path:
+    sys.path.insert(0, str(VLLM_ROOT))
+
 from model.ats_auto import ATSModelForCausalLM, LinearATSHead, MLPATSHead, TransformerATSHead
 from trl_train import DataCollatorForLanguageModeling, _filter_split_for_positive_assistant_masks
+
+try:
+    from vllm.model_executor.models.ats import ATSModelForCausalLM as VllmATSModelForCausalLM
+except Exception:  # pragma: no cover - optional local vLLM deps.
+    VllmATSModelForCausalLM = None
 
 ATS_HEAD_SPEC = importlib.util.spec_from_file_location(
     "simpledeco_ats_head_test_module",
@@ -120,6 +129,33 @@ def _ats_config_namespace(calibration_type: str, hidden_size: int) -> SimpleName
         hidden_act="silu",
         rms_norm_eps=1e-6,
     )
+
+
+def _build_vllm_ats_model_stub(
+    calibration_type: str,
+    *,
+    normalize_logits: bool,
+) -> nn.Module:
+    if VllmATSModelForCausalLM is None:
+        pytest.skip("local vLLM ATS dependencies are not available")
+    config = _ats_config_namespace(calibration_type, hidden_size=8)
+    config.normalize_logits = normalize_logits
+    model = object.__new__(VllmATSModelForCausalLM)
+    nn.Module.__init__(model)
+    model.config = config
+    model.ats_head = build_vllm_ats_head(config)
+    model.llm = SimpleNamespace(lm_head=nn.Linear(config.hidden_size, 10,
+                                                  bias=False))
+    model._runtime_hidden_states = None
+    model._runtime_metadata = None
+    model._request_hidden_cache = {}
+
+    def _compute_base_logits(hidden_states, sampling_metadata=None):
+        del sampling_metadata
+        return torch.matmul(hidden_states, model.llm.lm_head.weight.t())
+
+    model._compute_base_logits = _compute_base_logits
+    return model
 
 
 class _FakeDecoder(nn.Module):
@@ -270,6 +306,46 @@ def test_ats_vllm_head_matches_hf_head(calibration_type: str) -> None:
     vllm_logits = vllm_head.apply_scale(logits, vllm_scale)
     torch.testing.assert_close(vllm_scale, hf_scale, atol=1e-5, rtol=1e-5)
     torch.testing.assert_close(vllm_logits, hf_logits, atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("calibration_type", ["linear", "transformer"])
+@pytest.mark.parametrize("normalize_logits", [False, True])
+def test_vllm_ats_helper_returns_scale_and_effective_temperature(
+    calibration_type: str,
+    normalize_logits: bool,
+) -> None:
+    if VllmATSModelForCausalLM is None:
+        pytest.skip("local vLLM ATS dependencies are not available")
+    model = _build_vllm_ats_model_stub(
+        calibration_type,
+        normalize_logits=normalize_logits,
+    )
+    hidden_states = torch.randn(3, 8)
+
+    logits, scale = VllmATSModelForCausalLM._compute_logits_and_scale(
+        model,
+        hidden_states,
+        None,
+    )
+    base_logits = model._compute_base_logits(hidden_states, None)
+    expected_scale = model.ats_head.get_temperature_scale(
+        hidden_states=hidden_states.unsqueeze(1),
+        logits=base_logits.unsqueeze(1),
+        lm_head_weight=model.llm.lm_head.weight,
+        attention_mask=torch.ones((hidden_states.shape[0], 1)),
+        position_ids=torch.zeros((hidden_states.shape[0], 1),
+                                 dtype=torch.long),
+    ).squeeze(1)
+    expected_logits = model.ats_head.apply_scale(base_logits, expected_scale)
+
+    torch.testing.assert_close(scale, expected_scale)
+    torch.testing.assert_close(logits, expected_logits)
+
+    effective_temperature = torch.reciprocal(scale.squeeze(-1).clamp_min(1e-8))
+    torch.testing.assert_close(
+        effective_temperature,
+        1.0 / scale.squeeze(-1).clamp_min(1e-8),
+    )
 
 
 def test_ats_falls_back_to_decoder_hidden_states() -> None:
