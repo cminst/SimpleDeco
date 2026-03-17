@@ -65,12 +65,13 @@ if __name__ == "__main__":
     dynamic_policy_help = (
         "Dynamic sampling policies and kwargs:\n"
         "  confidence_gated: T_high (>=0), maxprob_threshold (0..1)\n"
+        "  edt: T0 (>=0), theta (>=0), N (0..1)\n"
         "  entropy_continuous: T_min (>=0), T_max (>=0 and >=T_min)\n"
         "  entropy_shift: T_base (>=0), delta (>=0), H_mean (0..1)\n"
         "  entropy_adaptive: H_threshold (0..1, normalized), T_low (>=0), T_high (>=0)\n"
         "Example:\n"
-        "  --dynamic_sampling_policy entropy_adaptive "
-        "--dyn H_threshold=0.15 --dyn T_low=0.3 --dyn T_high=1.0"
+        "  --dynamic_sampling_policy edt "
+        "--dyn T0=0.798 --dyn theta=0.1 --dyn N=0.8"
     )
 
     parser = argparse.ArgumentParser(
@@ -92,7 +93,7 @@ if __name__ == "__main__":
                         help='Optional jsonl output path for per-sample generations.')
     parser.add_argument('--dynamic_sampling_policy', type=str, default=None,
                         help='Optional dynamic sampling policy '
-                             '(confidence_gated, entropy_continuous, entropy_shift, entropy_adaptive).')
+                             '(confidence_gated, edt, entropy_continuous, entropy_shift, entropy_adaptive).')
     parser.add_argument('--dynamic_sampling_kwargs', type=str, default='{}',
                         help='Optional JSON object of kwargs for dynamic sampling policy. '
                              'Overrides can be provided via --dyn.')
