@@ -120,6 +120,16 @@ LATEX_METRIC_ORDER = (
 )
 
 
+MAIN_LATEX_METRIC_ORDER = (
+    ("js", "min"),
+    ("T_r2", "max"),
+    ("p_r2", "max"),
+    ("entropy_mae", "min"),
+    ("top1_mae", "min"),
+    ("entropy_r2", "max"),
+)
+
+
 def _format_latex_metric(value: float, *, bold: bool = False, digits: int = 3) -> str:
     body = f"{value:.{digits}f}"
     if bold:
@@ -127,9 +137,12 @@ def _format_latex_metric(value: float, *, bold: bool = False, digits: int = 3) -
     return f"${body}$"
 
 
-def build_shadow_latex_rows(summary: Dict[str, Dict[str, float]]) -> List[str]:
+def _build_shadow_latex_rows(
+    summary: Dict[str, Dict[str, float]],
+    metric_order: Tuple[Tuple[str, str], ...],
+) -> List[str]:
     best_by_metric: Dict[str, float] = {}
-    for metric_name, direction in LATEX_METRIC_ORDER:
+    for metric_name, direction in metric_order:
         values = [float(summary[name][metric_name]) for name in MODEL_LABELS if name in summary]
         best_by_metric[metric_name] = min(values) if direction == "min" else max(values)
 
@@ -137,13 +150,21 @@ def build_shadow_latex_rows(summary: Dict[str, Dict[str, float]]) -> List[str]:
     for name, label in MODEL_LABELS.items():
         metrics = summary[name]
         formatted_metrics = []
-        for metric_name, direction in LATEX_METRIC_ORDER:
+        for metric_name, direction in metric_order:
             value = float(metrics[metric_name])
             best_value = best_by_metric[metric_name]
             is_best = bool(np.isclose(value, best_value, rtol=0.0, atol=5e-7))
             formatted_metrics.append(_format_latex_metric(value, bold=is_best))
         rows.append(f"{label} & " + " & ".join(formatted_metrics) + r" \\")
     return rows
+
+
+def build_shadow_latex_rows(summary: Dict[str, Dict[str, float]]) -> List[str]:
+    return _build_shadow_latex_rows(summary, LATEX_METRIC_ORDER)
+
+
+def build_shadow_main_latex_rows(summary: Dict[str, Dict[str, float]]) -> List[str]:
+    return _build_shadow_latex_rows(summary, MAIN_LATEX_METRIC_ORDER)
 
 
 # -----------------------------------------------------------------------------
@@ -1095,8 +1116,10 @@ def main() -> None:
         for name, res in all_results.items()
     }
     latex_rows = build_shadow_latex_rows(summary)
+    main_latex_rows = build_shadow_main_latex_rows(summary)
     summary["latex_rows"] = {
         "shadow_controller_table_rows": latex_rows,
+        "shadow_controller_main_table_rows": main_latex_rows,
     }
 
     summary_path = os.path.join(args.out_dir, "metrics_summary.json")
@@ -1107,13 +1130,24 @@ def main() -> None:
     latex_rows_path = os.path.join(args.out_dir, "shadow_controller_table_rows.tex")
     with open(latex_rows_path, "w") as f:
         f.write(
-            "% Ready-to-copy rows for colm2026_v5.tex.\n"
+            "% Ready-to-copy rows for the appendix shadow-controller table in colm2026_v5.tex.\n"
             "% Best value in each metric column is bolded automatically.\n"
             "% Columns: JS, Ent. MAE, Nuc. MAE, Top1 MAE, T-MAE, p-MAE, Post-Entropy R^2.\n"
         )
         f.write("\n".join(latex_rows))
         f.write("\n")
     logger.info("Saved LaTeX rows to %s", latex_rows_path)
+
+    main_latex_rows_path = os.path.join(args.out_dir, "shadow_controller_main_table_rows.tex")
+    with open(main_latex_rows_path, "w") as f:
+        f.write(
+            "% Ready-to-copy rows for the main-paper shadow-controller table in colm2026_v5.tex.\n"
+            "% Best value in each metric column is bolded automatically.\n"
+            "% Columns: JS, T-R^2, p-R^2, Ent. MAE, Top1 MAE, Post-Entropy R^2.\n"
+        )
+        f.write("\n".join(main_latex_rows))
+        f.write("\n")
+    logger.info("Saved main-table LaTeX rows to %s", main_latex_rows_path)
 
 
 if __name__ == "__main__":
