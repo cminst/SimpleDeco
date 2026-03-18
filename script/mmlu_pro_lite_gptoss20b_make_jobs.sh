@@ -7,7 +7,6 @@ DATASET="mmlu_pro_lite"
 JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/mmlu_pro_lite_gptoss20b_jobs.txt}"
 APPEND="${APPEND:-0}"
 FILTER_EXISTING="${FILTER_EXISTING:-1}"
-
 RESULT_ROOT="${RESULT_ROOT:-ckpt_gptoss20b}"
 MODEL_BASE="${MODEL_BASE:-ckpt/gpt-oss-20b}"
 MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-GPT-OSS-20B-Merged}"
@@ -17,10 +16,13 @@ NUM_SAMPLES="${NUM_SAMPLES:-16}"
 TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-32768}"
 
+# Force Marlin backend for MXFP4 (fixes triton_kernels.matmul_ogs crash on Blackwell RTX Pro 6000)
+# Set MXFP4_MARLIN=0 to try native Triton instead (may be faster but often unstable)
+MXFP4_MARLIN="${MXFP4_MARLIN:-1}"
+
 TAG_BASE="base-gptoss20b"
 TAG_AUTODECO="autodeco-gptoss20b"
 TAG_MEANSHIFT="meanshift-0.917-0.526-gptoss20b"
-
 SEEDS_8=(42 43 44 45 46 47 48 49)
 
 mkdir -p "$(dirname "$JOB_FILE")"
@@ -64,8 +66,11 @@ emit_eval_jobs() {
   for seed in "${SEEDS[@]}"; do
     local out="${RESULT_ROOT}/${DATASET}/${tag}/maj${NUM_SAMPLES}_seed${seed}.jsonl"
     local log="${RESULT_ROOT}/${DATASET}/${tag}/maj${NUM_SAMPLES}_seed${seed}.log"
+
     local -a cmd=(
-      "$PYTHON_BIN" utils/llm_eval.py
+      ${MXFP4_MARLIN:+VLLM_MXFP4_USE_MARLIN=1}   # ← automatically adds the fix for MXFP4 on Blackwell
+      "$PYTHON_BIN"
+      utils/llm_eval.py
       --model_name_or_path "$model"
       --dataset "$DATASET"
       --temp "$temp"
@@ -77,9 +82,11 @@ emit_eval_jobs() {
       --seed "$seed"
       --save_outputs "$out"
     )
+
     if ((${#extra_args[@]} > 0)); then
       cmd+=("${extra_args[@]}")
     fi
+
     emit_job "$out" "$log" "${cmd[@]}"
   done
 }
