@@ -50,6 +50,50 @@ image = (
 autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
 app = modal.App(image=image, name="AutoDeco Experiments")
 
+
+def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
+    if model_name == "dsr17b":
+        downloads = [
+            (
+                "cminst/AutoDeco-R1-Distill-Qwen-7B-Merged",
+                "ckpt/AutoDeco-R1-Distill-Qwen-7B-merged",
+            ),
+            (
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "ckpt/DeepSeek-R1-Distill-Qwen-7B",
+            ),
+        ]
+    elif model_name == "gptoss20b":
+        downloads = [
+            (
+                "cminst/AutoDeco-GPT-OSS-20B-Merged",
+                "ckpt/AutoDeco-GPT-OSS-20B-Merged",
+            ),
+            (
+                "cminst/GPT-OSS-20B-templatefixes",
+                "ckpt/gpt-oss-20b",
+            ),
+        ]
+    else:
+        raise ValueError(f"Unknown model_name: {model_name}")
+
+    for hf_repo, local_dir in downloads:
+        target_path = repo / local_dir
+        if target_path.is_dir() and any(target_path.iterdir()):
+            continue
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                "hf",
+                "download",
+                hf_repo,
+                "--local-dir",
+                local_dir,
+            ],
+            check=True,
+            cwd=repo,
+        )
+
 @app.function(
     gpu="H200:1", # RTX-PRO-6000:1
     timeout=86400,
@@ -92,53 +136,7 @@ def runwithgpu(model_name: str):
         shutil.copytree(temp_clone_path, repo, dirs_exist_ok=True, symlinks=True)
         shutil.rmtree(temp_clone_path)
 
-        if model_name == "dsr17b":
-            subprocess.run(
-                [
-                    "hf",
-                    "download",
-                    "cminst/AutoDeco-R1-Distill-Qwen-7B-Merged",
-                    "--local-dir",
-                    "ckpt/AutoDeco-R1-Distill-Qwen-7B-merged",
-                ],
-                check=True,
-                cwd=repo,
-            )
-            subprocess.run(
-                [
-                    "hf",
-                    "download",
-                    "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-                    "--local-dir",
-                    "ckpt/DeepSeek-R1-Distill-Qwen-7B",
-                ],
-                check=True,
-                cwd=repo,
-            )
-        elif model_name == "gptoss20b":
-            subprocess.run(
-                [
-                    "hf",
-                    "download",
-                    "cminst/AutoDeco-GPT-OSS-20B-Merged",
-                    "--local-dir",
-                    "ckpt/AutoDeco-GPT-OSS-20B-Merged",
-                ],
-                check=True,
-                cwd=repo,
-            )
-            subprocess.run(
-                [
-                    "hf",
-                    "download",
-                    "cminst/GPT-OSS-20B-templatefixes",
-                    "--local-dir",
-                    "ckpt/gpt-oss-20b",
-                ],
-                check=True,
-                cwd=repo,
-            )
-
+        _ensure_model_downloaded(repo, model_name)
         autodeco_volume.commit()
     else:
         subprocess.run(
@@ -146,6 +144,7 @@ def runwithgpu(model_name: str):
             check=True,
             cwd=repo,
         )
+        _ensure_model_downloaded(repo, model_name)
 
     os.chdir("/root")
 

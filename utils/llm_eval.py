@@ -63,7 +63,7 @@ def apply_eval_chat_template(tokenizer, messages, *, reasoning_effort=None):
 
 DEFAULT_FINAL_ANSWER_SUFFIX = "Make sure you output the final answer within \\boxed{}."
 MCQ_FINAL_ANSWER_SUFFIX = (
-    "Put your final letter answer within \\boxed{}, for example \\boxed{A}."
+    "Put your final letter answer within \\boxed{}, for example \\boxed{A}. Exactly one answer choice is correct."
 )
 
 
@@ -82,12 +82,12 @@ if __name__ == "__main__":
         path = path.rstrip('/')
         parts = path.split('/')
         if len(parts) >= 2:
-            return parts[-1]  
+            return parts[-1]
         elif len(parts) == 1:
             return parts[0]
         else:
             return 'unknown'
-    
+
 
     dynamic_policy_help = (
         "Dynamic sampling policies and kwargs:\n"
