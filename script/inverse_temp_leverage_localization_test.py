@@ -30,11 +30,69 @@ from pertoken_diagnostics_hypothesis_utils import (
 from shadow_controller_dist_match import log_hypothesis, set_seed, setup_logging
 
 
+DEFAULT_ENTROPY_BIN_EDGES = (0.00, 0.05, 0.10, 0.20, 0.40, 0.60, 0.80, 1.00)
+
+
 def _safe_sign_agreement(x: np.ndarray, y: np.ndarray) -> float:
     mask = (np.abs(x) > 1e-12) & (np.abs(y) > 1e-12)
     if not np.any(mask):
         return float("nan")
     return float(np.mean(np.sign(x[mask]) == np.sign(y[mask])))
+
+
+def _parse_bin_edges(spec: str) -> np.ndarray:
+    try:
+        edges = np.asarray([float(part.strip()) for part in spec.split(",") if part.strip()], dtype=np.float32)
+    except ValueError as exc:
+        raise ValueError(f"Failed to parse --entropy-bin-edges={spec!r}") from exc
+    if len(edges) < 2:
+        raise ValueError("Expected at least two comma-separated entropy bin edges.")
+    if not np.all(np.isfinite(edges)):
+        raise ValueError("Entropy bin edges must be finite.")
+    if not np.all(edges[1:] > edges[:-1]):
+        raise ValueError("Entropy bin edges must be strictly increasing.")
+    return edges
+
+
+def _format_bin_label(left: float, right: float, is_last: bool) -> str:
+    return f"$[{left:.2f}, {right:.2f}{']' if is_last else ')'}$"
+
+
+def _fixed_interval_bins(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    clipped = np.clip(values, float(edges[0]), float(edges[-1]))
+    bins = np.searchsorted(edges, clipped, side="right") - 1
+    return np.clip(bins, 0, len(edges) - 2).astype(np.int32)
+
+
+def _covered_lookup(terms) -> np.ndarray:
+    lookup = np.full(len(terms.covered_mask), -1, dtype=np.int32)
+    lookup[terms.covered_indices] = np.arange(len(terms.covered_indices), dtype=np.int32)
+    return lookup
+
+
+def _format_metric(value: Any, digits: int = 6) -> str:
+    if value is None:
+        return "n/a"
+    return f"{float(value):.{digits}f}"
+
+
+def _format_latex_float(value: Any, digits: int = 3) -> str:
+    if value is None:
+        return r"[\;]"
+    return f"{float(value):.{digits}f}"
+
+
+def _latex_row(row: Dict[str, Any], use_covered_count: bool) -> str:
+    count = row["count_covered"] if use_covered_count else row["count_all"]
+    support = row["support_change_rate_covered"] if use_covered_count else row["support_change_rate"]
+    return (
+        f"{row['bin_label']} & {count} & "
+        f"{_format_latex_float(row['mean_alignment'])} & "
+        f"{_format_latex_float(row['mean_penalty'])} & "
+        f"{_format_latex_float(row['mean_predicted_net'])} & "
+        f"{_format_latex_float(row['mean_logit_variance'])} & "
+        f"{_format_latex_float(support)} \\\\"
+    )
 
 
 def _bin_table(
@@ -49,6 +107,7 @@ def _bin_table(
     bins = rank_bins(signal_values, num_bins)
     rows: List[Dict[str, Any]] = []
     covered_mask = terms.covered_mask
+    covered_lookup = _covered_lookup(terms)
     for bin_idx in range(int(bins.max()) + 1):
         all_mask = bins == bin_idx
         covered_bin_mask = covered_mask & all_mask
@@ -57,6 +116,7 @@ def _bin_table(
             "bin_index": int(bin_idx),
             "count_all": int(np.sum(all_mask)),
             "count_covered": int(np.sum(covered_bin_mask)),
+            "covered_rate": (float(np.sum(covered_bin_mask) / np.sum(all_mask)) if np.any(all_mask) else None),
             "signal_min": float(np.min(signal_values[all_mask])),
             "signal_max": float(np.max(signal_values[all_mask])),
             "signal_mean": float(np.mean(signal_values[all_mask])),
@@ -66,26 +126,115 @@ def _bin_table(
             "nucleus_delta_gt5_rate": float(np.mean(nucleus_delta[all_mask] > 5)),
         }
         if np.any(covered_bin_mask):
-            idx = np.searchsorted(terms.covered_indices, np.flatnonzero(covered_bin_mask))
+            idx = covered_lookup[np.flatnonzero(covered_bin_mask)]
             row.update(
                 {
                     "mean_var": float(np.mean(terms.var[idx])),
+                    "mean_logit_variance": float(np.mean(terms.var[idx])),
+                    "delta_variance": float(np.var(terms.delta[idx])),
                     "mean_alignment": float(np.mean(terms.alignment[idx])),
                     "mean_penalty": float(np.mean(terms.penalty[idx])),
+                    "mean_predicted_net": float(np.mean(terms.predicted_net[idx])),
                     "mean_actual_gain": float(np.mean(terms.actual_gain[idx])),
                     "positive_alignment_rate": float(np.mean(terms.alignment[idx] > 0)),
                     "sign_agreement_grad_delta": _safe_sign_agreement(terms.grad[idx], terms.delta[idx]),
+                    "mean_abs_delta_covered": float(np.mean(np.abs(terms.delta[idx]))),
+                    "support_change_rate_covered": float(np.mean(support_change[covered_bin_mask])),
+                    "nucleus_delta_gt1_rate_covered": float(np.mean(nucleus_delta[covered_bin_mask] > 1)),
+                    "nucleus_delta_gt5_rate_covered": float(np.mean(nucleus_delta[covered_bin_mask] > 5)),
                 }
             )
         else:
             row.update(
                 {
                     "mean_var": None,
+                    "mean_logit_variance": None,
+                    "delta_variance": None,
                     "mean_alignment": None,
                     "mean_penalty": None,
+                    "mean_predicted_net": None,
                     "mean_actual_gain": None,
                     "positive_alignment_rate": None,
                     "sign_agreement_grad_delta": None,
+                    "mean_abs_delta_covered": None,
+                    "support_change_rate_covered": None,
+                    "nucleus_delta_gt1_rate_covered": None,
+                    "nucleus_delta_gt5_rate_covered": None,
+                }
+            )
+        rows.append(row)
+    return rows
+
+
+def _fixed_entropy_table(
+    entropy_values: np.ndarray,
+    edges: np.ndarray,
+    terms,
+    abs_delta_all: np.ndarray,
+    support_change: np.ndarray,
+    nucleus_delta: np.ndarray,
+) -> List[Dict[str, Any]]:
+    bins = _fixed_interval_bins(entropy_values, edges)
+    rows: List[Dict[str, Any]] = []
+    covered_mask = terms.covered_mask
+    covered_lookup = _covered_lookup(terms)
+    for bin_idx in range(len(edges) - 1):
+        left = float(edges[bin_idx])
+        right = float(edges[bin_idx + 1])
+        all_mask = bins == bin_idx
+        covered_bin_mask = covered_mask & all_mask
+        row: Dict[str, Any] = {
+            "signal": "H_norm_fixed",
+            "bin_index": int(bin_idx),
+            "bin_left": left,
+            "bin_right": right,
+            "bin_label": _format_bin_label(left, right, is_last=(bin_idx == len(edges) - 2)),
+            "count_all": int(np.sum(all_mask)),
+            "count_covered": int(np.sum(covered_bin_mask)),
+            "covered_rate": (float(np.sum(covered_bin_mask) / np.sum(all_mask)) if np.any(all_mask) else None),
+            "signal_min": left,
+            "signal_max": right,
+            "signal_mean": (float(np.mean(entropy_values[all_mask])) if np.any(all_mask) else None),
+            "mean_abs_delta": (float(np.mean(abs_delta_all[all_mask])) if np.any(all_mask) else None),
+            "support_change_rate": (float(np.mean(support_change[all_mask])) if np.any(all_mask) else None),
+            "nucleus_delta_gt1_rate": (float(np.mean(nucleus_delta[all_mask] > 1)) if np.any(all_mask) else None),
+            "nucleus_delta_gt5_rate": (float(np.mean(nucleus_delta[all_mask] > 5)) if np.any(all_mask) else None),
+        }
+        if np.any(covered_bin_mask):
+            idx = covered_lookup[np.flatnonzero(covered_bin_mask)]
+            row.update(
+                {
+                    "mean_var": float(np.mean(terms.var[idx])),
+                    "mean_logit_variance": float(np.mean(terms.var[idx])),
+                    "delta_variance": float(np.var(terms.delta[idx])),
+                    "mean_alignment": float(np.mean(terms.alignment[idx])),
+                    "mean_penalty": float(np.mean(terms.penalty[idx])),
+                    "mean_predicted_net": float(np.mean(terms.predicted_net[idx])),
+                    "mean_actual_gain": float(np.mean(terms.actual_gain[idx])),
+                    "positive_alignment_rate": float(np.mean(terms.alignment[idx] > 0)),
+                    "sign_agreement_grad_delta": _safe_sign_agreement(terms.grad[idx], terms.delta[idx]),
+                    "mean_abs_delta_covered": float(np.mean(np.abs(terms.delta[idx]))),
+                    "support_change_rate_covered": float(np.mean(support_change[covered_bin_mask])),
+                    "nucleus_delta_gt1_rate_covered": float(np.mean(nucleus_delta[covered_bin_mask] > 1)),
+                    "nucleus_delta_gt5_rate_covered": float(np.mean(nucleus_delta[covered_bin_mask] > 5)),
+                }
+            )
+        else:
+            row.update(
+                {
+                    "mean_var": None,
+                    "mean_logit_variance": None,
+                    "delta_variance": None,
+                    "mean_alignment": None,
+                    "mean_penalty": None,
+                    "mean_predicted_net": None,
+                    "mean_actual_gain": None,
+                    "positive_alignment_rate": None,
+                    "sign_agreement_grad_delta": None,
+                    "mean_abs_delta_covered": None,
+                    "support_change_rate_covered": None,
+                    "nucleus_delta_gt1_rate_covered": None,
+                    "nucleus_delta_gt5_rate_covered": None,
                 }
             )
         rows.append(row)
@@ -109,6 +258,12 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--max-val-tokens", type=int, default=0)
     ap.add_argument("--num-bins", type=int, default=8)
+    ap.add_argument(
+        "--entropy-bin-edges",
+        type=str,
+        default=",".join(f"{edge:.2f}" for edge in DEFAULT_ENTROPY_BIN_EDGES),
+        help="Comma-separated fixed H_norm bin edges for the paper-facing entropy table.",
+    )
     ap.add_argument("--h0-mean-mass-threshold", type=float, default=0.97)
     ap.add_argument("--h0-frac-mass-threshold", type=float, default=0.90)
     ap.add_argument("--h0-row-mass-threshold", type=float, default=0.95)
@@ -175,12 +330,21 @@ def main() -> None:
     nucleus_mean = rowwise_nucleus_size_from_probs(probs_mean, op.mean_p)
     nucleus_delta = np.abs(nucleus_auto - nucleus_mean)
     support_change = nucleus_delta > 0
+    entropy_edges = _parse_bin_edges(args.entropy_bin_edges)
 
     bin_tables = {
         "H_norm": _bin_table("H_norm", bundle.H_norm, terms, abs_delta_all, support_change, nucleus_delta, args.num_bins),
         "p_max": _bin_table("p_max", bundle.p_max, terms, abs_delta_all, support_change, nucleus_delta, args.num_bins),
         "gap12": _bin_table("gap12", bundle.gap12, terms, abs_delta_all, support_change, nucleus_delta, args.num_bins),
     }
+    entropy_table = _fixed_entropy_table(
+        bundle.H_norm,
+        entropy_edges,
+        terms,
+        abs_delta_all,
+        support_change,
+        nucleus_delta,
+    )
 
     logger.info("=== Bin Tables ===")
     for signal_name, rows in bin_tables.items():
@@ -204,6 +368,48 @@ def main() -> None:
                 row["nucleus_delta_gt5_rate"],
                 ("n/a" if row["positive_alignment_rate"] is None else f"{row['positive_alignment_rate']:.6f}"),
             )
+
+    logger.info("=== Fixed Entropy Table (paper bins) ===")
+    for row in entropy_table:
+        logger.info(
+            "ENTROPY %s | N_all=%d | N_cov=%d | cov=%.6f | align=%s | penalty=%s | pred_net=%s | "
+            "actual_net=%s | mean_v=%s | var_delta=%s | support_change(all)=%s | support_change(cov)=%s",
+            row["bin_label"],
+            row["count_all"],
+            row["count_covered"],
+            (float("nan") if row["covered_rate"] is None else row["covered_rate"]),
+            _format_metric(row["mean_alignment"]),
+            _format_metric(row["mean_penalty"]),
+            _format_metric(row["mean_predicted_net"]),
+            _format_metric(row["mean_actual_gain"]),
+            _format_metric(row["mean_logit_variance"]),
+            _format_metric(row["delta_variance"]),
+            _format_metric(row["support_change_rate"]),
+            _format_metric(row["support_change_rate_covered"]),
+        )
+
+    latex_rows_covered = [_latex_row(row, use_covered_count=True) for row in entropy_table]
+    latex_rows_all = [_latex_row(row, use_covered_count=False) for row in entropy_table]
+    latex_cov_path = os.path.join(args.out_dir, "entropy_bin_table_rows_count_covered.tex")
+    latex_all_path = os.path.join(args.out_dir, "entropy_bin_table_rows_count_all.tex")
+    with open(latex_cov_path, "w") as f:
+        f.write(
+            "% Ready-to-copy rows for colm2026_v5.tex.\n"
+            "% N uses count_covered, and Support Delta rate uses the same covered subset.\n"
+            "% Net gain here is the predicted net gain E[g*delta - 0.5*v*delta^2].\n"
+            "% The JSON summary also includes actual net gain and count_all if you prefer those.\n"
+        )
+        f.write("\n".join(latex_rows_covered))
+        f.write("\n")
+    with open(latex_all_path, "w") as f:
+        f.write(
+            "% Alternate rows where N uses count_all and Support Delta rate uses all held-out tokens.\n"
+            "% Alignment/penalty/net/v_t are still computed on covered tokens only.\n"
+        )
+        f.write("\n".join(latex_rows_all))
+        f.write("\n")
+    logger.info("Saved covered-count LaTeX rows to %s", latex_cov_path)
+    logger.info("Saved all-token-count LaTeX rows to %s", latex_all_path)
 
     h_rows = bin_tables["H_norm"]
     p_rows = bin_tables["p_max"]
@@ -257,6 +463,7 @@ def main() -> None:
             "seed": args.seed,
             "max_val_tokens": args.max_val_tokens,
             "num_bins": args.num_bins,
+            "entropy_bin_edges": [float(edge) for edge in entropy_edges],
         },
         "train_operating_point": {
             "mean_T": op.mean_T,
@@ -276,6 +483,11 @@ def main() -> None:
             "nucleus_delta_gt5_rate": float(np.mean(nucleus_delta > 5)),
         },
         "bin_tables": bin_tables,
+        "entropy_table": entropy_table,
+        "latex_rows": {
+            "count_covered": latex_rows_covered,
+            "count_all": latex_rows_all,
+        },
     }
     out_path = os.path.join(args.out_dir, "metrics_summary.json")
     with open(out_path, "w") as f:

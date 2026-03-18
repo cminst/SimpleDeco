@@ -23,7 +23,7 @@ image = (
         'git config --global user.name "Qingyun Li (from Modal)"',
         'git config --global credential.helper store',
     )
-    .run_commands("echo 'VERSION 1'")
+    .run_commands("echo 'VERSION 2'")
     .run_commands(
         "uv pip install -U torchvision torchaudio torch==2.8.0 'numpy<2.3' vllm==0.10.2 --torch-backend=cu128 --no-build-isolation --system",
         "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptools_scm --torch-backend=cu128 --system",

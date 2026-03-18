@@ -11,3 +11,4 @@ local_run.sh
 **/__pycache__/
 **/.ipynb_checkpoints/
 arXiv*
+colm*.tex
