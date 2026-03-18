@@ -15,10 +15,24 @@ MODE="${MODE:-maj@k}"
 NUM_SAMPLES="${NUM_SAMPLES:-16}"
 TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-32768}"
+REASONING_EFFORT="${REASONING_EFFORT:-}"
 
-TAG_BASE="base-gptoss20b"
-TAG_AUTODECO="autodeco-gptoss20b"
-TAG_MEANSHIFT="meanshift-0.917-0.526-gptoss20b"
+case "$REASONING_EFFORT" in
+  ""|low|medium|high) ;;
+  *)
+    echo "Invalid REASONING_EFFORT: '$REASONING_EFFORT'. Expected one of: low, medium, high." >&2
+    exit 1
+    ;;
+esac
+
+REASONING_TAG_SUFFIX=""
+if [[ -n "$REASONING_EFFORT" ]]; then
+  REASONING_TAG_SUFFIX="-effort-${REASONING_EFFORT}"
+fi
+
+TAG_BASE="base-gptoss20b${REASONING_TAG_SUFFIX}"
+TAG_AUTODECO="autodeco-gptoss20b${REASONING_TAG_SUFFIX}"
+TAG_MEANSHIFT="meanshift-0.917-0.526-gptoss20b${REASONING_TAG_SUFFIX}"
 SEEDS_8=(42 43 44 45 46 47 48 49)
 
 mkdir -p "$(dirname "$JOB_FILE")"
@@ -77,6 +91,10 @@ emit_eval_jobs() {
       --seed "$seed"
       --save_outputs "$out"
     )
+
+    if [[ -n "$REASONING_EFFORT" ]]; then
+      cmd+=(--reasoning_effort "$REASONING_EFFORT")
+    fi
 
     if ((${#extra_args[@]} > 0)); then
       cmd+=("${extra_args[@]}")

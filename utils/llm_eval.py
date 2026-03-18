@@ -50,6 +50,17 @@ def parse_dynamic_sampling_kv(arg: str):
         return key, raw_value
 
 
+def apply_eval_chat_template(tokenizer, messages, *, reasoning_effort=None):
+    kwargs = {
+        "tokenize": False,
+        "add_generation_prompt": True,
+        "enable_thinking": True,
+    }
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
+    return tokenizer.apply_chat_template(messages, **kwargs)
+
+
 if __name__ == "__main__":
     def extract_model_name(path):
         path = path.rstrip('/')
@@ -100,6 +111,9 @@ if __name__ == "__main__":
     parser.add_argument('--dyn', action='append', type=parse_dynamic_sampling_kv, default=[],
                         metavar='KEY=VALUE',
                         help='Repeatable override for dynamic sampling kwargs, e.g. --dyn window=16 --dyn alpha=0.5')
+    parser.add_argument('--reasoning_effort', type=str, default=None,
+                        choices=['low', 'medium', 'high'],
+                        help='Optional GPT-OSS reasoning effort used when rendering the chat template.')
     args = parser.parse_args()
 
 
@@ -152,11 +166,10 @@ if __name__ == "__main__":
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     problems = [
-        tokenizer.apply_chat_template(
+        apply_eval_chat_template(
+            tokenizer,
             [{"role": "user", "content": item['problem'] + '\nMake sure you output the final answer within \\boxed{}.'}],
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=True
+            reasoning_effort=args.reasoning_effort,
         ) for item in data
     ]
 
@@ -181,9 +194,13 @@ if __name__ == "__main__":
         return 1.0 if (sum(scores) / len(scores)) > 0.5 else 0.0
 
     dyn_tag = f"-dyn_{args.dynamic_sampling_policy}" if args.dynamic_sampling_policy else ""
+    reasoning_effort_tag = (
+        f"-reasoning_effort_{args.reasoning_effort}" if args.reasoning_effort else ""
+    )
     log_base = (
         f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}'
-        f'-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}{dyn_tag}'
+        f'-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}'
+        f'{reasoning_effort_tag}{dyn_tag}'
     )
     all_acc = []
     for idx, output_group in enumerate(outputs):
@@ -214,6 +231,7 @@ if __name__ == "__main__":
                         'seed': args.seed,
                         'model_name_or_path': args.model_name_or_path,
                         'ckpt_name': ckpt_name,
+                        'reasoning_effort': args.reasoning_effort,
                         'dynamic_sampling_policy': args.dynamic_sampling_policy,
                         'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
                     }
