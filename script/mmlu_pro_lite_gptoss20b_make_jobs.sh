@@ -16,10 +16,6 @@ NUM_SAMPLES="${NUM_SAMPLES:-16}"
 TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-32768}"
 
-# Force Marlin backend for MXFP4 (fixes triton_kernels.matmul_ogs crash on Blackwell RTX Pro 6000)
-# Set MXFP4_MARLIN=0 to try native Triton instead (may be faster but often unstable)
-MXFP4_MARLIN="${MXFP4_MARLIN:-1}"
-
 TAG_BASE="base-gptoss20b"
 TAG_AUTODECO="autodeco-gptoss20b"
 TAG_MEANSHIFT="meanshift-0.917-0.526-gptoss20b"
@@ -68,7 +64,6 @@ emit_eval_jobs() {
     local log="${RESULT_ROOT}/${DATASET}/${tag}/maj${NUM_SAMPLES}_seed${seed}.log"
 
     local -a cmd=(
-      ${MXFP4_MARLIN:+VLLM_MXFP4_USE_MARLIN=1}   # ← automatically adds the fix for MXFP4 on Blackwell
       "$PYTHON_BIN"
       utils/llm_eval.py
       --model_name_or_path "$model"
