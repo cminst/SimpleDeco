@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """AutoDeco implementation PyTorch. Supports temperature and top-p prediction heads on top of any AutoModelForCausalLM"""
+import json
+from pathlib import Path
 from typing import Optional, Tuple, Union, Dict, Any
 import importlib
 import inspect
@@ -44,6 +46,7 @@ from transformers.cache_utils import Cache
 
 from transformers.modeling_utils import SpecificPreTrainedModelType
 
+from safetensors import safe_open
 from safetensors.torch import load_file, load_model, save_file
 
 logger = logging.get_logger(__name__)
@@ -174,6 +177,7 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _no_split_modules = []  # Will be set based on base model
     config_class = AutoDecoModelForCausalLMConfig
+
     def __init__(self, config: AutoDecoModelForCausalLMConfig, **kwargs):
         """
         Initialize AutoDeco model.
@@ -192,38 +196,28 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         logger.info(f"Loading base model from {base_model_path}")
         logger.info(f"Base model type: {config.base_model_type}")
 
-        base_model_kwargs = {}
-        torch_dtype = None
-        if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
-            torch_dtype = config.torch_dtype
-        elif hasattr(config, "dtype") and config.dtype is not None:
-            torch_dtype = config.dtype
-        elif kwargs.get("torch_dtype", None) is not None:
-            torch_dtype = kwargs.get("torch_dtype")
-        elif kwargs.get("dtype", None) is not None:
-            torch_dtype = kwargs.get("dtype")
-        if torch_dtype is not None:
-            base_model_kwargs["torch_dtype"] = torch_dtype
+        if kwargs.get("init_base_model_from_config"):
+            logger.info("Initializing base model architecture from embedded config")
+            self.llm = AutoModelForCausalLM.from_config(
+                self._build_base_model_config(config),
+                **self._get_base_model_init_kwargs(config, kwargs, from_config=True),
+            )
+        elif kwargs.get("load_base_model") is False:
+            logger.info("Skipping base model loading (will be loaded from checkpoint)")
+            self.llm = None
+        else:
+            self.llm = AutoModelForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=base_model_path,
+                **self._get_base_model_init_kwargs(config, kwargs, from_config=False),
+            )
 
-        for key in (
-            "attn_implementation",
-            "device_map",
-            "quantization_config",
-            "revision",
-            "trust_remote_code",
-            "low_cpu_mem_usage",
-        ):
-            if kwargs.get(key, None) is not None:
-                base_model_kwargs[key] = kwargs.get(key)
-
-        self.llm = AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=base_model_path,
-            **base_model_kwargs,
-        )
-
-        if kwargs.get("use_cache", None) is not None:
+        if self.llm is not None and kwargs.get("use_cache", None) is not None:
             self.llm.config.use_cache = kwargs.get("use_cache")
-        if kwargs.get("attn_implementation", None) is not None and hasattr(self.llm.config, "attn_implementation"):
+        if (
+            self.llm is not None
+            and kwargs.get("attn_implementation", None) is not None
+            and hasattr(self.llm.config, "attn_implementation")
+        ):
             self.llm.config.attn_implementation = kwargs.get("attn_implementation")
 
 
@@ -257,6 +251,106 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
         self._keys_to_ignore_on_save = [k for k in self.state_dict().keys() if k.startswith("llm.")]
 
     # whole model only
+    @staticmethod
+    def _resolve_torch_dtype(config: AutoDecoModelForCausalLMConfig, kwargs: dict[str, Any]) -> Any:
+        if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
+            return config.torch_dtype
+        if hasattr(config, "dtype") and config.dtype is not None:
+            return config.dtype
+        if kwargs.get("torch_dtype", None) is not None:
+            return kwargs.get("torch_dtype")
+        if kwargs.get("dtype", None) is not None:
+            return kwargs.get("dtype")
+        return None
+
+    @classmethod
+    def _get_base_model_init_kwargs(
+        cls,
+        config: AutoDecoModelForCausalLMConfig,
+        kwargs: dict[str, Any],
+        *,
+        from_config: bool,
+    ) -> dict[str, Any]:
+        base_model_kwargs: dict[str, Any] = {}
+        torch_dtype = cls._resolve_torch_dtype(config, kwargs)
+        if torch_dtype is not None:
+            base_model_kwargs["torch_dtype"] = torch_dtype
+
+        for key in ("attn_implementation", "trust_remote_code"):
+            if kwargs.get(key, None) is not None:
+                base_model_kwargs[key] = kwargs.get(key)
+
+        if not from_config:
+            for key in ("device_map", "quantization_config", "revision", "low_cpu_mem_usage"):
+                if kwargs.get(key, None) is not None:
+                    base_model_kwargs[key] = kwargs.get(key)
+
+        return base_model_kwargs
+
+    @staticmethod
+    def _build_base_model_config(config: AutoDecoModelForCausalLMConfig) -> PretrainedConfig:
+        base_model_type = getattr(config, "base_model_type", None)
+        if not base_model_type:
+            raise ValueError("Merged AutoDeco checkpoint is missing base_model_type in config.json")
+
+        config_dict = config.to_dict() if hasattr(config, "to_dict") else {}
+        for key in (
+            "enable_temperature_head",
+            "enable_top_p_head",
+            "use_enhanced_features",
+            "train_temp",
+            "train_top_p",
+            "base_model_name_or_path",
+            "base_model_type",
+            "model_type",
+            "architectures",
+        ):
+            config_dict.pop(key, None)
+
+        try:
+            base_model_config = AutoConfig.for_model(base_model_type, **config_dict)
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to reconstruct base model config for merged AutoDeco checkpoint with base_model_type={base_model_type!r}"
+            ) from exc
+
+        base_model_name_or_path = getattr(config, "base_model_name_or_path", None)
+        if base_model_name_or_path is not None:
+            base_model_config._name_or_path = base_model_name_or_path
+        return base_model_config
+
+    @staticmethod
+    def _has_llm_weights(keys: Any) -> bool:
+        return any(key.startswith("llm.") for key in keys)
+
+    @classmethod
+    def _is_merged_checkpoint(cls, checkpoint_path: Union[str, os.PathLike]) -> bool:
+        checkpoint_dir = Path(checkpoint_path)
+        if not checkpoint_dir.is_dir():
+            return False
+
+        index_path = checkpoint_dir / "model.safetensors.index.json"
+        if index_path.is_file():
+            with open(index_path, "r", encoding="utf-8") as f:
+                weight_map = json.load(f).get("weight_map", {})
+            if cls._has_llm_weights(weight_map.keys()):
+                return True
+
+        for weights_path in sorted(checkpoint_dir.glob("*.safetensors")):
+            with safe_open(str(weights_path), framework="pt", device="cpu") as handle:
+                if cls._has_llm_weights(handle.keys()):
+                    return True
+
+        for weights_path in sorted(checkpoint_dir.glob("*.bin")):
+            try:
+                state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+            except TypeError:
+                state_dict = torch.load(weights_path, map_location="cpu")
+            if isinstance(state_dict, dict) and cls._has_llm_weights(state_dict.keys()):
+                return True
+
+        return False
+
     @classmethod
     def _to_autodeco_config(
         cls,
@@ -333,6 +427,18 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             enable_top_p_head=kwargs.get("enable_top_p_head"),
             use_enhanced_features=kwargs.get("use_enhanced_features"),
         )
+
+        if raw_model_type == AutoDecoModelForCausalLMConfig.model_type:
+            if cls._is_merged_checkpoint(pretrained_model_name_or_path):
+                logger.info("Loading AutoDeco model from merged checkpoint: %s", pretrained_model_name_or_path)
+                return super().from_pretrained(
+                    pretrained_model_name_or_path,
+                    *model_args,
+                    config=autodeco_config,
+                    init_base_model_from_config=True,
+                    **kwargs,
+                )
+
         autodeco_model: AutoDecoModelForCausalLM = cls(autodeco_config, **kwargs)
 
         if raw_model_type == AutoDecoModelForCausalLMConfig.model_type:
