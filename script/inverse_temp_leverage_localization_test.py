@@ -78,15 +78,21 @@ def _format_metric(value: Any, digits: int = 6) -> str:
 
 def _format_latex_float(value: Any, digits: int = 3) -> str:
     if value is None:
-        return r"[\;]"
+        return "---"
     return f"{float(value):.{digits}f}"
 
 
-def _latex_row(row: Dict[str, Any], use_covered_count: bool) -> str:
+def _format_latex_percent(count: int, total: int, digits: int = 1) -> str:
+    if total <= 0:
+        return "---"
+    return f"{100.0 * float(count) / float(total):.{digits}f}\\%"
+
+
+def _latex_row(row: Dict[str, Any], use_covered_count: bool, total_count: int) -> str:
     count = row["count_covered"] if use_covered_count else row["count_all"]
     support = row["support_change_rate_covered"] if use_covered_count else row["support_change_rate"]
     return (
-        f"{row['bin_label']} & {count} & "
+        f"{row['bin_label']} & {_format_latex_percent(count, total_count)} & "
         f"{_format_latex_float(row['mean_alignment'])} & "
         f"{_format_latex_float(row['mean_penalty'])} & "
         f"{_format_latex_float(row['mean_predicted_net'])} & "
@@ -398,14 +404,20 @@ def main() -> None:
             _format_metric(row["support_change_rate_covered"]),
         )
 
-    latex_rows_covered = [_latex_row(row, use_covered_count=True) for row in entropy_table]
-    latex_rows_all = [_latex_row(row, use_covered_count=False) for row in entropy_table]
+    total_count_covered = int(sum(row["count_covered"] for row in entropy_table))
+    total_count_all = int(sum(row["count_all"] for row in entropy_table))
+    latex_rows_covered = [
+        _latex_row(row, use_covered_count=True, total_count=total_count_covered) for row in entropy_table
+    ]
+    latex_rows_all = [
+        _latex_row(row, use_covered_count=False, total_count=total_count_all) for row in entropy_table
+    ]
     latex_cov_path = os.path.join(args.out_dir, "entropy_bin_table_rows_count_covered.tex")
     latex_all_path = os.path.join(args.out_dir, "entropy_bin_table_rows_count_all.tex")
     with open(latex_cov_path, "w") as f:
         f.write(
             "% Ready-to-copy rows for colm2026_v5.tex.\n"
-            "% N uses count_covered, and Support Delta rate uses the same covered subset.\n"
+            "% N is the percentage share of covered tokens, and Support Delta rate uses the same covered subset.\n"
             "% Net gain here is the predicted net gain E[g*delta - 0.5*v*delta^2].\n"
             "% The JSON summary also includes actual net gain and count_all if you prefer those.\n"
         )
@@ -413,7 +425,8 @@ def main() -> None:
         f.write("\n")
     with open(latex_all_path, "w") as f:
         f.write(
-            "% Alternate rows where N uses count_all and Support Delta rate uses all held-out tokens.\n"
+            "% Alternate rows where N is the percentage share of all evaluation tokens,\n"
+            "% and Support Delta rate uses all evaluation tokens.\n"
             "% Alignment/penalty/net/v_t are still computed on covered tokens only.\n"
         )
         f.write("\n".join(latex_rows_all))
