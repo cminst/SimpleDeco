@@ -217,6 +217,7 @@ def load_diagnostics_slice(
     seed: int,
     logger: logging.Logger,
     max_val_tokens: int = 0,
+    use_all_tokens: bool = False,
 ) -> tuple[DiagnosticsSlice, TrainOperatingPoint]:
     ds = load_from_disk(ds_path)
     if "tokens" not in ds:
@@ -237,11 +238,19 @@ def load_diagnostics_slice(
 
     meta = tok.select_columns(meta_cols).with_format("numpy")[:]
     seq_id = meta["seq_id"].astype(np.int64)
-    tr_mask, va_mask = split_by_seq_mod(seq_id, val_mod)
-    tr_idx = np.flatnonzero(tr_mask)
-    va_idx = np.flatnonzero(va_mask)
-    if len(tr_idx) == 0 or len(va_idx) == 0:
-        raise ValueError(f"val_mod={val_mod} produced an empty train or validation split.")
+    if use_all_tokens:
+        tr_idx = np.arange(len(seq_id), dtype=np.int64)
+        va_idx = tr_idx.copy()
+        logger.info(
+            "Using all %d diagnostics rows for both operating-point estimation and evaluation.",
+            len(seq_id),
+        )
+    else:
+        tr_mask, va_mask = split_by_seq_mod(seq_id, val_mod)
+        tr_idx = np.flatnonzero(tr_mask)
+        va_idx = np.flatnonzero(va_mask)
+        if len(tr_idx) == 0 or len(va_idx) == 0:
+            raise ValueError(f"val_mod={val_mod} produced an empty train or validation split.")
 
     T_train = meta["T_hat"][tr_idx].astype(np.float32)
     p_train = meta["p_hat"][tr_idx].astype(np.float32)

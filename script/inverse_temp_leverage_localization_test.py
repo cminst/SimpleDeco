@@ -259,6 +259,11 @@ def main() -> None:
     ap.add_argument("--max-val-tokens", type=int, default=0)
     ap.add_argument("--num-bins", type=int, default=8)
     ap.add_argument(
+        "--use-all-tokens",
+        action="store_true",
+        help="Estimate the mean operating point and report localization metrics on the full diagnostics dataset.",
+    )
+    ap.add_argument(
         "--entropy-bin-edges",
         type=str,
         default=",".join(f"{edge:.2f}" for edge in DEFAULT_ENTROPY_BIN_EDGES),
@@ -282,10 +287,15 @@ def main() -> None:
         seed=args.seed,
         logger=logger,
         max_val_tokens=args.max_val_tokens,
+        use_all_tokens=args.use_all_tokens,
     )
     logger.info(
-        "Held-out rows: %d | dist_k=%d | mean_beta(train)=%.5f | mean_p(train)=%.5f",
-        len(bundle.T_hat), args.dist_k, op.mean_beta, op.mean_p,
+        "%s rows: %d | dist_k=%d | mean_beta(op)=%.5f | mean_p(op)=%.5f",
+        ("All-token evaluation" if args.use_all_tokens else "Held-out"),
+        len(bundle.T_hat),
+        args.dist_k,
+        op.mean_beta,
+        op.mean_p,
     )
 
     adequacy = heldout_topk_adequacy_stats(bundle, row_mass_threshold=args.h0_row_mass_threshold)
@@ -464,6 +474,7 @@ def main() -> None:
             "max_val_tokens": args.max_val_tokens,
             "num_bins": args.num_bins,
             "entropy_bin_edges": [float(edge) for edge in entropy_edges],
+            "use_all_tokens": args.use_all_tokens,
         },
         "train_operating_point": {
             "mean_T": op.mean_T,
