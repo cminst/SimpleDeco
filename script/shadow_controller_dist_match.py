@@ -101,6 +101,51 @@ def batched_indices(indices: np.ndarray, batch_size: int, shuffle: bool, rng: np
         yield idx[start:start + batch_size]
 
 
+MODEL_LABELS = {
+    "mean": "Mean",
+    "scalar": "Scalar",
+    "scalar_bits": "Scalar+bits",
+    "scalar_bits_topk": "Scalar+bits+topk",
+}
+
+
+LATEX_METRIC_ORDER = (
+    ("js", "min"),
+    ("entropy_mae", "min"),
+    ("nucleus_mae", "min"),
+    ("top1_mae", "min"),
+    ("T_mae", "min"),
+    ("p_mae", "min"),
+    ("entropy_r2", "max"),
+)
+
+
+def _format_latex_metric(value: float, *, bold: bool = False, digits: int = 3) -> str:
+    body = f"{value:.{digits}f}"
+    if bold:
+        return rf"$\mathbf{{{body}}}$"
+    return f"${body}$"
+
+
+def build_shadow_latex_rows(summary: Dict[str, Dict[str, float]]) -> List[str]:
+    best_by_metric: Dict[str, float] = {}
+    for metric_name, direction in LATEX_METRIC_ORDER:
+        values = [float(summary[name][metric_name]) for name in MODEL_LABELS if name in summary]
+        best_by_metric[metric_name] = min(values) if direction == "min" else max(values)
+
+    rows: List[str] = []
+    for name, label in MODEL_LABELS.items():
+        metrics = summary[name]
+        formatted_metrics = []
+        for metric_name, direction in LATEX_METRIC_ORDER:
+            value = float(metrics[metric_name])
+            best_value = best_by_metric[metric_name]
+            is_best = bool(np.isclose(value, best_value, rtol=0.0, atol=5e-7))
+            formatted_metrics.append(_format_latex_metric(value, bold=is_best))
+        rows.append(f"{label} & " + " & ".join(formatted_metrics) + r" \\")
+    return rows
+
+
 # -----------------------------------------------------------------------------
 # Distribution helpers
 # -----------------------------------------------------------------------------
@@ -1049,9 +1094,26 @@ def main() -> None:
         }
         for name, res in all_results.items()
     }
-    with open(os.path.join(args.out_dir, "metrics_summary.json"), "w") as f:
+    latex_rows = build_shadow_latex_rows(summary)
+    summary["latex_rows"] = {
+        "shadow_controller_table_rows": latex_rows,
+    }
+
+    summary_path = os.path.join(args.out_dir, "metrics_summary.json")
+    with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
-    logger.info("Saved metrics summary to %s", os.path.join(args.out_dir, "metrics_summary.json"))
+    logger.info("Saved metrics summary to %s", summary_path)
+
+    latex_rows_path = os.path.join(args.out_dir, "shadow_controller_table_rows.tex")
+    with open(latex_rows_path, "w") as f:
+        f.write(
+            "% Ready-to-copy rows for colm2026_v5.tex.\n"
+            "% Best value in each metric column is bolded automatically.\n"
+            "% Columns: JS, Ent. MAE, Nuc. MAE, Top1 MAE, T-MAE, p-MAE, Post-Entropy R^2.\n"
+        )
+        f.write("\n".join(latex_rows))
+        f.write("\n")
+    logger.info("Saved LaTeX rows to %s", latex_rows_path)
 
 
 if __name__ == "__main__":
