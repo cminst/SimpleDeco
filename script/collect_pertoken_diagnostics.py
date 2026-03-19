@@ -26,6 +26,15 @@ import torch
 from datasets import Dataset, DatasetDict, Features, Sequence, Value, concatenate_datasets, load_dataset
 from transformers import AutoTokenizer
 
+try:
+    from rich import print as rich_print
+    from rich.markup import escape as rich_escape
+    _RICH_AVAILABLE = True
+except Exception:
+    rich_print = None
+    rich_escape = None
+    _RICH_AVAILABLE = False
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -329,6 +338,33 @@ def _compute_token_indicators(input_ids: List[int], tokenizer: AutoTokenizer) ->
     return indicators
 
 
+def _console_print(message: str) -> None:
+    if _RICH_AVAILABLE and rich_print is not None:
+        rich_print(message)
+        return
+    print(message)
+
+
+def _render_tokenized_row(
+    input_ids: List[int],
+    tokenizer: AutoTokenizer,
+    label_mask: List[int] | None = None,
+) -> str:
+    pieces: List[str] = []
+    for idx, token_id in enumerate(input_ids):
+        token_text = tokenizer.decode([int(token_id)], skip_special_tokens=False)
+        if _RICH_AVAILABLE and rich_escape is not None:
+            token_text = rich_escape(token_text)
+        if label_mask is not None and idx < len(label_mask) and int(label_mask[idx]) == 1:
+            if _RICH_AVAILABLE:
+                pieces.append(f"[bold]{token_text}[/bold]")
+            else:
+                pieces.append(token_text)
+        else:
+            pieces.append(token_text)
+    return "".join(pieces)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Collect per-token AutoDeco diagnostics and save a HuggingFace Dataset.",
@@ -591,6 +627,7 @@ def main() -> None:
     processed_examples = 0
     processed_tokens = 0
     seq_id_counter = 0
+    printed_tokenized_example = False
 
     batch: List[Dict[str, Any]] = []
 
@@ -839,6 +876,18 @@ def main() -> None:
             assistant_mask_missing_examples += 1
         if not input_ids or len(input_ids) < 2:
             continue
+        if not printed_tokenized_example:
+            if label_mask is not None:
+                if assistant_mask_used:
+                    _console_print("[!] Example row with assistant tokens in bold:")
+                elif args.completion_only:
+                    _console_print("[!] Example row with completion tokens in bold:")
+                else:
+                    _console_print("[!] Example tokenized row with scored tokens in bold:")
+            else:
+                _console_print("[!] Example tokenized row:")
+            _console_print(_render_tokenized_row(input_ids, tokenizer, label_mask))
+            printed_tokenized_example = True
 
         prompt_ids = input_ids[:prompt_len] if prompt_len > 0 else input_ids
         prompt_hash = hashlib.sha256(json.dumps(prompt_ids).encode("utf-8")).hexdigest()
