@@ -626,6 +626,10 @@ def main() -> None:
 
     processed_examples = 0
     processed_tokens = 0
+    running_temp_sum = 0.0
+    running_temp_count = 0
+    running_top_p_sum = 0.0
+    running_top_p_count = 0
     seq_id_counter = 0
     printed_tokenized_example = False
 
@@ -637,8 +641,13 @@ def main() -> None:
         token_datasets.append(Dataset.from_list(token_rows, features=token_features))
         token_rows.clear()
 
+    def _format_running_mean(total: float, count: int) -> str:
+        if count <= 0:
+            return "n/a"
+        return f"{total / count:.4f}"
+
     def process_batch(batch_items: List[Dict[str, Any]]) -> None:
-        nonlocal processed_tokens
+        nonlocal processed_tokens, running_temp_sum, running_temp_count, running_top_p_sum, running_top_p_count
 
         tensors = _pad_batch(batch_items, tokenizer.pad_token_id)
         input_ids_t = tensors["input_ids"]
@@ -735,13 +744,19 @@ def main() -> None:
 
         temp_list: List[float | None]
         if temp_valid is not None:
+            temp_finite = temp_valid[finite_mask]
             temp_list = temp_valid[finite_mask].detach().cpu().tolist()
+            running_temp_sum += float(temp_finite.sum().item())
+            running_temp_count += int(temp_finite.numel())
         else:
             temp_list = [None] * len(entropy_list)
 
         p_hat_list: List[float | None]
         if top_p_valid is not None:
+            top_p_finite = top_p_valid[finite_mask]
             p_hat_list = top_p_valid[finite_mask].detach().cpu().tolist()
+            running_top_p_sum += float(top_p_finite.sum().item())
+            running_top_p_count += int(top_p_finite.numel())
         else:
             p_hat_list = [None] * len(entropy_list)
 
@@ -928,7 +943,11 @@ def main() -> None:
         if args.max_tokens is not None and processed_tokens >= args.max_tokens:
             break
         if args.log_every > 0 and processed_examples % args.log_every == 0:
-            print(f"[{processed_examples}/{len(indices)}] tokens={processed_tokens}")
+            print(
+                f"[{processed_examples}/{len(indices)}] tokens={processed_tokens} "
+                f"mean_T_hat={_format_running_mean(running_temp_sum, running_temp_count)} "
+                f"mean_p_hat={_format_running_mean(running_top_p_sum, running_top_p_count)}"
+            )
         if args.chunk_size > 0 and len(token_rows) >= args.chunk_size:
             flush_tokens()
 
