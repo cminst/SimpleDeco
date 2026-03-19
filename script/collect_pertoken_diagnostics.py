@@ -209,15 +209,37 @@ def _tokenize_row(
     user_suffix: str | None,
     assistant_only: bool,
     completion_only: bool,
-) -> Tuple[List[int], List[int] | None, bool, int, int]:
+    max_seq_len: int | None,
+) -> Tuple[List[int], List[int] | None, bool, int, int, bool]:
+    def finalize(
+        input_ids: List[int],
+        label_mask: List[int] | None,
+        assistant_mask_used: bool,
+        prompt_len: int,
+        completion_len: int,
+    ) -> Tuple[List[int], List[int] | None, bool, int, int, bool]:
+        if max_seq_len is None or max_seq_len <= 0 or len(input_ids) <= max_seq_len:
+            return input_ids, label_mask, assistant_mask_used, prompt_len, completion_len, False
+
+        input_ids = input_ids[-max_seq_len:]
+        if label_mask is not None:
+            label_mask = label_mask[-max_seq_len:]
+            completion_len = int(sum(label_mask))
+            prompt_len = len(label_mask) - completion_len
+        else:
+            completion_len = min(completion_len, max_seq_len)
+            prompt_len = max(len(input_ids) - completion_len, 0)
+        return input_ids, label_mask, assistant_mask_used, prompt_len, completion_len, True
+
     if row.get("prompt") is not None and row.get("completion") is not None:
-        return _tokenize_prompt_completion(
+        input_ids, label_mask, assistant_mask_used, prompt_len, completion_len = _tokenize_prompt_completion(
             row,
             tokenizer,
             assistant_only=assistant_only,
             completion_only=completion_only,
             enable_thinking=enable_thinking,
         )
+        return finalize(input_ids, label_mask, assistant_mask_used, prompt_len, completion_len)
 
     conversation = None
     for key in (text_field, "messages", "conversations"):
@@ -249,8 +271,8 @@ def _tokenize_row(
                 label_mask = [int(x) for x in assistant_masks]
                 prompt_len = len(label_mask) - sum(label_mask)
                 completion_len = sum(label_mask)
-                return input_ids, label_mask, True, prompt_len, completion_len
-        return input_ids, None, False, len(input_ids), 0
+                return finalize(input_ids, label_mask, True, prompt_len, completion_len)
+        return finalize(input_ids, None, False, len(input_ids), 0)
 
     value = row.get(text_field)
     if value is None:
@@ -260,7 +282,7 @@ def _tokenize_row(
     if user_suffix:
         value = f"{value}{user_suffix}"
     input_ids = tokenizer(text=value)["input_ids"]
-    return input_ids, None, False, len(input_ids), 0
+    return finalize(input_ids, None, False, len(input_ids), 0)
 
 
 def _pad_batch(
@@ -412,6 +434,12 @@ def main() -> None:
         type=int,
         default=4,
         help="Number of examples processed together per forward pass.",
+    )
+    parser.add_argument(
+        "--max_seq_len",
+        type=int,
+        default=16384,
+        help="Truncate tokenized rows to at most this many tokens; use <=0 to disable.",
     )
     parser.add_argument(
         "--seed",
@@ -623,6 +651,7 @@ def main() -> None:
 
     assistant_mask_used_examples = 0
     assistant_mask_missing_examples = 0
+    truncated_examples = 0
 
     processed_examples = 0
     processed_tokens = 0
@@ -874,7 +903,7 @@ def main() -> None:
 
     for idx in indices:
         row = dataset_split[int(idx)]
-        input_ids, label_mask, assistant_mask_used, prompt_len, completion_len = _tokenize_row(
+        input_ids, label_mask, assistant_mask_used, prompt_len, completion_len, was_truncated = _tokenize_row(
             row=row,
             text_field=text_field,
             tokenizer=tokenizer,
@@ -884,7 +913,10 @@ def main() -> None:
             user_suffix=args.user_suffix,
             assistant_only=args.assistant_only,
             completion_only=args.completion_only,
+            max_seq_len=args.max_seq_len if args.max_seq_len > 0 else None,
         )
+        if was_truncated:
+            truncated_examples += 1
         if assistant_mask_used:
             assistant_mask_used_examples += 1
         if args.assistant_only and not assistant_mask_used:
@@ -999,6 +1031,10 @@ def main() -> None:
             f"[!] assistant_only requested, but assistant masks were missing for "
             f"{assistant_mask_missing_examples} example(s). Falling back to unmasked tokens."
         )
+    if args.max_seq_len > 0 and truncated_examples > 0:
+        print(
+            f"[!] Truncated {truncated_examples} example(s) to max_seq_len={args.max_seq_len}."
+        )
 
     metadata = {
         "dataset": args.dataset_name,
@@ -1006,6 +1042,8 @@ def main() -> None:
         "text_field": text_field,
         "examples_processed": int(processed_examples),
         "tokens_processed": int(processed_tokens),
+        "max_seq_len": int(args.max_seq_len),
+        "truncated_examples": int(truncated_examples),
         "collect_temp_head": bool(collect_temp),
         "collect_top_p_head": bool(collect_top_p),
         "topk_mass": mass_k_list,
