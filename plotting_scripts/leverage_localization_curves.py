@@ -222,7 +222,7 @@ def _plot_binned_figure(
     fig, (ax_top, ax_bottom) = plt.subplots(
         2,
         1,
-        figsize=(5.5, 2.25),
+        figsize=(5.5, 4.5),
         sharex=True,
         gridspec_kw={"height_ratios": [0.85, 1.9]},
         constrained_layout=False,
