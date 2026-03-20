@@ -140,7 +140,7 @@ def runwithgpu(model_name: str):
         autodeco_volume.commit()
     else:
         subprocess.run(
-            ["git", "pull"],
+            ["git", "pull", "--recurse-submodules"],
             check=True,
             cwd=repo,
         )

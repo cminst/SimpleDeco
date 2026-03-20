@@ -8,7 +8,7 @@ import shutil
 import sys
 import time
 
-from queue_backend import collect_status
+from queue_backend import collect_status, requeue_failed_jobs
 
 
 def elide_middle(text: str, max_len: int) -> str:
@@ -128,13 +128,18 @@ def watch_curses(args: argparse.Namespace) -> None:
             has_colors = True
             curses.init_pair(3, curses.COLOR_GREEN, -1)
             curses.init_pair(5, curses.COLOR_RED, -1)
+        status_message = ""
+        status_message_until = 0.0
 
         while True:
             status = collect_status(args.file, stale_after=args.stale_after, head=args.head)
             height, width = stdscr.getmaxyx()
             now_str = time.strftime("%Y-%m-%d %H:%M:%S")
             rows = build_display_rows(status, args.head, width, now_str)
-            hint = "Press q to quit"
+            if time.time() < status_message_until and status_message:
+                hint = status_message
+            else:
+                hint = "Press r to requeue failed jobs, q to quit"
             if height > 0:
                 rows = rows[: max(0, height - 1)]
                 if len(rows) < height:
@@ -162,6 +167,20 @@ def watch_curses(args: argparse.Namespace) -> None:
                 key = stdscr.getch()
                 if key in (ord("q"), ord("Q")):
                     return
+                if key in (ord("r"), ord("R")):
+                    try:
+                        requeued = requeue_failed_jobs(args.file)
+                        count = len(requeued)
+                        if count == 0:
+                            status_message = "No failed jobs to requeue"
+                        elif count == 1:
+                            status_message = "Requeued 1 failed job"
+                        else:
+                            status_message = f"Requeued {count} failed jobs"
+                    except Exception as exc:
+                        status_message = f"Requeue failed: {exc}"
+                    status_message_until = time.time() + max(2.0, min(args.interval, 5.0))
+                    break
                 time.sleep(0.1)
 
     curses.wrapper(_run)

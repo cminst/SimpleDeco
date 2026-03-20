@@ -492,6 +492,46 @@ def reap_stale_jobs(
     return requeued
 
 
+def requeue_failed_jobs(
+    queue_file: str,
+    prepend: bool = False,
+    reset_retries: bool = True,
+    queue_dir: str | None = None,
+) -> list[dict[str, Any]]:
+    paths = QueuePaths.from_queue_file(queue_file, queue_dir=queue_dir)
+    requeued: list[dict[str, Any]] = []
+    with queue_lock(paths):
+        failed_paths = sorted(
+            (path for path in paths.failed_dir.iterdir() if path.suffix == ".json"),
+            key=lambda path: (
+                float(_load_json(path).get("failed_at", 0.0)),
+                path.name,
+            ),
+        )
+        now = time.time()
+        for failed_path in failed_paths:
+            record = _load_json(failed_path)
+            meta = _load_meta(paths)
+            order = _next_order(meta, prepend=prepend)
+            _save_meta(paths, meta)
+            pending_path = paths.pending_dir / _pending_name(order, str(record["job_id"]))
+            os.replace(failed_path, pending_path)
+            _fsync_dir(paths.failed_dir)
+            _fsync_dir(paths.pending_dir)
+            record["status"] = "pending"
+            record["order"] = order
+            record["updated_at"] = now
+            record["last_failed_at"] = float(record.get("failed_at", record.get("last_failed_at", now)))
+            record["last_requeued_at"] = now
+            record["manual_requeues"] = int(record.get("manual_requeues", 0)) + 1
+            record.pop("failed_at", None)
+            if reset_retries:
+                record["retries"] = 0
+            _write_json(pending_path, record)
+            requeued.append(record)
+    return requeued
+
+
 def _job_summary(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "job_id": record.get("job_id", ""),
@@ -624,6 +664,11 @@ def main() -> None:
     reap_parser.add_argument("--prepend", action="store_true")
     reap_parser.add_argument("--json", action="store_true")
 
+    requeue_failed_parser = subparsers.add_parser("requeue-failed", help="Return failed jobs to pending.")
+    requeue_failed_parser.add_argument("--prepend", action="store_true")
+    requeue_failed_parser.add_argument("--no-reset-retries", action="store_true")
+    requeue_failed_parser.add_argument("--json", action="store_true")
+
     status_parser = subparsers.add_parser("status", help="Show queue counts.")
     status_parser.add_argument("--stale-after", type=int, default=0)
     status_parser.add_argument("--head", type=int, default=5)
@@ -709,6 +754,19 @@ def main() -> None:
             args.queue_file,
             stale_after=args.stale_after,
             prepend=args.prepend,
+            queue_dir=args.queue_dir,
+        )
+        if args.json:
+            _print_json(requeued)
+        else:
+            sys.stdout.write(f"{len(requeued)}\n")
+        return
+
+    if args.command == "requeue-failed":
+        requeued = requeue_failed_jobs(
+            args.queue_file,
+            prepend=args.prepend,
+            reset_retries=not args.no_reset_retries,
             queue_dir=args.queue_dir,
         )
         if args.json:
