@@ -265,13 +265,13 @@ def _draw_line_end_labels_for_figure(ax: Any, entries: list[dict[str, Any]], pe:
             entry["label"],
             ha="left",
             va="center",
-            fontsize=14.8,
+            fontsize=8.9,
             color=entry["text_color"],
             alpha=entry["alpha"],
             weight=entry["weight"],
             zorder=entry["zorder"] + 0.1,
         )
-        text.set_path_effects([pe.withStroke(linewidth=3.2, foreground="white", alpha=0.92)])
+        text.set_path_effects([pe.withStroke(linewidth=2.2, foreground="white", alpha=0.92)])
         texts.append(text)
 
     fig = ax.figure
@@ -306,10 +306,10 @@ def _plot_aime24_curves(
             "text.latex.preamble": r"\usepackage{amsmath}\usepackage{mathpazo}",
             "font.family": "serif",
             "font.serif": ["Palatino", "Times New Roman", "Times"],
-            "font.size": 15.6,
-            "axes.labelsize": 16.4,
-            "xtick.labelsize": 14.4,
-            "ytick.labelsize": 14.4,
+            "font.size": 9.4,
+            "axes.labelsize": 9.8,
+            "xtick.labelsize": 8.6,
+            "ytick.labelsize": 8.6,
             "axes.unicode_minus": False,
             "axes.titleweight": "bold",
             "figure.facecolor": "#FFFFFF",
@@ -335,8 +335,8 @@ def _plot_aime24_curves(
     label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
     palette = ct._paper_palette(len(labels))
 
-    fig, axes = plt.subplots(1, 2, figsize=(12.8, 4.15), constrained_layout=True)
-    for ax, (mode, ylabel) in zip(axes, [("maj", "maj@k (\%)"), ("pass", "pass@k (\%)")]):
+    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.05), constrained_layout=True)
+    for ax, (mode, ylabel) in zip(axes, [("maj", r"maj@k (\%)"), ("pass", r"pass@k (\%)")]):
         ct._apply_paper_axes_style(ax)
         series_groups = prepared_plot_data.get(mode, [])
         label_entries: list[dict[str, Any]] = []
