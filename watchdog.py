@@ -29,7 +29,7 @@ def run_upload(directory_to_watch: str, repo_id: str, includes: list[str] | None
 
 
 def run_download(repo_id: str, dest_dir: str):
-    cmd = ["hf", "download", repo_id, "--repo-type", "dataset", "--local-dir", dest_dir, "*.jsonl"]
+    cmd = ["hf", "download", repo_id, "--repo-type", "dataset", "--local-dir", dest_dir, "--include", "\"*.jsonl\""]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
