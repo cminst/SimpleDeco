@@ -218,7 +218,7 @@ def _method_style(label: str, fallback_color: str) -> dict[str, Any]:
         "color": color,
         "text_color": color,
         "alpha": 0.97,
-        "linewidth": 2.2,
+        "linewidth": 2.0,
         "linestyle": "-",
         "marker": None,
         "markersize": 0.0,
@@ -273,6 +273,13 @@ def _plot_aime24_curves(
     left_pad = min(0.4, max(0.18, (x_span if x_span > 0 else 1.0) * 0.05))
     right_pad = min(0.4, max(0.18, (x_span if x_span > 0 else 1.0) * 0.05))
     palette = ct._paper_palette(len(labels))
+    maj_ticks = sorted(
+        {
+            k
+            for series in prepared_plot_data.get("maj", [])
+            for k, _, _ in series
+        }
+    )
 
     fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.45), constrained_layout=False)
     fig.subplots_adjust(left=0.1, right=0.992, bottom=0.23, top=0.8, wspace=0.22)
@@ -309,10 +316,10 @@ def _plot_aime24_curves(
             raise RuntimeError(f"No plot data available for {mode}@k.")
 
         ax.set_ylabel(ylabel)
-        ax.grid(True, color="#D7DCE3", linewidth=0.75, alpha=0.55)
+        ax.grid(False)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
         ax.set_xlim(max(0.0, x_min - left_pad), x_max + right_pad)
-        ax.set_xticks(sorted(mode_ks))
+        ax.set_xticks(maj_ticks if mode == "pass" and maj_ticks else sorted(mode_ks))
 
     for ax in axes:
         ax.set_xlabel("sample budget $k$")
