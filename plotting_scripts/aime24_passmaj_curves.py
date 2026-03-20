@@ -227,66 +227,6 @@ def _method_style(label: str, fallback_color: str) -> dict[str, Any]:
     }
 
 
-def _draw_line_end_labels_for_figure(ax: Any, entries: list[dict[str, Any]], pe: Any) -> None:
-    if not entries:
-        return
-
-    x_values = [entry["x"] for entry in entries]
-    x_min = min(x_values)
-    x_max = max(x_values)
-    span = x_max - x_min
-    pad = max(0.5, (span if span > 0 else 1.0) * 0.1)
-    label_x = x_max + pad * 0.3
-    connector_x = label_x - pad * 0.1
-
-    current_left, current_right = ax.get_xlim()
-    left_limit = min(current_left, x_min)
-    ax.set_xlim(left_limit, max(current_right, x_max + pad * 1.02))
-
-    y_positions = ct._resolve_label_positions(
-        [(idx, entry["y"]) for idx, entry in enumerate(entries)],
-        *ax.get_ylim(),
-    )
-    texts: list[Any] = []
-    for idx, entry in enumerate(entries):
-        label_y = y_positions[idx]
-        ax.plot(
-            [entry["x"], connector_x],
-            [entry["y"], label_y],
-            color=entry["color"],
-            alpha=min(0.7, entry["alpha"] * 0.7),
-            linewidth=0.8,
-            zorder=entry["zorder"],
-            solid_capstyle="round",
-        )
-        text = ax.text(
-            label_x,
-            label_y,
-            entry["label"],
-            ha="left",
-            va="center",
-            fontsize=8.9,
-            color=entry["text_color"],
-            alpha=entry["alpha"],
-            weight=entry["weight"],
-            zorder=entry["zorder"] + 0.1,
-        )
-        text.set_path_effects([pe.withStroke(linewidth=2.2, foreground="white", alpha=0.92)])
-        texts.append(text)
-
-    fig = ax.figure
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    axes_bbox = ax.get_window_extent(renderer=renderer)
-    max_text_width = max(text.get_window_extent(renderer=renderer).width for text in texts)
-    target_right_padding_px = 8.0
-    denominator = axes_bbox.width - max_text_width - target_right_padding_px
-    if denominator > 1.0:
-        desired_right = left_limit + ((label_x - left_limit) * axes_bbox.width / denominator)
-        min_right = x_max + pad * 0.68
-        ax.set_xlim(left_limit, max(min_right, desired_right))
-
-
 def _plot_aime24_curves(
     output_path: Path,
     plot_data: dict[str, list[list[tuple[int, float, float | None]]]],
@@ -294,7 +234,6 @@ def _plot_aime24_curves(
     maj_avg: str,
 ) -> None:
     try:
-        import matplotlib.patheffects as pe
         import matplotlib.pyplot as plt
         from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
@@ -332,14 +271,15 @@ def _plot_aime24_curves(
     x_max = max(all_ks) if all_ks else 1
     x_span = x_max - x_min
     left_pad = min(0.4, max(0.18, (x_span if x_span > 0 else 1.0) * 0.05))
-    label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
+    right_pad = min(0.4, max(0.18, (x_span if x_span > 0 else 1.0) * 0.05))
     palette = ct._paper_palette(len(labels))
 
-    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.05), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.45), constrained_layout=False)
+    fig.subplots_adjust(left=0.1, right=0.992, bottom=0.23, top=0.8, wspace=0.22)
+    legend_handles: dict[str, Any] = {}
     for ax, (mode, ylabel) in zip(axes, [("maj", r"maj@k (\%)"), ("pass", r"pass@k (\%)")]):
         ct._apply_paper_axes_style(ax)
         series_groups = prepared_plot_data.get(mode, [])
-        label_entries: list[dict[str, Any]] = []
         mode_ks: set[int] = set()
 
         for idx, series in enumerate(series_groups):
@@ -349,7 +289,7 @@ def _plot_aime24_curves(
             vals = [value for _, value, _ in series]
             mode_ks.update(ks)
             style = _method_style(labels[idx], palette[idx % len(palette)])
-            ax.plot(
+            (line,) = ax.plot(
                 ks,
                 vals,
                 color=style["color"],
@@ -363,31 +303,38 @@ def _plot_aime24_curves(
                 markeredgecolor="#FFFFFF",
                 markerfacecolor=style["color"],
             )
-            label_entries.append(
-                {
-                    "label": labels[idx],
-                    "x": ks[-1],
-                    "y": vals[-1],
-                    "color": style["color"],
-                    "text_color": style["text_color"],
-                    "alpha": style["alpha"],
-                    "weight": "normal",
-                    "zorder": style["zorder"],
-                }
-            )
+            legend_handles.setdefault(labels[idx], line)
 
-        if not label_entries:
+        if not legend_handles:
             raise RuntimeError(f"No plot data available for {mode}@k.")
 
         ax.set_ylabel(ylabel)
         ax.grid(True, color="#D7DCE3", linewidth=0.75, alpha=0.55)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
-        ax.set_xlim(max(0.0, x_min - left_pad), x_max + label_pad * 1.6)
+        ax.set_xlim(max(0.0, x_min - left_pad), x_max + right_pad)
         ax.set_xticks(sorted(mode_ks))
-        _draw_line_end_labels_for_figure(ax, label_entries, pe)
 
     for ax in axes:
         ax.set_xlabel("sample budget $k$")
+
+    legend = fig.legend(
+        [legend_handles[label] for label in labels if label in legend_handles],
+        [label for label in labels if label in legend_handles],
+        loc="upper center",
+        ncol=min(4, len(legend_handles)),
+        bbox_to_anchor=(0.5, 0.985),
+        frameon=True,
+        fancybox=False,
+        framealpha=1.0,
+        edgecolor="#D7DCE3",
+        facecolor="#FFFFFF",
+        fontsize=8.7,
+        handlelength=2.2,
+        handletextpad=0.6,
+        borderpad=0.35,
+        columnspacing=1.2,
+    )
+    legend.get_frame().set_linewidth(0.8)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
