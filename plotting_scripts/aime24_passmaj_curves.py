@@ -281,8 +281,8 @@ def _plot_aime24_curves(
         }
     )
 
-    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.45), constrained_layout=False)
-    fig.subplots_adjust(left=0.1, right=0.992, bottom=0.23, top=0.8, wspace=0.22)
+    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.25), constrained_layout=False)
+    fig.subplots_adjust(left=0.1, right=0.992, bottom=0.22, top=0.81, wspace=0.22)
     legend_handles: dict[str, Any] = {}
     for ax, (mode, ylabel) in zip(axes, [("maj", r"maj@k (\%)"), ("pass", r"pass@k (\%)")]):
         ct._apply_paper_axes_style(ax)
@@ -320,7 +320,7 @@ def _plot_aime24_curves(
             raise RuntimeError(f"No plot data available for {mode}@k.")
 
         ax.set_ylabel(ylabel)
-        ax.grid(False)
+        ax.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
         mode_x_min = min(mode_ks) if mode_ks else x_min
         ax.set_xlim(max(0.0, mode_x_min - left_pad), x_max + right_pad)
