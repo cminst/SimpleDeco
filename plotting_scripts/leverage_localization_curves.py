@@ -1,4 +1,4 @@
-"""Generate the paper-style leverage localization curve figure."""
+"""Generate the paper-style leverage localization figure."""
 from __future__ import annotations
 
 import argparse
@@ -19,6 +19,7 @@ import compare_trajs as ct
 
 
 DEFAULT_OUTPUT = _REPO_ROOT / "figure" / "leverage_localization_curves.pdf"
+DEFAULT_MERGE_TAIL_FROM = 0.40
 
 
 def _require_mapping(payload: Any, desc: str) -> dict[str, Any]:
@@ -61,14 +62,41 @@ def _load_entropy_table(input_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _prepare_plot_payload(rows: list[dict[str, Any]]) -> dict[str, np.ndarray]:
-    lefts: list[float] = []
-    rights: list[float] = []
-    centers: list[float] = []
-    alignment: list[float] = []
-    penalty: list[float] = []
-    count_covered: list[float] = []
+def _weighted_mean(values: np.ndarray, weights: np.ndarray) -> float:
+    mask = np.isfinite(values) & np.isfinite(weights) & (weights > 0.0)
+    if not np.any(mask):
+        return float("nan")
+    return float(np.sum(values[mask] * weights[mask]) / np.sum(weights[mask]))
 
+
+def _format_edge(value: float) -> str:
+    rounded = round(float(value) + 1e-9, 2)
+    if abs(rounded) < 1e-9:
+        return "0"
+    if abs(rounded - 1.0) < 1e-9:
+        return "1"
+    text = f"{rounded:.2f}"
+    if 0.0 < rounded < 1.0 and text.startswith("0"):
+        return text[1:]
+    if -1.0 < rounded < 0.0 and text.startswith("-0"):
+        return f"-{text[2:]}"
+    return text
+
+
+def _interval_label(left: float, right: float) -> str:
+    close = "]" if abs(right - 1.0) < 1e-9 else ")"
+    return rf"$[{_format_edge(left)},{_format_edge(right)}{close}$"
+
+
+def _tail_label(left: float) -> str:
+    return rf"$\geq {_format_edge(left)}$"
+
+
+def _prepare_plot_payload(
+    rows: list[dict[str, Any]],
+    merge_tail_from: float | None,
+) -> dict[str, np.ndarray | list[str]]:
+    parsed_rows: list[dict[str, float]] = []
     for row_idx, raw_row in enumerate(rows):
         row = _require_mapping(raw_row, f"entropy_table[{row_idx}]")
         left = _require_number(row, "bin_left", row_idx)
@@ -77,44 +105,86 @@ def _prepare_plot_payload(rows: list[dict[str, Any]]) -> dict[str, np.ndarray]:
             raise ValueError(
                 f"Row {row_idx} has invalid entropy bin bounds: bin_right <= bin_left."
             )
-        covered = _require_number(row, "count_covered", row_idx)
-        lefts.append(left)
-        rights.append(right)
-        centers.append((left + right) / 2.0)
-        alignment.append(_optional_number(row, "mean_alignment", row_idx))
-        penalty.append(_optional_number(row, "mean_penalty", row_idx))
-        count_covered.append(covered)
+        parsed_rows.append(
+            {
+                "left": left,
+                "right": right,
+                "count_covered": _require_number(row, "count_covered", row_idx),
+                "alignment": _optional_number(row, "mean_alignment", row_idx),
+                "penalty": _optional_number(row, "mean_penalty", row_idx),
+            }
+        )
 
-    left_arr = np.asarray(lefts, dtype=np.float64)
-    right_arr = np.asarray(rights, dtype=np.float64)
+    left_arr = np.asarray([row["left"] for row in parsed_rows], dtype=np.float64)
+    right_arr = np.asarray([row["right"] for row in parsed_rows], dtype=np.float64)
     if np.any(left_arr[1:] < left_arr[:-1]) or np.any(right_arr[1:] < right_arr[:-1]):
         raise ValueError("Entropy bins must appear in nondecreasing order.")
 
-    alignment_arr = np.asarray(alignment, dtype=np.float64)
-    penalty_arr = np.asarray(penalty, dtype=np.float64)
-    finite_any = np.isfinite(alignment_arr) | np.isfinite(penalty_arr)
+    merged_rows: list[dict[str, float | str]] = []
+    tail_rows: list[dict[str, float]] = []
+    for row in parsed_rows:
+        if merge_tail_from is not None and row["left"] >= merge_tail_from:
+            tail_rows.append(row)
+            continue
+        merged_rows.append({**row, "label": _interval_label(row["left"], row["right"])})
+
+    if tail_rows:
+        weights = np.asarray([row["count_covered"] for row in tail_rows], dtype=np.float64)
+        merged_rows.append(
+            {
+                "left": float(tail_rows[0]["left"]),
+                "right": float(tail_rows[-1]["right"]),
+                "count_covered": float(np.sum(weights)),
+                "alignment": _weighted_mean(
+                    np.asarray([row["alignment"] for row in tail_rows], dtype=np.float64),
+                    weights,
+                ),
+                "penalty": _weighted_mean(
+                    np.asarray([row["penalty"] for row in tail_rows], dtype=np.float64),
+                    weights,
+                ),
+                "label": _tail_label(float(tail_rows[0]["left"])),
+            }
+        )
+
+    if not merged_rows:
+        raise ValueError("No entropy bins remain after preprocessing.")
+
+    counts = np.asarray([float(row["count_covered"]) for row in merged_rows], dtype=np.float64)
+    total_covered = float(np.sum(counts))
+    if total_covered <= 0.0:
+        raise ValueError("Covered-token total is zero; cannot render the share panel.")
+
+    alignment = np.asarray([float(row["alignment"]) for row in merged_rows], dtype=np.float64)
+    penalty = np.asarray([float(row["penalty"]) for row in merged_rows], dtype=np.float64)
+    finite_any = np.isfinite(alignment) | np.isfinite(penalty)
     if not np.any(finite_any):
         raise ValueError("No finite mean_alignment or mean_penalty values were found.")
 
-    covered_arr = np.asarray(count_covered, dtype=np.float64)
-    total_covered = float(np.sum(covered_arr))
-    if total_covered <= 0.0:
-        raise ValueError("Covered-token total is zero; cannot render the support strip.")
-
     return {
-        "lefts": left_arr,
-        "rights": right_arr,
-        "centers": np.asarray(centers, dtype=np.float64),
-        "alignment": alignment_arr,
-        "penalty": penalty_arr,
-        "covered_share": covered_arr / total_covered,
+        "labels": [str(row["label"]) for row in merged_rows],
+        "alignment": alignment,
+        "penalty": penalty,
+        "covered_share_pct": 100.0 * counts / total_covered,
+        "net": alignment - penalty,
     }
 
 
-def _plot_curves(output_path: Path, plot_payload: dict[str, np.ndarray]) -> None:
+def _style_axes(ax: Any) -> None:
+    ct._apply_paper_axes_style(ax)
+    for spine_name in ("top", "right", "left", "bottom"):
+        ax.spines[spine_name].set_visible(True)
+        ax.spines[spine_name].set_color("#98A2B3")
+        ax.spines[spine_name].set_linewidth(0.9)
+
+
+def _plot_binned_figure(
+    output_path: Path,
+    plot_payload: dict[str, np.ndarray | list[str]],
+    show_net_marker: bool,
+) -> None:
     try:
         import matplotlib.pyplot as plt
-        from matplotlib.patches import Rectangle
         from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
         raise RuntimeError("matplotlib is required to generate this figure.") from exc
@@ -126,9 +196,9 @@ def _plot_curves(output_path: Path, plot_payload: dict[str, np.ndarray]) -> None
             "font.family": "serif",
             "font.serif": ["Palatino", "Times New Roman", "Times"],
             "font.size": 9.4,
-            "axes.labelsize": 9.8,
-            "xtick.labelsize": 8.6,
-            "ytick.labelsize": 8.6,
+            "axes.labelsize": 9.6,
+            "xtick.labelsize": 8.2,
+            "ytick.labelsize": 8.4,
             "axes.unicode_minus": False,
             "axes.titleweight": "bold",
             "figure.facecolor": "#FFFFFF",
@@ -136,139 +206,130 @@ def _plot_curves(output_path: Path, plot_payload: dict[str, np.ndarray]) -> None
         }
     )
 
-    x = plot_payload["centers"]
-    lefts = plot_payload["lefts"]
-    rights = plot_payload["rights"]
-    alignment = plot_payload["alignment"]
-    penalty = plot_payload["penalty"]
-    covered_share = plot_payload["covered_share"]
+    labels = list(plot_payload["labels"])
+    alignment = np.asarray(plot_payload["alignment"], dtype=np.float64)
+    penalty = np.asarray(plot_payload["penalty"], dtype=np.float64)
+    share_pct = np.asarray(plot_payload["covered_share_pct"], dtype=np.float64)
+    net = np.asarray(plot_payload["net"], dtype=np.float64)
 
-    finite_values = np.concatenate(
-        [alignment[np.isfinite(alignment)], penalty[np.isfinite(penalty)]]
-    )
-    curve_max = float(np.max(finite_values)) if finite_values.size else 1.0
-    curve_max = max(curve_max, 1e-6)
-    strip_height = curve_max * 0.09
-    y_top = curve_max * 1.12
-    y_bottom = -strip_height * 1.32
-    strip_base = -strip_height
-    share_max = float(np.max(covered_share))
-
-    fig, ax = plt.subplots(1, 1, figsize=(5.5, 2.25), constrained_layout=False)
-    fig.subplots_adjust(left=0.11, right=0.992, bottom=0.29, top=0.82)
-
-    ct._apply_paper_axes_style(ax)
-    for spine_name in ("top", "right", "left", "bottom"):
-        ax.spines[spine_name].set_visible(True)
-        ax.spines[spine_name].set_color("#98A2B3")
-        ax.spines[spine_name].set_linewidth(0.9)
-
-    ax.axhline(0.0, color="#B8C1CC", linewidth=0.8, zorder=1)
-
-    for left, right, share in zip(lefts, rights, covered_share):
-        alpha = 0.18 if share_max <= 0.0 else 0.18 + 0.42 * (share / share_max)
-        rect = Rectangle(
-            (left, strip_base),
-            right - left,
-            strip_height,
-            facecolor="#B8C0CA",
-            edgecolor="#FFFFFF",
-            linewidth=0.5,
-            alpha=alpha,
-            zorder=0,
-        )
-        ax.add_patch(rect)
-
-    valid_alignment = np.isfinite(alignment)
-    valid_penalty = np.isfinite(penalty)
+    x = np.arange(len(labels), dtype=np.float64)
+    bar_width = 0.34
     blue = "#4E79A7"
     red = "#E15759"
+    gray = "#B9C1CB"
+    black = "#1F2937"
 
-    ax.fill_between(
+    fig, (ax_top, ax_bottom) = plt.subplots(
+        2,
+        1,
+        figsize=(5.5, 2.25),
+        sharex=True,
+        gridspec_kw={"height_ratios": [0.85, 1.9]},
+        constrained_layout=False,
+    )
+    fig.subplots_adjust(left=0.11, right=0.992, bottom=0.25, top=0.81, hspace=0.06)
+
+    _style_axes(ax_top)
+    _style_axes(ax_bottom)
+
+    share_bars = ax_top.bar(
         x,
-        0.0,
+        share_pct,
+        width=0.72,
+        color=gray,
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
+        alpha=0.88,
+        zorder=3,
+    )
+    ax_top.set_ylabel(r"share (\%)")
+    ax_top.grid(axis="y", color="#E7ECF2", linewidth=0.5, alpha=0.9)
+    ax_top.yaxis.set_major_locator(MaxNLocator(nbins=4))
+    ax_top.set_ylim(0.0, max(float(np.max(share_pct)) * 1.18, 1.0))
+    ax_top.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+
+    align_bars = ax_bottom.bar(
+        x - bar_width / 2.0,
         alignment,
-        where=valid_alignment,
-        interpolate=True,
+        width=bar_width,
         color=blue,
-        alpha=0.18,
-        zorder=2,
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
+        alpha=0.95,
+        zorder=3,
+        label="Alignment gain",
     )
-    ax.fill_between(
-        x,
-        0.0,
+    penalty_bars = ax_bottom.bar(
+        x + bar_width / 2.0,
         penalty,
-        where=valid_penalty,
-        interpolate=True,
+        width=bar_width,
         color=red,
-        alpha=0.16,
-        zorder=2,
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
+        alpha=0.95,
+        zorder=3,
+        label="Curvature penalty",
     )
-    (align_line,) = ax.plot(
-        x,
-        alignment,
-        color=blue,
-        linewidth=2.0,
-        alpha=0.98,
-        zorder=4,
-        marker="o",
-        markersize=3.2,
-        markerfacecolor=blue,
-        markeredgecolor="#FFFFFF",
-        markeredgewidth=0.6,
+    net_handle = None
+    if show_net_marker:
+        (net_handle,) = ax_bottom.plot(
+            x,
+            net,
+            linestyle="None",
+            marker="o",
+            markersize=3.6,
+            color=black,
+            markeredgecolor="#FFFFFF",
+            markeredgewidth=0.5,
+            zorder=4,
+            label="Net gain",
+        )
+
+    ax_bottom.axhline(0.0, color="#AAB4C0", linewidth=0.85, zorder=1)
+    ax_bottom.set_ylabel("mean term")
+    ax_bottom.set_xlabel("normalized entropy bin")
+    ax_bottom.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
+    ax_bottom.yaxis.set_major_locator(MaxNLocator(nbins=5))
+
+    finite_values = np.concatenate(
+        [
+            alignment[np.isfinite(alignment)],
+            penalty[np.isfinite(penalty)],
+            net[np.isfinite(net)] if show_net_marker else np.asarray([], dtype=np.float64),
+        ]
     )
-    (penalty_line,) = ax.plot(
-        x,
-        penalty,
-        color=red,
-        linewidth=1.95,
-        alpha=0.98,
-        zorder=4,
-        marker="o",
-        markersize=3.2,
-        markerfacecolor=red,
-        markeredgecolor="#FFFFFF",
-        markeredgewidth=0.6,
-    )
+    y_min = min(0.0, float(np.min(finite_values)) if finite_values.size else 0.0)
+    y_max = max(0.0, float(np.max(finite_values)) if finite_values.size else 1.0)
+    span = max(y_max - y_min, 1e-6)
+    bottom_pad = 0.12 * span if y_min < 0.0 else 0.06 * span
+    top_pad = 0.10 * span
+    ax_bottom.set_ylim(y_min - bottom_pad, y_max + top_pad)
 
-    ax.set_xlim(float(np.min(lefts)), float(np.max(rights)))
-    ax.set_ylim(y_bottom, y_top)
-    ax.set_xlabel("normalized entropy")
-    ax.set_ylabel("mean gain / penalty")
-    ax.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
+    rotation = 12 if len(labels) > 5 else 0
+    ax_bottom.set_xticks(x)
+    ax_bottom.set_xticklabels(labels, rotation=rotation, ha="right" if rotation else "center")
 
-    unique_edges = sorted({float(value) for value in np.concatenate([lefts, rights])})
-    if len(unique_edges) <= 9:
-        ax.set_xticks(unique_edges)
-
-    ax.text(
-        0.0,
-        -0.22,
-        "gray strip: covered share",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=7.6,
-        color="#7A8797",
-    )
-
+    legend_handles = [align_bars, penalty_bars]
+    legend_labels = ["Alignment gain", "Curvature penalty"]
+    if net_handle is not None:
+        legend_handles.append(net_handle)
+        legend_labels.append("Net gain")
     legend = fig.legend(
-        [align_line, penalty_line],
-        ["Alignment gain", "Curvature penalty"],
+        legend_handles,
+        legend_labels,
         loc="upper center",
-        ncol=2,
-        bbox_to_anchor=(0.5, 0.985),
+        ncol=len(legend_handles),
+        bbox_to_anchor=(0.5, 0.988),
         frameon=True,
         fancybox=False,
         framealpha=1.0,
         edgecolor="#D7DCE3",
         facecolor="#FFFFFF",
-        fontsize=8.7,
-        handlelength=2.2,
-        handletextpad=0.6,
+        fontsize=8.5,
+        handlelength=1.9,
+        handletextpad=0.55,
         borderpad=0.35,
-        columnspacing=1.2,
+        columnspacing=1.15,
     )
     legend.get_frame().set_linewidth(0.8)
 
@@ -291,6 +352,25 @@ def main() -> None:
         default=str(DEFAULT_OUTPUT),
         help=f"Output PDF/PNG path (default: {DEFAULT_OUTPUT}).",
     )
+    parser.add_argument(
+        "--merge-tail-from",
+        type=float,
+        default=DEFAULT_MERGE_TAIL_FROM,
+        help=(
+            "Merge all bins with bin_left >= this threshold into one tail bin "
+            f"(default: {DEFAULT_MERGE_TAIL_FROM:.2f})."
+        ),
+    )
+    parser.add_argument(
+        "--no-merge-tail",
+        action="store_true",
+        help="Disable tail-bin merging and plot all bins separately.",
+    )
+    parser.add_argument(
+        "--hide-net-marker",
+        action="store_true",
+        help="Hide the net-gain marker from the lower panel.",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -303,9 +383,14 @@ def main() -> None:
     if not output_path.is_absolute():
         output_path = _REPO_ROOT / output_path
 
+    merge_tail_from = None if args.no_merge_tail else float(args.merge_tail_from)
     rows = _load_entropy_table(input_path)
-    plot_payload = _prepare_plot_payload(rows)
-    _plot_curves(output_path, plot_payload)
+    plot_payload = _prepare_plot_payload(rows, merge_tail_from=merge_tail_from)
+    _plot_binned_figure(
+        output_path,
+        plot_payload=plot_payload,
+        show_net_marker=not args.hide_net_marker,
+    )
     print(f"Wrote {output_path}")
 
 
