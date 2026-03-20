@@ -227,6 +227,66 @@ def _method_style(label: str, fallback_color: str) -> dict[str, Any]:
     }
 
 
+def _draw_line_end_labels_for_figure(ax: Any, entries: list[dict[str, Any]], pe: Any) -> None:
+    if not entries:
+        return
+
+    x_values = [entry["x"] for entry in entries]
+    x_min = min(x_values)
+    x_max = max(x_values)
+    span = x_max - x_min
+    pad = max(0.5, (span if span > 0 else 1.0) * 0.1)
+    label_x = x_max + pad * 0.3
+    connector_x = label_x - pad * 0.1
+
+    current_left, current_right = ax.get_xlim()
+    left_limit = min(current_left, x_min)
+    ax.set_xlim(left_limit, max(current_right, x_max + pad * 1.02))
+
+    y_positions = ct._resolve_label_positions(
+        [(idx, entry["y"]) for idx, entry in enumerate(entries)],
+        *ax.get_ylim(),
+    )
+    texts: list[Any] = []
+    for idx, entry in enumerate(entries):
+        label_y = y_positions[idx]
+        ax.plot(
+            [entry["x"], connector_x],
+            [entry["y"], label_y],
+            color=entry["color"],
+            alpha=min(0.7, entry["alpha"] * 0.7),
+            linewidth=0.8,
+            zorder=entry["zorder"],
+            solid_capstyle="round",
+        )
+        text = ax.text(
+            label_x,
+            label_y,
+            entry["label"],
+            ha="left",
+            va="center",
+            fontsize=12.4,
+            color=entry["text_color"],
+            alpha=entry["alpha"],
+            weight=entry["weight"],
+            zorder=entry["zorder"] + 0.1,
+        )
+        text.set_path_effects([pe.withStroke(linewidth=3.2, foreground="white", alpha=0.92)])
+        texts.append(text)
+
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    axes_bbox = ax.get_window_extent(renderer=renderer)
+    max_text_width = max(text.get_window_extent(renderer=renderer).width for text in texts)
+    target_right_padding_px = 8.0
+    denominator = axes_bbox.width - max_text_width - target_right_padding_px
+    if denominator > 1.0:
+        desired_right = left_limit + ((label_x - left_limit) * axes_bbox.width / denominator)
+        min_right = x_max + pad * 0.68
+        ax.set_xlim(left_limit, max(min_right, desired_right))
+
+
 def _plot_aime24_curves(
     output_path: Path,
     plot_data: dict[str, list[list[tuple[int, float, float | None]]]],
@@ -243,7 +303,10 @@ def _plot_aime24_curves(
     plt.rcParams.update(
         {
             "font.family": ["Times New Roman", "serif"],
-            "font.size": 12,
+            "font.size": 13.2,
+            "axes.labelsize": 13.8,
+            "xtick.labelsize": 12.2,
+            "ytick.labelsize": 12.2,
             "axes.titleweight": "bold",
             "figure.facecolor": "#FFFFFF",
             "savefig.facecolor": "#FFFFFF",
@@ -268,7 +331,7 @@ def _plot_aime24_curves(
     label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
     palette = ct._paper_palette(len(labels))
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.9), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(12.8, 4.15), constrained_layout=True)
     for ax, (mode, ylabel) in zip(axes, [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]):
         ct._apply_paper_axes_style(ax)
         series_groups = prepared_plot_data.get(mode, [])
@@ -317,7 +380,7 @@ def _plot_aime24_curves(
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
         ax.set_xlim(max(0.0, x_min - left_pad), x_max + label_pad * 1.6)
         ax.set_xticks(sorted(mode_ks))
-        ct._draw_line_end_labels(ax, label_entries, pe)
+        _draw_line_end_labels_for_figure(ax, label_entries, pe)
 
     for ax in axes:
         ax.set_xlabel("sample budget $k$")
