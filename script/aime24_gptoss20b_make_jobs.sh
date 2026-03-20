@@ -37,7 +37,7 @@ TAG_BASE="base-gptoss20b${REASONING_TAG_SUFFIX}"
 TAG_AUTODECO="autodeco-gptoss20b${REASONING_TAG_SUFFIX}"
 TAG_MEANSHIFT="meanshift-${MEANSHIFT_TEMP}-${MEANSHIFT_TOP_P}-gptoss20b${REASONING_TAG_SUFFIX}"
 TAG_GREEDY="greedy-gptoss20b${REASONING_TAG_SUFFIX}"
-SEEDS_8=(42 43 44 45 46 47 48 49)
+SEEDS_16=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57)
 
 mkdir -p "$(dirname "$JOB_FILE")"
 
@@ -109,15 +109,15 @@ emit_eval_jobs() {
   done
 }
 
-SEEDS=("${SEEDS_8[@]}")
+SEEDS=("${SEEDS_16[@]}")
 
-# 1) Base: all 8 seeds.
+# 1) Base: all 16 seeds.
 emit_eval_jobs "$TAG_BASE" "$MODEL_BASE" 1.0 1.0 "$NUM_SAMPLES"
 
-# 2) AutoDeco: all 8 seeds.
+# 2) AutoDeco: all 16 seeds.
 emit_eval_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 0.95 "$NUM_SAMPLES"
 
-# 3) Meanshift: all 8 seeds.
+# 3) Meanshift: all 16 seeds.
 emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" "$NUM_SAMPLES"
 
 # 4) Greedy: one seed, one sample.
