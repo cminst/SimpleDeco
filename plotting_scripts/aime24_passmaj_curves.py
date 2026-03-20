@@ -322,8 +322,8 @@ def _plot_aime24_curves(
         ax.set_ylabel(ylabel)
         ax.grid(False)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
-        mode_left_pad = left_pad + 0.55 if mode == "maj" else left_pad
-        ax.set_xlim(max(0.0, x_min - mode_left_pad), x_max + right_pad)
+        mode_x_min = min(mode_ks) if mode_ks else x_min
+        ax.set_xlim(max(0.0, mode_x_min - left_pad), x_max + right_pad)
         ax.set_xticks(maj_ticks if mode == "pass" and maj_ticks else sorted(mode_ks))
 
     for ax in axes:
