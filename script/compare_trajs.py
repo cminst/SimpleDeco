@@ -802,17 +802,19 @@ def _draw_line_end_labels(ax: Any, entries: List[Dict[str, Any]], pe: Any) -> No
     x_min = min(x_values)
     x_max = max(x_values)
     span = x_max - x_min
-    pad = max(0.6, (span if span > 0 else 1.0) * 0.12)
-    label_x = x_max + pad * 0.42
-    connector_x = label_x - pad * 0.12
+    pad = max(0.5, (span if span > 0 else 1.0) * 0.1)
+    label_x = x_max + pad * 0.32
+    connector_x = label_x - pad * 0.1
 
     current_left, current_right = ax.get_xlim()
-    ax.set_xlim(min(current_left, x_min), max(current_right, x_max + pad * 1.55))
+    left_limit = min(current_left, x_min)
+    ax.set_xlim(left_limit, max(current_right, x_max + pad * 1.05))
 
     y_positions = _resolve_label_positions(
         [(idx, entry["y"]) for idx, entry in enumerate(entries)],
         *ax.get_ylim(),
     )
+    texts: List[Any] = []
     for idx, entry in enumerate(entries):
         label_y = y_positions[idx]
         ax.plot(
@@ -830,13 +832,28 @@ def _draw_line_end_labels(ax: Any, entries: List[Dict[str, Any]], pe: Any) -> No
             entry["label"],
             ha="left",
             va="center",
-            fontsize=9.5,
+            fontsize=10.8,
             color=entry["text_color"],
             alpha=entry["alpha"],
             weight=entry["weight"],
             zorder=entry["zorder"] + 0.1,
         )
         text.set_path_effects([pe.withStroke(linewidth=3, foreground="white", alpha=0.92)])
+        texts.append(text)
+
+    # Fit the right-side label gutter to the actual rendered label width instead of
+    # leaving a fixed wide margin after the longest label.
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    axes_bbox = ax.get_window_extent(renderer=renderer)
+    max_text_width = max(text.get_window_extent(renderer=renderer).width for text in texts)
+    target_right_padding_px = 10.0
+    denominator = axes_bbox.width - max_text_width - target_right_padding_px
+    if denominator > 1.0:
+        desired_right = left_limit + ((label_x - left_limit) * axes_bbox.width / denominator)
+        min_right = x_max + pad * 0.72
+        ax.set_xlim(left_limit, max(min_right, desired_right))
 
 
 def _draw_point_labels(ax: Any, entries: List[Dict[str, Any]], pe: Any) -> None:
@@ -943,7 +960,7 @@ def _plot_curve_results(
     label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
     palette = _paper_palette(len(labels))
 
-    fig, axes = plt.subplots(2, 1, figsize=(7.5, 8.5), sharex=True, constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.9), sharex=True, constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
     for ax, (mode, ylabel) in zip(axes, order):
@@ -1026,8 +1043,9 @@ def _plot_curve_results(
         xlabel = "k (maj: odd only)"
     else:
         xlabel = "k"
-    axes[-1].set_xlabel(xlabel)
-    axes[-1].xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
+    for ax in axes:
+        ax.set_xlabel(xlabel)
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
