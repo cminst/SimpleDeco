@@ -196,10 +196,10 @@ def _method_style(label: str, fallback_color: str) -> dict[str, Any]:
     lower = label.lower()
     if "greedy" in lower:
         return {
-            "color": "#8A9099",
+            "color": "#98A1AB",
             "text_color": "#6B7280",
-            "alpha": 0.95,
-            "linewidth": 1.35,
+            "alpha": 0.9,
+            "linewidth": 1.4,
             "linestyle": (0, (4.2, 2.4)),
             "marker": None,
             "markersize": 0.0,
@@ -208,25 +208,21 @@ def _method_style(label: str, fallback_color: str) -> dict[str, Any]:
         }
     if "meanshift" in lower:
         color = "#59A14F"
-        marker = "s"
     elif "autodeco" in lower or "simpledeco" in lower:
         color = "#B07AA1"
-        marker = "^"
     elif "base" in lower:
         color = "#4E79A7"
-        marker = "o"
     else:
         color = fallback_color
-        marker = "D"
     return {
         "color": color,
         "text_color": color,
         "alpha": 0.97,
-        "linewidth": 1.8,
+        "linewidth": 2.2,
         "linestyle": "-",
-        "marker": marker,
-        "markersize": 5.2,
-        "markeredgewidth": 0.85,
+        "marker": None,
+        "markersize": 0.0,
+        "markeredgewidth": 0.0,
         "zorder": 3,
     }
 
