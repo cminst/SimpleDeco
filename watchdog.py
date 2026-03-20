@@ -1,7 +1,12 @@
 import argparse
-import subprocess
 import time
 from pathlib import Path
+
+from huggingface_hub import HfApi, snapshot_download
+
+
+DATASET_REPO_TYPE = "dataset"
+JSONL_GLOB = "**/*.jsonl"
 
 
 def get_jsonl_file_set(path: str) -> set[str]:
@@ -14,31 +19,34 @@ def get_jsonl_file_set(path: str) -> set[str]:
 
 
 def run_upload(directory_to_watch: str, repo_id: str, includes: list[str] | None = None):
-    cmd = ["hf", "upload", repo_id, directory_to_watch, "--repo-type", "dataset"]
-    if includes:
-        for rel_path in includes:
-            cmd.extend(["--include", rel_path])
-    else:
-        cmd.extend(["--include", "*.jsonl"])
+    api = HfApi()
+    allow_patterns = includes if includes else JSONL_GLOB
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return True, result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return False, e.stderr.strip() or str(e)
+        commit_info = api.upload_folder(
+            repo_id=repo_id,
+            folder_path=directory_to_watch,
+            repo_type=DATASET_REPO_TYPE,
+            allow_patterns=allow_patterns,
+        )
+        return True, str(commit_info.repo_url)
+    except Exception as e:
+        return False, str(e)
 
 
 def run_download(repo_id: str, dest_dir: str):
-    cmd = ["hf", "download", repo_id, "--repo-type", "dataset", "--local-dir", dest_dir, "--include", "\"**/*.jsonl\""]
-
-    print(f"Running {' '.join(cmd)}")
+    print(f"Running snapshot_download for {repo_id} -> {Path(dest_dir).resolve()}")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        print(result.stdout.strip())
-        return True, result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return False, e.stderr.strip() or str(e)
+        local_path = snapshot_download(
+            repo_id=repo_id,
+            repo_type=DATASET_REPO_TYPE,
+            local_dir=dest_dir,
+            allow_patterns=JSONL_GLOB,
+        )
+        return True, local_path
+    except Exception as e:
+        return False, str(e)
 
 
 def log(msg: str) -> None:
@@ -68,7 +76,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sync",
         action="store_true",
-        help="Also download from HF repo every minute",
+        help="Also download from the HF repo periodically",
+    )
+    parser.add_argument(
+        "--sync-interval",
+        type=float,
+        default=60.0,
+        help="Download sync interval in seconds when --sync is enabled",
     )
     return parser.parse_args()
 
@@ -76,10 +90,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     interval_str = str(int(args.check_interval)) if args.check_interval.is_integer() else str(args.check_interval)
+    sync_interval_str = str(int(args.sync_interval)) if args.sync_interval.is_integer() else str(args.sync_interval)
     path = Path(args.dir)
 
     if not path.exists():
         print(f"Error: {args.dir} does not exist.")
+        return
+
+    if args.sync_interval <= 0:
+        print("Error: --sync-interval must be > 0.")
         return
 
     log("Initial upload...")
@@ -93,10 +112,11 @@ def main() -> None:
     log(
         "Tracking "
         f"{len(known_files)} existing file(s). Polling every "
-        f"{interval_str}s."
+        f"{interval_str}s"
+        + (f". Syncing every {sync_interval_str}s." if args.sync else ".")
     )
 
-    sync_interval = 60
+    sync_interval = args.sync_interval
     last_sync_time = time.time()
 
     while True:
