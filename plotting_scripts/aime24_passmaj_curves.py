@@ -85,11 +85,11 @@ def _build_specs(args: argparse.Namespace) -> list[MethodSpec]:
             patterns=_parse_patterns(args.base, DEFAULT_PATTERN_CANDIDATES["Base"]),
         ),
         MethodSpec(
-            label="MeanShift",
+            label="\\textsc{MeanShift}",
             patterns=_parse_patterns(args.meanshift, DEFAULT_PATTERN_CANDIDATES["MeanShift"]),
         ),
         MethodSpec(
-            label="AutoDeco",
+            label="\\textsc{AutoDeco}",
             patterns=_parse_patterns(args.autodeco, DEFAULT_PATTERN_CANDIDATES["AutoDeco"]),
         ),
         MethodSpec(
@@ -336,7 +336,7 @@ def _plot_aime24_curves(
     palette = ct._paper_palette(len(labels))
 
     fig, axes = plt.subplots(1, 2, figsize=(12.8, 4.15), constrained_layout=True)
-    for ax, (mode, ylabel) in zip(axes, [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]):
+    for ax, (mode, ylabel) in zip(axes, [("maj", "maj@k (\%)"), ("pass", "pass@k (\%)")]):
         ct._apply_paper_axes_style(ax)
         series_groups = prepared_plot_data.get(mode, [])
         label_entries: list[dict[str, Any]] = []
