@@ -218,7 +218,7 @@ def _method_style(label: str, fallback_color: str) -> dict[str, Any]:
         "color": color,
         "text_color": color,
         "alpha": 0.97,
-        "linewidth": 2.0,
+        "linewidth": 1.9,
         "linestyle": "-",
         "marker": None,
         "markersize": 0.0,
@@ -286,6 +286,10 @@ def _plot_aime24_curves(
     legend_handles: dict[str, Any] = {}
     for ax, (mode, ylabel) in zip(axes, [("maj", r"maj@k (\%)"), ("pass", r"pass@k (\%)")]):
         ct._apply_paper_axes_style(ax)
+        for spine_name in ("top", "right", "left", "bottom"):
+            ax.spines[spine_name].set_visible(True)
+            ax.spines[spine_name].set_color("#98A2B3")
+            ax.spines[spine_name].set_linewidth(0.9)
         series_groups = prepared_plot_data.get(mode, [])
         mode_ks: set[int] = set()
 
