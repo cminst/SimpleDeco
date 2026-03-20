@@ -265,7 +265,7 @@ def _draw_line_end_labels_for_figure(ax: Any, entries: list[dict[str, Any]], pe:
             entry["label"],
             ha="left",
             va="center",
-            fontsize=12.4,
+            fontsize=13.6,
             color=entry["text_color"],
             alpha=entry["alpha"],
             weight=entry["weight"],
@@ -303,10 +303,10 @@ def _plot_aime24_curves(
     plt.rcParams.update(
         {
             "font.family": ["Times New Roman", "serif"],
-            "font.size": 13.2,
-            "axes.labelsize": 13.8,
-            "xtick.labelsize": 12.2,
-            "ytick.labelsize": 12.2,
+            "font.size": 14.6,
+            "axes.labelsize": 15.2,
+            "xtick.labelsize": 13.4,
+            "ytick.labelsize": 13.4,
             "axes.titleweight": "bold",
             "figure.facecolor": "#FFFFFF",
             "savefig.facecolor": "#FFFFFF",
