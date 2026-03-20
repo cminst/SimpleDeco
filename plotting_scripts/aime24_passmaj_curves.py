@@ -85,11 +85,11 @@ def _build_specs(args: argparse.Namespace) -> list[MethodSpec]:
             patterns=_parse_patterns(args.base, DEFAULT_PATTERN_CANDIDATES["Base"]),
         ),
         MethodSpec(
-            label="\\textsc{MeanShift}",
+            label="MeanShift",
             patterns=_parse_patterns(args.meanshift, DEFAULT_PATTERN_CANDIDATES["MeanShift"]),
         ),
         MethodSpec(
-            label="\\textsc{AutoDeco}",
+            label="AutoDeco",
             patterns=_parse_patterns(args.autodeco, DEFAULT_PATTERN_CANDIDATES["AutoDeco"]),
         ),
         MethodSpec(
