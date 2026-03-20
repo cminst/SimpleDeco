@@ -706,10 +706,38 @@ def _paper_palette(count: int) -> List[str]:
 
 
 def _paper_method_style(
+    label: str,
     idx: int,
     focus_idx: int | None,
     palette: List[str],
 ) -> Dict[str, Any]:
+    style_rank = _style_rank(idx, focus_idx)
+    marker_cycle = ["o", "s", "^", "D", "P", "X", "v", "<"]
+    explicit_markers = {
+        "base": "o",
+        "meanshift": "s",
+        "autodeco": "^",
+    }
+    label_lower = label.lower()
+    marker = next(
+        (shape for name, shape in explicit_markers.items() if name in label_lower),
+        marker_cycle[style_rank % len(marker_cycle)],
+    )
+    if _is_greedy_tag(label):
+        color = "#8A9099" if idx == focus_idx else "#A8AFB8"
+        return {
+            "color": color,
+            "alpha": 0.92 if idx == focus_idx else 0.86,
+            "linewidth": 1.45 if idx == focus_idx else 1.2,
+            "text_color": "#6B7280" if idx == focus_idx else color,
+            "weight": "normal",
+            "zorder": 2.2 if idx == focus_idx else 1.8,
+            "edge_color": "#FFFFFF",
+            "linestyle": (0, (4.2, 2.4)),
+            "marker": None,
+            "markersize": 0.0,
+            "markeredgewidth": 0.0,
+        }
     if focus_idx is None:
         color = palette[idx]
         return {
@@ -720,6 +748,10 @@ def _paper_method_style(
             "weight": "normal",
             "zorder": 3,
             "edge_color": "#FFFFFF",
+            "linestyle": "-",
+            "marker": marker,
+            "markersize": 5.0,
+            "markeredgewidth": 0.85,
         }
     if idx == focus_idx:
         color = "#1F4E79"
@@ -731,6 +763,10 @@ def _paper_method_style(
             "weight": "semibold",
             "zorder": 4,
             "edge_color": "#0F172A",
+            "linestyle": "-",
+            "marker": marker,
+            "markersize": 5.4,
+            "markeredgewidth": 0.95,
         }
     return {
         "color": "#C2C8D0",
@@ -740,6 +776,10 @@ def _paper_method_style(
         "weight": "normal",
         "zorder": 2,
         "edge_color": "#FFFFFF",
+        "linestyle": "-",
+        "marker": marker,
+        "markersize": 4.8,
+        "markeredgewidth": 0.8,
     }
 
 
@@ -960,7 +1000,7 @@ def _plot_curve_results(
     label_pad = max(0.8, (x_span if x_span > 0 else 1.0) * 0.14)
     palette = _paper_palette(len(labels))
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.9), sharex=True, constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.9), constrained_layout=True)
     order = [("maj", "maj@k (%)"), ("pass", "pass@k (%)")]
 
     for ax, (mode, ylabel) in zip(axes, order):
@@ -984,13 +1024,15 @@ def _plot_curve_results(
 
         has_any = False
         label_entries: List[Dict[str, Any]] = []
+        mode_ks: set[int] = set()
 
         for idx, series in enumerate(series_groups):
             if not series:
                 continue
             ks = [k for k, _, _ in series]
             vals = [v for _, v, _ in series]
-            style = _paper_method_style(idx, focus_idx, palette)
+            mode_ks.update(ks)
+            style = _paper_method_style(labels[idx], idx, focus_idx, palette)
 
             ax.plot(
                 ks,
@@ -999,7 +1041,12 @@ def _plot_curve_results(
                 linewidth=style["linewidth"],
                 alpha=style["alpha"],
                 zorder=style["zorder"],
-                linestyle="-",
+                linestyle=style["linestyle"],
+                marker=style["marker"],
+                markersize=style["markersize"],
+                markeredgewidth=style["markeredgewidth"],
+                markeredgecolor=style["edge_color"],
+                markerfacecolor=style["color"],
             )
             label_entries.append(
                 {
@@ -1035,17 +1082,12 @@ def _plot_curve_results(
         ax.grid(True, color="#D7DCE3", linewidth=0.75, alpha=0.55)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
         ax.set_xlim(max(0.0, x_min - left_pad), x_max + label_pad * 1.6)
+        ax.set_xticks(sorted(mode_ks))
         _draw_line_end_labels(ax, label_entries, pe)
 
-    if maj_avg == "pairs":
-        xlabel = "k (maj: pairwise avg of k-1,k at even k)"
-    elif maj_avg == "odd":
-        xlabel = "k (maj: odd only)"
-    else:
-        xlabel = "k"
+    xlabel = "sample budget $k$"
     for ax in axes:
         ax.set_xlabel(xlabel)
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=8))
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
