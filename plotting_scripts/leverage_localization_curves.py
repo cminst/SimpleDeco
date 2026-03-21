@@ -239,6 +239,7 @@ def _plot_binned_figure(
     alignment = np.asarray(plot_payload["alignment"], dtype=np.float64)
     penalty = np.asarray(plot_payload["penalty"], dtype=np.float64)
     support_change_pct = np.asarray(plot_payload["support_change_pct"], dtype=np.float64)
+    share_pct = np.asarray(plot_payload["covered_share_pct"], dtype=np.float64)
 
     x = np.arange(len(alignment), dtype=np.float64)
     bar_width = 0.37
@@ -252,7 +253,7 @@ def _plot_binned_figure(
         constrained_layout=False,
         gridspec_kw={"width_ratios": (0.95, 0.75)},
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.24, top=0.855, wspace=0.3)
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.31, top=0.855, wspace=0.3)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -320,10 +321,23 @@ def _plot_binned_figure(
         axis.set_xlim(edge_positions[0], edge_positions[-1])
         axis.set_xticks(edge_positions)
         axis.set_xticklabels(edge_labels)
+        axis.tick_params(axis="x", pad=1.5)
         tick_texts = axis.get_xticklabels()
         if tick_texts:
             tick_texts[0].set_ha("left")
             tick_texts[-1].set_ha("right")
+        for xpos, share in zip(x, share_pct):
+            axis.text(
+                xpos,
+                -0.19,
+                rf"{share:.1f}\%",
+                transform=axis.get_xaxis_transform(),
+                ha="center",
+                va="top",
+                fontsize=7.2,
+                color="#667085",
+                clip_on=False,
+            )
 
     legend_handles = [align_bars, penalty_bars, support_bars]
     legend_labels = ["Alignment gain", "Curvature penalty", "Support change"]
