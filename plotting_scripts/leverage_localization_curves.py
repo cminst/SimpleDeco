@@ -239,7 +239,7 @@ def _plot_binned_figure(
         constrained_layout=False,
         gridspec_kw={"width_ratios": (0.95, 0.9)},
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.34, top=0.855, wspace=0.28)
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.30, top=0.855, wspace=0.28)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -302,7 +302,7 @@ def _plot_binned_figure(
     right_bottom = -max(right_max * 0.05, 0.2)
     ax_right.set_ylim(right_bottom, right_max * 1.12 if right_max > 0.0 else 1.0)
 
-    rotation = 30 if len(labels) > 1 else 0
+    rotation = 0
     for axis in (ax_left, ax_right):
         axis.set_xticks(x)
         axis.set_xticklabels(
