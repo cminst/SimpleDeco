@@ -1,0 +1,302 @@
+"""Plot paper-style scatter plots for AutoDeco temperature vs entropy/confidence."""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from datasets import Dataset
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = _REPO_ROOT / "script"
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+import compare_trajs as ct
+
+
+DEFAULT_OUTPUT = _REPO_ROOT / "figure" / "pertoken_temp_entropy_confidence_scatter.pdf"
+DEFAULT_DATASET_SPLIT = "tokens"
+DEFAULT_MAX_POINTS = 40_000
+DEFAULT_SEED = 0
+
+
+def _resolve_input_path(raw_path: str) -> Path:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = _REPO_ROOT / path
+    return path
+
+
+def _load_tokens_dataset(input_path: Path, split_name: str | None) -> "Dataset":
+    try:
+        from datasets import Dataset, DatasetDict, load_from_disk
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("datasets is required to load the Hugging Face dataset input.") from exc
+
+    if not input_path.exists():
+        raise FileNotFoundError(f"Dataset path not found: {input_path}")
+
+    dataset = load_from_disk(str(input_path))
+    if isinstance(dataset, Dataset):
+        return dataset
+    if not isinstance(dataset, DatasetDict):
+        raise TypeError(f"Expected a Dataset or DatasetDict at {input_path}, got {type(dataset)!r}.")
+
+    resolved_split = split_name or DEFAULT_DATASET_SPLIT
+    if resolved_split in dataset:
+        return dataset[resolved_split]
+    if DEFAULT_DATASET_SPLIT in dataset:
+        return dataset[DEFAULT_DATASET_SPLIT]
+    if len(dataset) == 1:
+        return next(iter(dataset.values()))
+
+    available = ", ".join(dataset.keys())
+    raise KeyError(
+        f"Could not resolve a token split from {input_path}. "
+        f"Requested '{resolved_split}'. Available splits: {available}"
+    )
+
+
+def _load_numeric_column(dataset: "Dataset", column_name: str) -> np.ndarray:
+    if column_name not in dataset.column_names:
+        available = ", ".join(dataset.column_names)
+        raise KeyError(f"Column '{column_name}' not found. Available columns: {available}")
+    values = np.asarray(dataset[column_name], dtype=np.float64)
+    if values.size == 0:
+        raise ValueError(f"Column '{column_name}' is empty.")
+    return values
+
+
+def _validate_bounded_values(
+    values: np.ndarray,
+    *,
+    name: str,
+    lower: float,
+    upper: float,
+    atol: float = 1e-6,
+) -> np.ndarray:
+    if np.any(values < lower - atol) or np.any(values > upper + atol):
+        observed_min = float(np.min(values))
+        observed_max = float(np.max(values))
+        raise ValueError(
+            f"Column '{name}' contains values outside [{lower}, {upper}]. "
+            f"Observed range: [{observed_min:.6g}, {observed_max:.6g}]"
+        )
+    return np.clip(values, lower, upper)
+
+
+def _validate_nonnegative_values(
+    values: np.ndarray,
+    *,
+    name: str,
+    atol: float = 1e-6,
+) -> np.ndarray:
+    if np.any(values < -atol):
+        observed_min = float(np.min(values))
+        raise ValueError(f"Column '{name}' contains negative values. Observed min: {observed_min:.6g}")
+    return np.clip(values, 0.0, None)
+
+
+def _filter_finite_rows(
+    temperatures: np.ndarray,
+    entropies: np.ndarray,
+    confidences: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    finite_mask = np.isfinite(temperatures) & np.isfinite(entropies) & np.isfinite(confidences)
+    if not np.any(finite_mask):
+        raise ValueError("No rows remain after dropping non-finite values from T_hat, H, and p_max.")
+    return temperatures[finite_mask], entropies[finite_mask], confidences[finite_mask]
+
+
+def _maybe_subsample_points(
+    temperatures: np.ndarray,
+    entropies: np.ndarray,
+    confidences: np.ndarray,
+    *,
+    max_points: int,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    total_points = temperatures.size
+    if total_points <= max_points:
+        return temperatures, entropies, confidences
+
+    rng = np.random.default_rng(seed)
+    indices = rng.choice(total_points, size=max_points, replace=False)
+    indices.sort()
+    return temperatures[indices], entropies[indices], confidences[indices]
+
+
+def _style_axes(ax: Any) -> None:
+    ct._apply_paper_axes_style(ax)
+    for spine_name in ("top", "right", "left", "bottom"):
+        ax.spines[spine_name].set_visible(True)
+        ax.spines[spine_name].set_color("#98A2B3")
+        ax.spines[spine_name].set_linewidth(0.9)
+    ax.spines["bottom"].set_zorder(6)
+
+
+def _plot_scatters(
+    output_path: Path,
+    temperatures: np.ndarray,
+    entropies: np.ndarray,
+    confidences: np.ndarray,
+) -> None:
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("matplotlib is required to generate this figure.") from exc
+
+    plt.rcParams.update(
+        {
+            "text.usetex": True,
+            "text.latex.preamble": r"\usepackage{amsmath}\usepackage{mathpazo}",
+            "font.family": "serif",
+            "font.serif": ["Palatino", "Times New Roman", "Times"],
+            "font.size": 9.4,
+            "axes.labelsize": 9.6,
+            "xtick.labelsize": 8.2,
+            "ytick.labelsize": 8.4,
+            "axes.unicode_minus": False,
+            "axes.titleweight": "bold",
+            "figure.facecolor": "#FFFFFF",
+            "savefig.facecolor": "#FFFFFF",
+        }
+    )
+
+    fig, (ax_left, ax_right) = plt.subplots(
+        1,
+        2,
+        figsize=(5.5, 2.55),
+        constrained_layout=False,
+        sharey=True,
+        gridspec_kw={"width_ratios": (1.0, 1.0)},
+    )
+    fig.subplots_adjust(left=0.11, right=0.992, bottom=0.25, top=0.91, wspace=0.16)
+
+    _style_axes(ax_left)
+    _style_axes(ax_right)
+
+    temp_color = "#D39A6A"
+    confidence_color = "#4E79A7"
+    scatter_kwargs = {
+        "s": 5.0,
+        "alpha": 0.24,
+        "edgecolors": "none",
+        "linewidths": 0.0,
+        "rasterized": True,
+        "zorder": 3,
+    }
+
+    ax_left.scatter(entropies, temperatures, color=temp_color, **scatter_kwargs)
+    ax_right.scatter(confidences, temperatures, color=confidence_color, **scatter_kwargs)
+
+    entropy_upper = max(float(np.max(entropies)) * 1.03, 1.0)
+
+    for axis in (ax_left, ax_right):
+        axis.grid(color="#E7ECF2", linewidth=0.55, alpha=0.9)
+        axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        axis.xaxis.set_major_locator(MaxNLocator(nbins=5))
+        axis.tick_params(axis="x", pad=1.0)
+        axis.set_ylim(0.0, 2.0)
+
+    ax_left.set_xlim(0.0, entropy_upper)
+    ax_right.set_xlim(0.0, 1.0)
+    ax_right.set_xticks(np.linspace(0.0, 1.0, 5))
+
+    ax_left.set_ylabel(r"Predicted temperature")
+    ax_left.set_xlabel(r"(a) Entropy $H$", labelpad=6)
+    ax_right.set_xlabel(r"(b) Top-1 confidence $p_{\max}$", labelpad=6)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate paper-style scatter plots for per-token temperature vs entropy/confidence.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="Path to a save_to_disk Hugging Face Dataset or DatasetDict from collect_pertoken_diagnostics.py.",
+    )
+    parser.add_argument(
+        "--split",
+        default=DEFAULT_DATASET_SPLIT,
+        help="Dataset split to use when the input is a DatasetDict.",
+    )
+    parser.add_argument(
+        "--output",
+        default=str(DEFAULT_OUTPUT),
+        help=f"Output PDF/PNG path (default: {DEFAULT_OUTPUT}).",
+    )
+    parser.add_argument(
+        "--max-points",
+        type=int,
+        default=DEFAULT_MAX_POINTS,
+        help="Maximum number of points to draw. If exceeded, randomly subsample without replacement.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        help="Random seed used for deterministic scatter subsampling.",
+    )
+    args = parser.parse_args()
+
+    if args.max_points <= 0:
+        raise ValueError("--max-points must be positive.")
+
+    input_path = _resolve_input_path(args.input)
+    output_path = _resolve_input_path(args.output)
+
+    tokens_dataset = _load_tokens_dataset(input_path, split_name=args.split)
+    temperatures_raw = _load_numeric_column(tokens_dataset, "T_hat")
+    entropies_raw = _load_numeric_column(tokens_dataset, "H")
+    confidences_raw = _load_numeric_column(tokens_dataset, "p_max")
+
+    temperatures, entropies, confidences = _filter_finite_rows(
+        temperatures_raw,
+        entropies_raw,
+        confidences_raw,
+    )
+    temperatures = _validate_bounded_values(
+        temperatures,
+        name="T_hat",
+        lower=0.0,
+        upper=2.0,
+    )
+    entropies = _validate_nonnegative_values(entropies, name="H")
+    confidences = _validate_bounded_values(
+        confidences,
+        name="p_max",
+        lower=0.0,
+        upper=1.0,
+    )
+    temperatures, entropies, confidences = _maybe_subsample_points(
+        temperatures,
+        entropies,
+        confidences,
+        max_points=int(args.max_points),
+        seed=int(args.seed),
+    )
+
+    _plot_scatters(
+        output_path=output_path,
+        temperatures=temperatures,
+        entropies=entropies,
+        confidences=confidences,
+    )
+    print(f"Wrote {output_path}")
+
+
+if __name__ == "__main__":
+    main()

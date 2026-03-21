@@ -26,12 +26,13 @@ TEMP_COLOR_MIN = 0.0
 TEMP_COLOR_MAX = 1.5
 TEMP_COLOR_GAMMA = 0.72
 TEMP_COLOR_STOPS = [
-    (0.00, "#223A5E"),
-    (0.12, "#355C8C"),
-    (0.26, "#4E79A7"),
-    (0.42, "#76B7B2"),
-    (0.62, "#D9C7A1"),
-    (0.80, "#D39A6A"),
+    (0.00, "#24364F"),
+    (0.18, "#3A5A80"),
+    (0.34, "#4E79A7"),
+    (0.52, "#9BB2C9"),
+    (0.60, "#E7ECF2"),
+    (0.72, "#D39A6A"),
+    (0.86, "#C9785D"),
     (1.00, "#E15759"),
 ]
 TEMP_TOKEN_CMAP = mcolors.LinearSegmentedColormap.from_list(
