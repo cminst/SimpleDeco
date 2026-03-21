@@ -239,7 +239,7 @@ def _plot_binned_figure(
         constrained_layout=False,
         gridspec_kw={"width_ratios": (1.0, 1.0)},
     )
-    fig.subplots_adjust(left=0.055, right=0.985, bottom=0.30, top=0.855, wspace=0.16)
+    fig.subplots_adjust(left=0.045, right=0.992, bottom=0.30, top=0.855, wspace=0.24)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -346,7 +346,7 @@ def _plot_binned_figure(
     legend.get_frame().set_linewidth(0.8)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    fig.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
