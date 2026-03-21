@@ -237,9 +237,9 @@ def _plot_binned_figure(
         2,
         figsize=(5.5, 3.2),
         constrained_layout=False,
-        gridspec_kw={"width_ratios": (0.95, 0.98)},
+        gridspec_kw={"width_ratios": (1.0, 1.0)},
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.30, top=0.855, wspace=0.2)
+    fig.subplots_adjust(left=0.055, right=0.985, bottom=0.30, top=0.855, wspace=0.16)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
