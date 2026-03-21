@@ -148,11 +148,11 @@ def _plot_histograms(
     fig, (ax_left, ax_right) = plt.subplots(
         1,
         2,
-        figsize=(5.5, 2.8),
+        figsize=(5.5, 2.45),
         constrained_layout=False,
         gridspec_kw={"width_ratios": (1.0, 1.0)},
     )
-    fig.subplots_adjust(left=0.09, right=0.992, bottom=0.24, top=0.915, wspace=0.24)
+    fig.subplots_adjust(left=0.09, right=0.992, bottom=0.255, top=0.91, wspace=0.24)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -190,10 +190,10 @@ def _plot_histograms(
         axis.axhline(0.0, color="#98A2B3", linewidth=0.9, zorder=6, clip_on=False)
 
     ax_left.set_xlim(0.0, 2.0)
-    ax_right.set_xlim(0.0, 1.0)
+    ax_right.set_xlim(0.2, 1.0)
 
     ax_left.set_xticks(np.linspace(0.0, 2.0, 5))
-    ax_right.set_xticks(np.linspace(0.0, 1.0, 6))
+    ax_right.set_xticks(np.linspace(0.2, 1.0, 5))
 
     temp_max = float(np.max(temp_hist)) if temp_hist.size else 0.0
     top_p_max = float(np.max(top_p_hist)) if top_p_hist.size else 0.0
