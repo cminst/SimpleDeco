@@ -281,7 +281,7 @@ def _plot_aime24_curves(
         }
     )
 
-    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.25), constrained_layout=False)
+    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.1), constrained_layout=False)
     fig.subplots_adjust(left=0.1, right=0.992, bottom=0.22, top=0.81, wspace=0.22)
     legend_handles: dict[str, Any] = {}
     for ax, (mode, ylabel) in zip(axes, [("maj", r"maj@k (\%)"), ("pass", r"pass@k (\%)")]):
