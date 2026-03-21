@@ -235,11 +235,11 @@ def _plot_binned_figure(
     fig, (ax_left, ax_right) = plt.subplots(
         1,
         2,
-        figsize=(5.5, 2.7),
+        figsize=(5.5, 2.5),
         constrained_layout=False,
         gridspec_kw={"width_ratios": (1.0, 1.0)},
     )
-    fig.subplots_adjust(left=0.045, right=0.992, bottom=0.30, top=0.855, wspace=0.24)
+    fig.subplots_adjust(left=0.045, right=0.992, bottom=0.265, top=0.855, wspace=0.24)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -282,7 +282,7 @@ def _plot_binned_figure(
         axis.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        axis.set_xlabel("normalized entropy bin", labelpad=14)
+        axis.set_xlabel("normalized entropy bin", labelpad=9)
 
     ax_left.set_ylabel("mean term")
     ax_right.set_ylabel(r"support change (\%)")
