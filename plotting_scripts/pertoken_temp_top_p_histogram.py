@@ -97,6 +97,7 @@ def _style_axes(ax: Any) -> None:
         ax.spines[spine_name].set_visible(True)
         ax.spines[spine_name].set_color("#98A2B3")
         ax.spines[spine_name].set_linewidth(0.9)
+    ax.spines["bottom"].set_zorder(6)
 
 
 def _compute_histogram(
@@ -165,8 +166,8 @@ def _plot_histograms(
         width=temp_widths,
         align="edge",
         color=warm_orange,
-        edgecolor="none",
-        linewidth=0.0,
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
         alpha=0.95,
         zorder=3,
     )
@@ -176,8 +177,8 @@ def _plot_histograms(
         width=top_p_widths,
         align="edge",
         color=plum,
-        edgecolor="none",
-        linewidth=0.0,
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
         alpha=0.92,
         zorder=3,
     )
@@ -186,6 +187,7 @@ def _plot_histograms(
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.tick_params(axis="x", pad=1.0)
+        axis.axhline(0.0, color="#98A2B3", linewidth=0.9, zorder=6, clip_on=False)
 
     ax_left.set_xlim(0.0, 2.0)
     ax_right.set_xlim(0.0, 1.0)
