@@ -306,8 +306,7 @@ def _plot_trends(
     _style_axes(ax_left)
     _style_axes(ax_right)
 
-    temp_color = "#D39A6A"
-    confidence_color = "#4E79A7"
+    trend_color = "#D39A6A"
 
     for axis in (ax_left, ax_right):
         axis.grid(color="#E7ECF2", linewidth=0.55, alpha=0.9)
@@ -319,7 +318,7 @@ def _plot_trends(
         y_values=temperatures,
         x_background=background_entropies,
         y_background=background_temperatures,
-        color=temp_color,
+        color=trend_color,
         xlabel=r"(a) Entropy $H$",
         xlim=None,
         num_bins=num_bins,
@@ -331,7 +330,7 @@ def _plot_trends(
         y_values=temperatures,
         x_background=background_confidences,
         y_background=background_temperatures,
-        color=confidence_color,
+        color=trend_color,
         xlabel=r"(b) Top-1 confidence $p_{\max}$",
         xlim=None,
         num_bins=num_bins,
