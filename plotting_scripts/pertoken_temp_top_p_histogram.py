@@ -151,7 +151,7 @@ def _plot_histograms(
         constrained_layout=False,
         gridspec_kw={"width_ratios": (1.0, 1.0)},
     )
-    fig.subplots_adjust(left=0.09, right=0.992, bottom=0.345, top=0.915, wspace=0.24)
+    fig.subplots_adjust(left=0.09, right=0.992, bottom=0.24, top=0.915, wspace=0.24)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -202,31 +202,8 @@ def _plot_histograms(
     ax_right.set_ylim(0.0, upper)
 
     ax_left.set_ylabel(r"share of tokens (\%)")
-    ax_left.set_xlabel("temperature", labelpad=4)
-    ax_right.set_xlabel(r"top-$p$", labelpad=4)
-
-    ax_left.text(
-        0.5,
-        -0.34,
-        r"(a) Predicted temperature",
-        transform=ax_left.transAxes,
-        ha="center",
-        va="top",
-        fontsize=8.5,
-        color="#475467",
-        clip_on=False,
-    )
-    ax_right.text(
-        0.5,
-        -0.34,
-        r"(b) Predicted top-$p$",
-        transform=ax_right.transAxes,
-        ha="center",
-        va="top",
-        fontsize=8.5,
-        color="#475467",
-        clip_on=False,
-    )
+    ax_left.set_xlabel(r"(a) Predicted temperature", labelpad=6)
+    ax_right.set_xlabel(r"(b) Predicted top-$p$", labelpad=6)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
