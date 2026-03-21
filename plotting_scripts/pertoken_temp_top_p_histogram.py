@@ -165,8 +165,8 @@ def _plot_histograms(
         width=temp_widths,
         align="edge",
         color=warm_orange,
-        edgecolor="#FFFFFF",
-        linewidth=0.65,
+        edgecolor="none",
+        linewidth=0.0,
         alpha=0.95,
         zorder=3,
     )
@@ -176,8 +176,8 @@ def _plot_histograms(
         width=top_p_widths,
         align="edge",
         color=plum,
-        edgecolor="#FFFFFF",
-        linewidth=0.65,
+        edgecolor="none",
+        linewidth=0.0,
         alpha=0.92,
         zorder=3,
     )
@@ -195,12 +195,10 @@ def _plot_histograms(
 
     temp_max = float(np.max(temp_hist)) if temp_hist.size else 0.0
     top_p_max = float(np.max(top_p_hist)) if top_p_hist.size else 0.0
-    temp_lower = -max(temp_max * 0.035, 0.08)
-    top_p_lower = -max(top_p_max * 0.035, 0.08)
     temp_upper = temp_max * 1.12 if temp_max > 0.0 else 1.0
     top_p_upper = top_p_max * 1.12 if top_p_max > 0.0 else 1.0
-    ax_left.set_ylim(temp_lower, temp_upper)
-    ax_right.set_ylim(top_p_lower, top_p_upper)
+    ax_left.set_ylim(0.0, temp_upper)
+    ax_right.set_ylim(0.0, top_p_upper)
 
     ax_left.set_ylabel(r"share of tokens (\%)")
     ax_left.set_xlabel(r"(a) Predicted temperature", labelpad=6)
