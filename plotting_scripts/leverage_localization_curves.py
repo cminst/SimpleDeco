@@ -112,6 +112,11 @@ def _prepare_plot_payload(
                 "count_covered": _require_number(row, "count_covered", row_idx),
                 "alignment": _optional_number(row, "mean_alignment", row_idx),
                 "penalty": _optional_number(row, "mean_penalty", row_idx),
+                "support_change": (
+                    _optional_number(row, "support_change_rate_covered", row_idx)
+                    if row.get("support_change_rate_covered") is not None
+                    else _optional_number(row, "support_change_rate", row_idx)
+                ),
             }
         )
 
@@ -143,6 +148,10 @@ def _prepare_plot_payload(
                     np.asarray([row["penalty"] for row in tail_rows], dtype=np.float64),
                     weights,
                 ),
+                "support_change": _weighted_mean(
+                    np.asarray([row["support_change"] for row in tail_rows], dtype=np.float64),
+                    weights,
+                ),
                 "label": _tail_label(float(tail_rows[0]["left"])),
             }
         )
@@ -157,16 +166,23 @@ def _prepare_plot_payload(
 
     alignment = np.asarray([float(row["alignment"]) for row in merged_rows], dtype=np.float64)
     penalty = np.asarray([float(row["penalty"]) for row in merged_rows], dtype=np.float64)
+    support_change = np.asarray(
+        [float(row["support_change"]) for row in merged_rows], dtype=np.float64
+    )
     finite_any = np.isfinite(alignment) | np.isfinite(penalty)
     if not np.any(finite_any):
         raise ValueError("No finite mean_alignment or mean_penalty values were found.")
+    if not np.any(np.isfinite(support_change)):
+        raise ValueError(
+            "No finite support_change_rate_covered or support_change_rate values were found."
+        )
 
     return {
         "labels": [str(row["label"]) for row in merged_rows],
         "alignment": alignment,
         "penalty": penalty,
+        "support_change_pct": 100.0 * support_change,
         "covered_share_pct": 100.0 * counts / total_covered,
-        "net": alignment - penalty,
     }
 
 
@@ -181,7 +197,6 @@ def _style_axes(ax: Any) -> None:
 def _plot_binned_figure(
     output_path: Path,
     plot_payload: dict[str, np.ndarray | list[str]],
-    show_net_marker: bool,
 ) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -209,21 +224,26 @@ def _plot_binned_figure(
     labels = list(plot_payload["labels"])
     alignment = np.asarray(plot_payload["alignment"], dtype=np.float64)
     penalty = np.asarray(plot_payload["penalty"], dtype=np.float64)
+    support_change_pct = np.asarray(plot_payload["support_change_pct"], dtype=np.float64)
     share_pct = np.asarray(plot_payload["covered_share_pct"], dtype=np.float64)
-    net = np.asarray(plot_payload["net"], dtype=np.float64)
 
     x = np.arange(len(labels), dtype=np.float64)
     bar_width = 0.34
     blue = "#4E79A7"
     red = "#E15759"
-    black = "#1F2937"
 
-    fig, ax = plt.subplots(1, 1, figsize=(4.0, 3.15), constrained_layout=False)
-    fig.subplots_adjust(left=0.11, right=0.992, bottom=0.30, top=0.86)
+    fig, (ax_left, ax_right) = plt.subplots(
+        1,
+        2,
+        figsize=(7.9, 3.15),
+        constrained_layout=False,
+    )
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.31, top=0.855, wspace=0.18)
 
-    _style_axes(ax)
+    _style_axes(ax_left)
+    _style_axes(ax_right)
 
-    align_bars = ax.bar(
+    align_bars = ax_left.bar(
         x - bar_width / 2.0,
         alignment,
         width=bar_width,
@@ -234,7 +254,7 @@ def _plot_binned_figure(
         zorder=3,
         label="Alignment gain",
     )
-    penalty_bars = ax.bar(
+    penalty_bars = ax_left.bar(
         x + bar_width / 2.0,
         penalty,
         width=bar_width,
@@ -245,60 +265,63 @@ def _plot_binned_figure(
         zorder=3,
         label="Curvature penalty",
     )
-    net_handle = None
-    if show_net_marker:
-        (net_handle,) = ax.plot(
-            x,
-            net,
-            linestyle="None",
-            marker="o",
-            markersize=3.6,
-            color=black,
-            markeredgecolor="#FFFFFF",
-            markeredgewidth=0.5,
-            zorder=4,
-            label="Net gain",
-        )
+    support_bars = ax_right.bar(
+        x,
+        support_change_pct,
+        width=0.56,
+        color="#8FA4BF",
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
+        alpha=0.92,
+        zorder=3,
+        label="Support change",
+    )
 
-    ax.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
-    ax.set_ylabel("mean term")
-    ax.set_xlabel("normalized entropy bin")
-    ax.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+    for axis in (ax_left, ax_right):
+        axis.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
+        axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
+        axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        axis.set_xlabel("normalized entropy bin")
 
-    finite_values = np.concatenate(
+    ax_left.set_ylabel("mean term")
+    ax_right.set_ylabel(r"support change (\%)")
+
+    left_values = np.concatenate(
         [
             alignment[np.isfinite(alignment)],
             penalty[np.isfinite(penalty)],
-            net[np.isfinite(net)] if show_net_marker else np.asarray([], dtype=np.float64),
         ]
     )
-    y_min = min(0.0, float(np.min(finite_values)) if finite_values.size else 0.0)
-    y_max = max(0.0, float(np.max(finite_values)) if finite_values.size else 1.0)
-    span = max(y_max - y_min, 1e-6)
-    bottom_pad = 0.14 * span if y_min < 0.0 else 0.08 * span
-    top_pad = 0.10 * span
-    ax.set_ylim(y_min - bottom_pad, y_max + top_pad)
+    left_max = max(0.0, float(np.max(left_values)) if left_values.size else 1.0)
+    left_bottom = -max(left_max * 0.05, 5e-4)
+    ax_left.set_ylim(left_bottom, left_max * 1.12 if left_max > 0.0 else 1.0)
+
+    right_values = support_change_pct[np.isfinite(support_change_pct)]
+    right_max = max(0.0, float(np.max(right_values)) if right_values.size else 1.0)
+    right_bottom = -max(right_max * 0.05, 0.2)
+    ax_right.set_ylim(right_bottom, right_max * 1.12 if right_max > 0.0 else 1.0)
 
     tick_labels = [
         rf"{label}" + "\n" + rf"{share:.1f}\%"
         for label, share in zip(labels, share_pct)
     ]
     rotation = 12 if len(labels) > 5 else 0
-    ax.set_xticks(x)
-    ax.set_xticklabels(tick_labels, rotation=rotation, ha="right" if rotation else "center")
+    for axis in (ax_left, ax_right):
+        axis.set_xticks(x)
+        axis.set_xticklabels(
+            tick_labels,
+            rotation=rotation,
+            ha="right" if rotation else "center",
+        )
 
-    legend_handles = [align_bars, penalty_bars]
-    legend_labels = ["Alignment gain", "Curvature penalty"]
-    if net_handle is not None:
-        legend_handles.append(net_handle)
-        legend_labels.append("Net gain")
+    legend_handles = [align_bars, penalty_bars, support_bars]
+    legend_labels = ["Alignment gain", "Curvature penalty", "Support change"]
     legend = fig.legend(
         legend_handles,
         legend_labels,
         loc="upper center",
         ncol=len(legend_handles),
-        bbox_to_anchor=(0.5, 0.965),
+        bbox_to_anchor=(0.5, 0.958),
         frameon=True,
         fancybox=False,
         framealpha=1.0,
@@ -348,7 +371,7 @@ def main() -> None:
     parser.add_argument(
         "--hide-net-marker",
         action="store_true",
-        help="Hide the net-gain marker from the lower panel.",
+        help="Deprecated; net markers are no longer plotted.",
     )
     args = parser.parse_args()
 
@@ -365,11 +388,7 @@ def main() -> None:
     merge_tail_from = None if args.no_merge_tail else float(args.merge_tail_from)
     rows = _load_entropy_table(input_path)
     plot_payload = _prepare_plot_payload(rows, merge_tail_from=merge_tail_from)
-    _plot_binned_figure(
-        output_path,
-        plot_payload=plot_payload,
-        show_net_marker=not args.hide_net_marker,
-    )
+    _plot_binned_figure(output_path, plot_payload=plot_payload)
     print(f"Wrote {output_path}")
 
 
