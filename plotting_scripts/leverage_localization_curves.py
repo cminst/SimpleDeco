@@ -237,9 +237,9 @@ def _plot_binned_figure(
         2,
         figsize=(5.5, 3.2),
         constrained_layout=False,
-        gridspec_kw={"width_ratios": (0.95, 0.9)},
+        gridspec_kw={"width_ratios": (0.95, 0.98)},
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.30, top=0.855, wspace=0.28)
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.30, top=0.855, wspace=0.2)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -282,7 +282,7 @@ def _plot_binned_figure(
         axis.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        axis.set_xlabel("normalized entropy bin", labelpad=20)
+        axis.set_xlabel("normalized entropy bin", labelpad=17)
 
     ax_left.set_ylabel("mean term")
     ax_right.set_ylabel(r"support change (\%)")
@@ -314,7 +314,7 @@ def _plot_binned_figure(
         for xpos, share in zip(x, share_pct):
             axis.text(
                 xpos,
-                -0.105,
+                -0.118,
                 rf"{share:.1f}\%",
                 transform=axis.get_xaxis_transform(),
                 ha="center",
