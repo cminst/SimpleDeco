@@ -235,7 +235,7 @@ def _plot_binned_figure(
     fig, (ax_left, ax_right) = plt.subplots(
         1,
         2,
-        figsize=(5.5, 2.5),
+        figsize=(5.5, 2.7),
         constrained_layout=False,
         gridspec_kw={"width_ratios": (1.0, 1.0)},
     )
@@ -314,7 +314,7 @@ def _plot_binned_figure(
         for xpos, share in zip(x, share_pct):
             axis.text(
                 xpos,
-                -0.118,
+                -0.128,
                 rf"{share:.1f}\%",
                 transform=axis.get_xaxis_transform(),
                 ha="center",
