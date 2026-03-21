@@ -241,7 +241,7 @@ def _plot_binned_figure(
     support_change_pct = np.asarray(plot_payload["support_change_pct"], dtype=np.float64)
 
     x = np.arange(len(alignment), dtype=np.float64)
-    bar_width = 0.34
+    bar_width = 0.37
     blue = "#4E79A7"
     red = "#E15759"
 
@@ -282,7 +282,7 @@ def _plot_binned_figure(
     support_bars = ax_right.bar(
         x,
         support_change_pct,
-        width=0.68,
+        width=0.74,
         color="#8FA4BF",
         edgecolor="#FFFFFF",
         linewidth=0.65,
