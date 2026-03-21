@@ -302,7 +302,7 @@ def _plot_binned_figure(
     ax_right.set_ylim(right_bottom, right_max * 1.12 if right_max > 0.0 else 1.0)
 
     tick_labels = [rf"{label}" for label in labels]
-    rotation = 18 if len(labels) > 1 else 0
+    rotation = 30 if len(labels) > 1 else 0
     for axis in (ax_left, ax_right):
         axis.set_xticks(x)
         axis.set_xticklabels(
