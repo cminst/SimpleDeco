@@ -225,7 +225,6 @@ def _plot_binned_figure(
     alignment = np.asarray(plot_payload["alignment"], dtype=np.float64)
     penalty = np.asarray(plot_payload["penalty"], dtype=np.float64)
     support_change_pct = np.asarray(plot_payload["support_change_pct"], dtype=np.float64)
-    share_pct = np.asarray(plot_payload["covered_share_pct"], dtype=np.float64)
 
     x = np.arange(len(labels), dtype=np.float64)
     bar_width = 0.34
@@ -237,9 +236,9 @@ def _plot_binned_figure(
         2,
         figsize=(5.5, 3.0),
         constrained_layout=False,
-        gridspec_kw={"width_ratios": (1.0, 0.8)},
+        gridspec_kw={"width_ratios": (0.95, 0.75)},
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.31, top=0.855, wspace=0.14)
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.24, top=0.855, wspace=0.3)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -302,11 +301,8 @@ def _plot_binned_figure(
     right_bottom = -max(right_max * 0.05, 0.2)
     ax_right.set_ylim(right_bottom, right_max * 1.12 if right_max > 0.0 else 1.0)
 
-    tick_labels = [
-        rf"{label}" + "\n" + rf"{share:.1f}\%"
-        for label, share in zip(labels, share_pct)
-    ]
-    rotation = 12 if len(labels) > 5 else 0
+    tick_labels = [rf"{label}" for label in labels]
+    rotation = 18 if len(labels) > 1 else 0
     for axis in (ax_left, ax_right):
         axis.set_xticks(x)
         axis.set_xticklabels(
