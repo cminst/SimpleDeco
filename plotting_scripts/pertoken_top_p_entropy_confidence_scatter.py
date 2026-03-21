@@ -308,8 +308,6 @@ def _plot_trends(
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.tick_params(axis="x", pad=1.0)
-        axis.axhline(0.0, color="#98A2B3", linewidth=0.9, zorder=6, clip_on=False)
-        # axis.set_ylim(0.0, 1.0)
 
     plum = "#B07AA1"
 
