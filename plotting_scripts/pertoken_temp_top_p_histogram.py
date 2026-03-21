@@ -156,7 +156,7 @@ def _plot_histograms(
     _style_axes(ax_left)
     _style_axes(ax_right)
 
-    blue = "#4E79A7"
+    warm_orange = "#D39A6A"
     plum = "#B07AA1"
 
     ax_left.bar(
@@ -164,7 +164,7 @@ def _plot_histograms(
         temp_hist,
         width=temp_widths,
         align="edge",
-        color=blue,
+        color=warm_orange,
         edgecolor="#FFFFFF",
         linewidth=0.65,
         alpha=0.95,
@@ -193,13 +193,14 @@ def _plot_histograms(
     ax_left.set_xticks(np.linspace(0.0, 2.0, 5))
     ax_right.set_xticks(np.linspace(0.0, 1.0, 6))
 
-    ymax = max(
-        float(np.max(temp_hist)) if temp_hist.size else 0.0,
-        float(np.max(top_p_hist)) if top_p_hist.size else 0.0,
-    )
-    upper = ymax * 1.12 if ymax > 0.0 else 1.0
-    ax_left.set_ylim(0.0, upper)
-    ax_right.set_ylim(0.0, upper)
+    temp_max = float(np.max(temp_hist)) if temp_hist.size else 0.0
+    top_p_max = float(np.max(top_p_hist)) if top_p_hist.size else 0.0
+    temp_lower = -max(temp_max * 0.035, 0.08)
+    top_p_lower = -max(top_p_max * 0.035, 0.08)
+    temp_upper = temp_max * 1.12 if temp_max > 0.0 else 1.0
+    top_p_upper = top_p_max * 1.12 if top_p_max > 0.0 else 1.0
+    ax_left.set_ylim(temp_lower, temp_upper)
+    ax_right.set_ylim(top_p_lower, top_p_upper)
 
     ax_left.set_ylabel(r"share of tokens (\%)")
     ax_left.set_xlabel(r"(a) Predicted temperature", labelpad=6)
