@@ -51,6 +51,26 @@ autodeco_volume = modal.Volume.from_name("autodeco", create_if_missing=True)
 app = modal.App(image=image, name="AutoDeco Experiments")
 
 
+def _sync_repo_to_remote(repo: pathlib.Path):
+    branch = subprocess.check_output(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=repo,
+        text=True,
+    ).strip()
+    if branch == "HEAD":
+        branch = "main"
+
+    subprocess.run(["git", "fetch", "origin"], check=True, cwd=repo)
+    subprocess.run(["git", "reset", "--hard", f"origin/{branch}"], check=True, cwd=repo)
+    subprocess.run(["git", "clean", "-ffd"], check=True, cwd=repo)
+    subprocess.run(["git", "submodule", "sync", "--recursive"], check=True, cwd=repo)
+    subprocess.run(
+        ["git", "submodule", "update", "--init", "--recursive", "--force"],
+        check=True,
+        cwd=repo,
+    )
+
+
 def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
     if model_name == "dsr17b":
         downloads = [
@@ -139,12 +159,9 @@ def runwithgpu(model_name: str):
         _ensure_model_downloaded(repo, model_name)
         autodeco_volume.commit()
     else:
-        subprocess.run(
-            ["git", "pull", "--recurse-submodules"],
-            check=True,
-            cwd=repo,
-        )
+        _sync_repo_to_remote(repo)
         _ensure_model_downloaded(repo, model_name)
+        autodeco_volume.commit()
 
     os.chdir("/root")
 
