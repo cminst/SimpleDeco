@@ -19,10 +19,25 @@ import io
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import colors as mcolors
 from matplotlib.figure import Figure
 
 TEMP_COLOR_MIN = 0.0
 TEMP_COLOR_MAX = 1.5
+TEMP_COLOR_GAMMA = 0.72
+TEMP_COLOR_STOPS = [
+    (0.00, "#223A5E"),
+    (0.12, "#355C8C"),
+    (0.26, "#4E79A7"),
+    (0.42, "#76B7B2"),
+    (0.62, "#D9C7A1"),
+    (0.80, "#D39A6A"),
+    (1.00, "#E15759"),
+]
+TEMP_TOKEN_CMAP = mcolors.LinearSegmentedColormap.from_list(
+    "request_temp_tokens",
+    TEMP_COLOR_STOPS,
+)
 
 
 def _find_ranges(text: str, start_tag: str, end_tag: str) -> List[Tuple[int, int]]:
@@ -102,39 +117,30 @@ def _empty_float_series(length: int) -> List[float | None]:
     return [None for _ in range(length)]
 
 
-def _temp_to_hex(value: float, vmin: float, vmax: float) -> str:
-    """Map a scalar value to a blue-to-red color hex string."""
+def _normalize_temp(value: float, vmin: float, vmax: float) -> float:
+    """Normalize temperature values while expanding the low-temperature regime."""
     if vmax <= vmin:
-        t = 0.0
-    else:
-        t = (value - vmin) / (vmax - vmin)
-        t = max(0.0, min(1.0, t))
+        return 0.0
+    t = (value - vmin) / (vmax - vmin)
+    t = max(0.0, min(1.0, t))
+    return t ** TEMP_COLOR_GAMMA
 
-    hue = 210.0 * (1.0 - t)
-    saturation = 0.85
-    lightness = 0.75
 
-    c = (1.0 - abs(2.0 * lightness - 1.0)) * saturation
-    h_prime = hue / 60.0
-    x = c * (1.0 - abs(h_prime % 2.0 - 1.0))
-    r1 = g1 = b1 = 0.0
-    if 0.0 <= h_prime < 1.0:
-        r1, g1, b1 = c, x, 0.0
-    elif 1.0 <= h_prime < 2.0:
-        r1, g1, b1 = x, c, 0.0
-    elif 2.0 <= h_prime < 3.0:
-        r1, g1, b1 = 0.0, c, x
-    elif 3.0 <= h_prime < 4.0:
-        r1, g1, b1 = 0.0, x, c
-    elif 4.0 <= h_prime < 5.0:
-        r1, g1, b1 = x, 0.0, c
-    elif 5.0 <= h_prime <= 6.0:
-        r1, g1, b1 = c, 0.0, x
-    m = lightness - c / 2.0
-    r = int(round((r1 + m) * 255))
-    g = int(round((g1 + m) * 255))
-    b = int(round((b1 + m) * 255))
-    return f"#{r:02X}{g:02X}{b:02X}"
+def _temp_to_hex(value: float, vmin: float, vmax: float) -> str:
+    """Map a scalar temperature to a paper-style color hex string."""
+    return mcolors.to_hex(TEMP_TOKEN_CMAP(_normalize_temp(value, vmin, vmax))).upper()
+
+
+def _temp_gradient_css(vmin: float, vmax: float, *, steps: int = 12) -> str:
+    """Build a CSS gradient that matches the temperature token colormap."""
+    if steps < 2:
+        steps = 2
+    gradient_parts: List[str] = []
+    for idx in range(steps):
+        frac = idx / float(steps - 1)
+        value = vmin + frac * (vmax - vmin)
+        gradient_parts.append(f"{_temp_to_hex(value, vmin, vmax)} {frac * 100.0:.1f}%")
+    return ", ".join(gradient_parts)
 
 
 def plot_request_output_temps(
@@ -253,12 +259,14 @@ def plot_request_output_temps(
     code_mask = _mask_from_ranges(spans, code_ranges)
 
     fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_facecolor("#FFFFFF")
+    ax.set_facecolor("#FCFCFD")
     plot_temps = [t if t is not None else float("nan") for t in aligned_temps]
     ax.plot(
         range(len(plot_temps)),
         plot_temps,
-        color="#2E3A59",
-        linewidth=1.6,
+        color="#4E79A7",
+        linewidth=1.8,
         label="Predicted temperature",
     )
     if aligned_smoothed is not None:
@@ -266,8 +274,8 @@ def plot_request_output_temps(
         ax.plot(
             range(len(plot_smoothed)),
             plot_smoothed,
-            color="#E07A5F",
-            linewidth=1.8,
+            color="#D39A6A",
+            linewidth=2.0,
             label=f"Smoothed (window={smooth_window})",
         )
 
@@ -279,8 +287,8 @@ def plot_request_output_temps(
         ax.axvspan(
             start,
             end,
-            color="#CFE8FF",
-            alpha=0.35,
+            color="#DCE8F5",
+            alpha=0.45,
             label="Inside <think>" if not think_labeled else None,
         )
         think_labeled = True
@@ -288,34 +296,50 @@ def plot_request_output_temps(
         ax.axvspan(
             start,
             end,
-            color="#FFF2B2",
-            alpha=0.35,
+            color="#F3E6BF",
+            alpha=0.45,
             label="Inside code" if not code_labeled else None,
         )
         code_labeled = True
 
     if prompt_len > 0:
-        ax.axvline(prompt_len - 1, color="#888888", linestyle="--", linewidth=1, label="Prompt end")
+        ax.axvline(
+            prompt_len - 1,
+            color="#98A2B3",
+            linestyle="--",
+            linewidth=1.0,
+            label="Prompt end",
+        )
 
     ax.set_xlabel("Token position")
     ax.set_ylabel("Predicted temperature")
     ax.set_xlim(0, max(len(token_ids) - 1, 1))
-    ax.grid(alpha=0.2)
+    ax.grid(axis="y", color="#E7ECF2", linewidth=0.7, alpha=0.9)
+    ax.grid(axis="x", color="#F2F4F7", linewidth=0.45, alpha=0.55)
+    for spine_name in ("top", "right", "left", "bottom"):
+        ax.spines[spine_name].set_visible(True)
+        ax.spines[spine_name].set_color("#98A2B3")
+        ax.spines[spine_name].set_linewidth(0.9)
 
     ax2 = None
     if aligned_top_p is not None:
         ax2 = ax.twinx()
+        ax2.set_facecolor("none")
         plot_top_p = [t if t is not None else float("nan") for t in aligned_top_p]
         ax2.plot(
             range(len(plot_top_p)),
             plot_top_p,
-            color="#6C8EBF",
+            color="#B07AA1",
             linewidth=1.4,
-            alpha=0.85,
+            alpha=0.9,
             label="Top-p",
         )
         ax2.set_ylabel("Top-p")
         ax2.set_ylim(0.0, 1.05)
+        for spine_name in ("top", "right", "left", "bottom"):
+            if spine_name in ax2.spines:
+                ax2.spines[spine_name].set_color("#98A2B3")
+                ax2.spines[spine_name].set_linewidth(0.9)
 
     if title is None:
         request_id = getattr(request_output, "request_id", "unknown")
@@ -327,7 +351,14 @@ def plot_request_output_temps(
         handles2, labels2 = ax2.get_legend_handles_labels()
         handles += handles2
         labels += labels2
-    ax.legend(handles, labels, loc="upper right")
+    ax.legend(
+        handles,
+        labels,
+        loc="upper right",
+        frameon=True,
+        facecolor="#FFFFFF",
+        edgecolor="#D0D5DD",
+    )
 
     fig.tight_layout()
     img_data_uri = None
@@ -345,6 +376,14 @@ def plot_request_output_temps(
             f.write(base64.b64decode(img_data_uri.split(',')[1]))
 
         gen_min, gen_max = TEMP_COLOR_MIN, TEMP_COLOR_MAX
+        temp_gradient = _temp_gradient_css(gen_min, gen_max)
+        gradient_ticks = [
+            gen_min,
+            gen_min + 0.25 * (gen_max - gen_min),
+            gen_min + 0.50 * (gen_max - gen_min),
+            gen_min + 0.75 * (gen_max - gen_min),
+            gen_max,
+        ]
 
         output_text_path = os.path.join(output_dir, "temp_trace.txt")
         with open(output_text_path, "w", encoding="utf-8") as f:
@@ -403,11 +442,18 @@ def plot_request_output_temps(
                 "<!doctype html>\n"
                 "<html><head><meta charset='utf-8'><title>Temp Trace</title>\n"
                 "<style>\n"
-                "body { font-family: Arial, sans-serif; }\n"
+                "body { font-family: Arial, sans-serif; color: #1F2937; background: #FFFFFF; }\n"
+                ".panel { border: 1px solid #E5E7EB; border-radius: 10px; padding: 14px 16px; background: #FCFCFD; }\n"
+                ".legend-row { display: flex; align-items: center; gap: 12px; margin: 10px 0 14px; }\n"
+                ".gradient-bar { flex: 1 1 auto; min-width: 220px; height: 14px; border-radius: 999px; "
+                f"background: linear-gradient(90deg, {temp_gradient}); border: 1px solid #D0D5DD; }}\n"
+                ".gradient-labels { display: flex; justify-content: space-between; gap: 8px; "
+                "font-size: 11px; color: #667085; margin-top: 6px; }\n"
                 ".token-box { white-space: pre-wrap; word-break: break-word; "
                 "border: 1px solid #DDD; padding: 12px; border-radius: 8px; "
-                "background: #FAFAFA; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }\n"
-                ".tok { padding: 0 1px; border-radius: 3px; position: relative; }\n"
+                "background: #FAFAFA; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; "
+                "line-height: 1.55; font-size: 13px; }\n"
+                ".tok { padding: 0 1px; border-radius: 3px; position: relative; box-decoration-break: clone; }\n"
                 ".tok:hover::after { "
                 "content: attr(data-tip); "
                 "position: absolute; "
@@ -428,9 +474,21 @@ def plot_request_output_temps(
                 f"<img src='{img_data_uri}' style='max-width: 100%; height: auto;' />\n"
                 f"<p>Prompt length: {prompt_len_display} tokens, total length: {len(token_ids)} tokens.</p>\n"
                 "<h3>Generated Tokens (colored by predicted temperature)</h3>\n"
-                f"<div class='legend'>Min: {gen_min:.4f} &nbsp; Max: {gen_max:.4f} "
-                "&nbsp; (hover a token for exact value)</div>\n"
+                "<div class='panel'>\n"
+                "<div class='legend'>Lower temperatures now use a broader cool-color range so small low-end differences remain visible. "
+                "Hover a token for exact values.</div>\n"
+                "<div class='legend-row'>\n"
+                f"<div class='gradient-bar' aria-label='temperature color scale from {gen_min:.4f} to {gen_max:.4f}'></div>\n"
+                "</div>\n"
+                "<div class='gradient-labels'>\n"
+                f"<span>{gradient_ticks[0]:.2f}</span>\n"
+                f"<span>{gradient_ticks[1]:.2f}</span>\n"
+                f"<span>{gradient_ticks[2]:.2f}</span>\n"
+                f"<span>{gradient_ticks[3]:.2f}</span>\n"
+                f"<span>{gradient_ticks[4]:.2f}</span>\n"
+                "</div>\n"
                 f"<div class='token-box'>{generation_html}</div>\n"
+                "</div>\n"
                 "</body></html>\n"
             )
     return fig
