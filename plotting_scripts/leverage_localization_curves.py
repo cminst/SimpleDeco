@@ -310,11 +310,11 @@ def _plot_binned_figure(
             rotation=rotation,
             ha="right" if rotation else "center",
         )
-        axis.tick_params(axis="x", pad=1.5)
+        axis.tick_params(axis="x", pad=0.5)
         for xpos, share in zip(x, share_pct):
             axis.text(
                 xpos,
-                -0.18,
+                -0.105,
                 rf"{share:.1f}\%",
                 transform=axis.get_xaxis_transform(),
                 ha="center",
