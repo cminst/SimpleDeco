@@ -1,4 +1,4 @@
-"""Plot paper-style scatter plots for AutoDeco temperature vs entropy/confidence."""
+"""Plot paper-style trend figures for AutoDeco temperature vs entropy/confidence."""
 from __future__ import annotations
 
 import argparse
@@ -19,10 +19,12 @@ if str(_SCRIPT_DIR) not in sys.path:
 import compare_trajs as ct
 
 
-DEFAULT_OUTPUT = _REPO_ROOT / "figure" / "pertoken_temp_entropy_confidence_scatter.pdf"
+DEFAULT_OUTPUT = _REPO_ROOT / "figure" / "pertoken_temp_entropy_confidence_trends.pdf"
 DEFAULT_DATASET_SPLIT = "tokens"
-DEFAULT_MAX_POINTS = 40_000
+DEFAULT_MAX_POINTS = 0
 DEFAULT_SEED = 0
+DEFAULT_NUM_BINS = 28
+DEFAULT_MIN_BIN_COUNT = 64
 
 
 def _resolve_input_path(raw_path: str) -> Path:
@@ -121,6 +123,10 @@ def _maybe_subsample_points(
     max_points: int,
     seed: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if max_points <= 0:
+        empty = np.empty((0,), dtype=np.float64)
+        return empty, empty, empty
+
     total_points = temperatures.size
     if total_points <= max_points:
         return temperatures, entropies, confidences
@@ -140,11 +146,129 @@ def _style_axes(ax: Any) -> None:
     ax.spines["bottom"].set_zorder(6)
 
 
-def _plot_scatters(
+def _compute_equal_count_trend(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    *,
+    num_bins: int,
+    min_bin_count: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if x_values.size != y_values.size:
+        raise ValueError("x_values and y_values must have the same length.")
+    if x_values.size == 0:
+        raise ValueError("Cannot compute a trend from zero points.")
+
+    order = np.argsort(x_values, kind="mergesort")
+    x_sorted = x_values[order]
+    y_sorted = y_values[order]
+    effective_bins = min(num_bins, max(1, x_sorted.size // min_bin_count))
+    if effective_bins <= 1:
+        effective_bins = 1
+
+    x_centers: list[float] = []
+    y_medians: list[float] = []
+    y_q1: list[float] = []
+    y_q3: list[float] = []
+
+    bin_indices = np.array_split(np.arange(x_sorted.size, dtype=np.int64), effective_bins)
+    for idx in bin_indices:
+        if idx.size < min_bin_count and len(bin_indices) > 1:
+            continue
+        x_chunk = x_sorted[idx]
+        y_chunk = y_sorted[idx]
+        x_centers.append(float(np.median(x_chunk)))
+        y_medians.append(float(np.median(y_chunk)))
+        y_q1.append(float(np.quantile(y_chunk, 0.25)))
+        y_q3.append(float(np.quantile(y_chunk, 0.75)))
+
+    if not x_centers:
+        raise ValueError(
+            "No trend bins remain after applying --min-bin-count. "
+            "Reduce --min-bin-count or --num-bins."
+        )
+
+    return (
+        np.asarray(x_centers, dtype=np.float64),
+        np.asarray(y_medians, dtype=np.float64),
+        np.asarray(y_q1, dtype=np.float64),
+        np.asarray(y_q3, dtype=np.float64),
+    )
+
+
+def _plot_panel(
+    ax: Any,
+    *,
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    x_background: np.ndarray,
+    y_background: np.ndarray,
+    color: str,
+    xlabel: str,
+    xlim: tuple[float, float],
+    num_bins: int,
+    min_bin_count: int,
+) -> None:
+    x_centers, y_medians, y_q1, y_q3 = _compute_equal_count_trend(
+        x_values,
+        y_values,
+        num_bins=num_bins,
+        min_bin_count=min_bin_count,
+    )
+
+    if x_background.size > 0 and y_background.size > 0:
+        ax.scatter(
+            x_background,
+            y_background,
+            s=3.0,
+            alpha=0.06,
+            color="#667085",
+            edgecolors="none",
+            linewidths=0.0,
+            rasterized=True,
+            zorder=1,
+        )
+
+    ax.fill_between(
+        x_centers,
+        y_q1,
+        y_q3,
+        color=color,
+        alpha=0.20,
+        linewidth=0.0,
+        zorder=2,
+    )
+    ax.plot(
+        x_centers,
+        y_medians,
+        color=color,
+        linewidth=1.7,
+        zorder=3,
+    )
+    ax.scatter(
+        x_centers,
+        y_medians,
+        s=10.0,
+        color=color,
+        edgecolors="#FFFFFF",
+        linewidths=0.35,
+        zorder=4,
+    )
+
+    ax.set_xlim(*xlim)
+    ax.set_xlabel(xlabel, labelpad=6)
+
+
+def _plot_trends(
     output_path: Path,
     temperatures: np.ndarray,
     entropies: np.ndarray,
     confidences: np.ndarray,
+    background_temperatures: np.ndarray,
+    background_entropies: np.ndarray,
+    background_confidences: np.ndarray,
+    *,
+    num_bins: int,
+    min_bin_count: int,
 ) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -182,21 +306,9 @@ def _plot_scatters(
     _style_axes(ax_left)
     _style_axes(ax_right)
 
+    entropy_upper = max(float(np.max(entropies)) * 1.03, 1.0)
     temp_color = "#D39A6A"
     confidence_color = "#4E79A7"
-    scatter_kwargs = {
-        "s": 5.0,
-        "alpha": 0.24,
-        "edgecolors": "none",
-        "linewidths": 0.0,
-        "rasterized": True,
-        "zorder": 3,
-    }
-
-    ax_left.scatter(entropies, temperatures, color=temp_color, **scatter_kwargs)
-    ax_right.scatter(confidences, temperatures, color=confidence_color, **scatter_kwargs)
-
-    entropy_upper = max(float(np.max(entropies)) * 1.03, 1.0)
 
     for axis in (ax_left, ax_right):
         axis.grid(color="#E7ECF2", linewidth=0.55, alpha=0.9)
@@ -205,13 +317,34 @@ def _plot_scatters(
         axis.tick_params(axis="x", pad=1.0)
         axis.set_ylim(0.0, 2.0)
 
-    ax_left.set_xlim(0.0, entropy_upper)
-    ax_right.set_xlim(0.0, 1.0)
+    _plot_panel(
+        ax_left,
+        x_values=entropies,
+        y_values=temperatures,
+        x_background=background_entropies,
+        y_background=background_temperatures,
+        color=temp_color,
+        xlabel=r"(a) Entropy $H$",
+        xlim=(0.0, entropy_upper),
+        num_bins=num_bins,
+        min_bin_count=min_bin_count,
+    )
+    _plot_panel(
+        ax_right,
+        x_values=confidences,
+        y_values=temperatures,
+        x_background=background_confidences,
+        y_background=background_temperatures,
+        color=confidence_color,
+        xlabel=r"(b) Top-1 confidence $p_{\max}$",
+        xlim=(0.0, 1.0),
+        num_bins=num_bins,
+        min_bin_count=min_bin_count,
+    )
+
     ax_right.set_xticks(np.linspace(0.0, 1.0, 5))
 
     ax_left.set_ylabel(r"Predicted temperature")
-    ax_left.set_xlabel(r"(a) Entropy $H$", labelpad=6)
-    ax_right.set_xlabel(r"(b) Top-1 confidence $p_{\max}$", labelpad=6)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
@@ -220,7 +353,7 @@ def _plot_scatters(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate paper-style scatter plots for per-token temperature vs entropy/confidence.",
+        description="Generate paper-style trend plots for per-token temperature vs entropy/confidence.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -242,18 +375,37 @@ def main() -> None:
         "--max-points",
         type=int,
         default=DEFAULT_MAX_POINTS,
-        help="Maximum number of points to draw. If exceeded, randomly subsample without replacement.",
+        help=(
+            "Maximum number of faint background points to draw. "
+            "Use 0 to disable the raw-point backdrop and only show the trend."
+        ),
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=DEFAULT_SEED,
-        help="Random seed used for deterministic scatter subsampling.",
+        help="Random seed used for deterministic background-point subsampling.",
+    )
+    parser.add_argument(
+        "--num-bins",
+        type=int,
+        default=DEFAULT_NUM_BINS,
+        help="Approximate number of equal-count bins used to summarize the temperature trend.",
+    )
+    parser.add_argument(
+        "--min-bin-count",
+        type=int,
+        default=DEFAULT_MIN_BIN_COUNT,
+        help="Minimum number of tokens required for a trend bin to be shown.",
     )
     args = parser.parse_args()
 
-    if args.max_points <= 0:
-        raise ValueError("--max-points must be positive.")
+    if args.max_points < 0:
+        raise ValueError("--max-points must be nonnegative.")
+    if args.num_bins <= 0:
+        raise ValueError("--num-bins must be positive.")
+    if args.min_bin_count <= 0:
+        raise ValueError("--min-bin-count must be positive.")
 
     input_path = _resolve_input_path(args.input)
     output_path = _resolve_input_path(args.output)
@@ -281,7 +433,7 @@ def main() -> None:
         lower=0.0,
         upper=1.0,
     )
-    temperatures, entropies, confidences = _maybe_subsample_points(
+    background_temperatures, background_entropies, background_confidences = _maybe_subsample_points(
         temperatures,
         entropies,
         confidences,
@@ -289,11 +441,16 @@ def main() -> None:
         seed=int(args.seed),
     )
 
-    _plot_scatters(
+    _plot_trends(
         output_path=output_path,
         temperatures=temperatures,
         entropies=entropies,
         confidences=confidences,
+        background_temperatures=background_temperatures,
+        background_entropies=background_entropies,
+        background_confidences=background_confidences,
+        num_bins=int(args.num_bins),
+        min_bin_count=int(args.min_bin_count),
     )
     print(f"Wrote {output_path}")
 
