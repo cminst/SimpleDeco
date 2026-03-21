@@ -309,7 +309,7 @@ def _plot_trends(
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.tick_params(axis="x", pad=1.0)
         axis.axhline(0.0, color="#98A2B3", linewidth=0.9, zorder=6, clip_on=False)
-        axis.set_ylim(0.0, 1.0)
+        # axis.set_ylim(0.0, 1.0)
 
     plum = "#B07AA1"
 
@@ -338,7 +338,7 @@ def _plot_trends(
         min_bin_count=min_bin_count,
     )
 
-    ax_left.set_ylabel(r"Predicted top-$p$ $\hat{p}$")
+    ax_left.set_ylabel(r"Predicted top-$p$")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
