@@ -235,10 +235,11 @@ def _plot_binned_figure(
     fig, (ax_left, ax_right) = plt.subplots(
         1,
         2,
-        figsize=(7.9, 3.15),
+        figsize=(5.5, 2.0),
+        gridspec_kw={"width_ratios": [1.22, 0.88]},
         constrained_layout=False,
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.31, top=0.855, wspace=0.18)
+    fig.subplots_adjust(left=0.075, right=0.985, bottom=0.39, top=0.76, wspace=0.12)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -281,10 +282,12 @@ def _plot_binned_figure(
         axis.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        axis.set_xlabel("normalized entropy bin")
 
     ax_left.set_ylabel("mean term")
+    ax_left.set_xlabel("normalized entropy bin")
     ax_right.set_ylabel(r"support change (\%)")
+    ax_right.yaxis.set_label_position("right")
+    ax_right.set_xlabel("")
 
     left_values = np.concatenate(
         [
@@ -306,13 +309,18 @@ def _plot_binned_figure(
         for label, share in zip(labels, share_pct)
     ]
     rotation = 12 if len(labels) > 5 else 0
-    for axis in (ax_left, ax_right):
-        axis.set_xticks(x)
-        axis.set_xticklabels(
-            tick_labels,
-            rotation=rotation,
-            ha="right" if rotation else "center",
-        )
+    ax_left.set_xticks(x)
+    ax_left.set_xticklabels(
+        tick_labels,
+        rotation=rotation,
+        ha="right" if rotation else "center",
+    )
+    ax_right.set_xticks(x)
+    ax_right.set_xticklabels(
+        labels,
+        rotation=rotation,
+        ha="right" if rotation else "center",
+    )
 
     legend_handles = [align_bars, penalty_bars, support_bars]
     legend_labels = ["Alignment gain", "Curvature penalty", "Support change"]
@@ -321,17 +329,17 @@ def _plot_binned_figure(
         legend_labels,
         loc="upper center",
         ncol=len(legend_handles),
-        bbox_to_anchor=(0.5, 0.958),
+        bbox_to_anchor=(0.5, 1.03),
         frameon=True,
         fancybox=False,
         framealpha=1.0,
         edgecolor="#D7DCE3",
         facecolor="#FFFFFF",
-        fontsize=8.5,
-        handlelength=1.9,
+        fontsize=8.1,
+        handlelength=1.7,
         handletextpad=0.55,
-        borderpad=0.35,
-        columnspacing=1.15,
+        borderpad=0.3,
+        columnspacing=0.95,
     )
     legend.get_frame().set_linewidth(0.8)
 
