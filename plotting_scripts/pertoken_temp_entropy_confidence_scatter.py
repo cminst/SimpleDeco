@@ -25,7 +25,7 @@ DEFAULT_MAX_POINTS = 0
 DEFAULT_SEED = 0
 DEFAULT_NUM_BINS = 28
 DEFAULT_MIN_BIN_COUNT = 64
-DEFAULT_CONFIDENCE_XMAX = 1.02
+DEFAULT_CONFIDENCE_XPAD = 0.05
 
 
 def _resolve_input_path(raw_path: str) -> Path:
@@ -334,7 +334,7 @@ def _plot_trends(
         y_background=background_temperatures,
         color=confidence_color,
         xlabel=r"(b) Top-1 confidence $p_{\max}$",
-        xlim=(0.0, DEFAULT_CONFIDENCE_XMAX),
+        xlim=(-DEFAULT_CONFIDENCE_XPAD, 1.0 + DEFAULT_CONFIDENCE_XPAD),
         num_bins=num_bins,
         min_bin_count=min_bin_count,
     )
