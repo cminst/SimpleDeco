@@ -216,23 +216,14 @@ def _plot_binned_figure(
     bar_width = 0.34
     blue = "#4E79A7"
     red = "#E15759"
-    gray = "#B9C1CB"
     black = "#1F2937"
 
-    fig, (ax_top, ax_bottom) = plt.subplots(
-        2,
-        1,
-        figsize=(5.5, 4.5),
-        sharex=True,
-        gridspec_kw={"height_ratios": [1.9, 0.95]},
-        constrained_layout=False,
-    )
-    fig.subplots_adjust(left=0.11, right=0.992, bottom=0.17, top=0.89, hspace=0.16)
+    fig, ax = plt.subplots(1, 1, figsize=(5.5, 3.15), constrained_layout=False)
+    fig.subplots_adjust(left=0.11, right=0.992, bottom=0.30, top=0.86)
 
-    _style_axes(ax_top)
-    _style_axes(ax_bottom)
+    _style_axes(ax)
 
-    align_bars = ax_top.bar(
+    align_bars = ax.bar(
         x - bar_width / 2.0,
         alignment,
         width=bar_width,
@@ -243,7 +234,7 @@ def _plot_binned_figure(
         zorder=3,
         label="Alignment gain",
     )
-    penalty_bars = ax_top.bar(
+    penalty_bars = ax.bar(
         x + bar_width / 2.0,
         penalty,
         width=bar_width,
@@ -256,7 +247,7 @@ def _plot_binned_figure(
     )
     net_handle = None
     if show_net_marker:
-        (net_handle,) = ax_top.plot(
+        (net_handle,) = ax.plot(
             x,
             net,
             linestyle="None",
@@ -269,11 +260,11 @@ def _plot_binned_figure(
             label="Net gain",
         )
 
-    ax_top.axhline(0.0, color="#AAB4C0", linewidth=0.85, zorder=1)
-    ax_top.set_ylabel("mean term")
-    ax_top.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
-    ax_top.yaxis.set_major_locator(MaxNLocator(nbins=5))
-    ax_top.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
+    ax.set_ylabel("mean term")
+    ax.set_xlabel("normalized entropy bin")
+    ax.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
 
     finite_values = np.concatenate(
         [
@@ -285,29 +276,17 @@ def _plot_binned_figure(
     y_min = min(0.0, float(np.min(finite_values)) if finite_values.size else 0.0)
     y_max = max(0.0, float(np.max(finite_values)) if finite_values.size else 1.0)
     span = max(y_max - y_min, 1e-6)
-    bottom_pad = 0.12 * span if y_min < 0.0 else 0.06 * span
+    bottom_pad = 0.14 * span if y_min < 0.0 else 0.08 * span
     top_pad = 0.10 * span
-    ax_top.set_ylim(y_min - bottom_pad, y_max + top_pad)
+    ax.set_ylim(y_min - bottom_pad, y_max + top_pad)
 
-    share_bars = ax_bottom.bar(
-        x,
-        share_pct,
-        width=0.72,
-        color=gray,
-        edgecolor="#FFFFFF",
-        linewidth=0.65,
-        alpha=0.88,
-        zorder=3,
-    )
-    ax_bottom.set_ylabel(r"share (\%)")
-    ax_bottom.set_xlabel("normalized entropy bin")
-    ax_bottom.grid(axis="y", color="#E7ECF2", linewidth=0.5, alpha=0.9)
-    ax_bottom.yaxis.set_major_locator(MaxNLocator(nbins=4))
-    ax_bottom.set_ylim(0.0, max(float(np.max(share_pct)) * 1.18, 1.0))
-
+    tick_labels = [
+        rf"{label}" + "\n" + rf"{share:.1f}\%"
+        for label, share in zip(labels, share_pct)
+    ]
     rotation = 12 if len(labels) > 5 else 0
-    ax_bottom.set_xticks(x)
-    ax_bottom.set_xticklabels(labels, rotation=rotation, ha="right" if rotation else "center")
+    ax.set_xticks(x)
+    ax.set_xticklabels(tick_labels, rotation=rotation, ha="right" if rotation else "center")
 
     legend_handles = [align_bars, penalty_bars]
     legend_labels = ["Alignment gain", "Curvature penalty"]
@@ -319,7 +298,7 @@ def _plot_binned_figure(
         legend_labels,
         loc="upper center",
         ncol=len(legend_handles),
-        bbox_to_anchor=(0.5, 0.972),
+        bbox_to_anchor=(0.5, 0.965),
         frameon=True,
         fancybox=False,
         framealpha=1.0,
