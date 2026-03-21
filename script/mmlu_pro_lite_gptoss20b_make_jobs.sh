@@ -17,10 +17,8 @@ TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-32768}"
 REASONING_EFFORT="${REASONING_EFFORT:-medium}"
 
-MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-0.917}"
-MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.526}"
-MEANSHIFT_ALT_TEMP="${MEANSHIFT_ALT_TEMP:-1.032}"
-MEANSHIFT_ALT_TOP_P="${MEANSHIFT_ALT_TOP_P:-0.940}"
+MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-1.032}"
+MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.940}"
 
 case "$REASONING_EFFORT" in
   ""|low|medium|high) ;;
@@ -38,7 +36,7 @@ fi
 TAG_BASE="base-gptoss20b${REASONING_TAG_SUFFIX}"
 TAG_AUTODECO="autodeco-gptoss20b${REASONING_TAG_SUFFIX}"
 TAG_MEANSHIFT="meanshift-${MEANSHIFT_TEMP}-${MEANSHIFT_TOP_P}-gptoss20b${REASONING_TAG_SUFFIX}"
-TAG_MEANSHIFT_ALT="meanshift-${MEANSHIFT_ALT_TEMP}-${MEANSHIFT_ALT_TOP_P}-gptoss20b${REASONING_TAG_SUFFIX}"
+TAG_GREEDY="greedy-gptoss20b${REASONING_TAG_SUFFIX}"
 SEEDS_8=(42 43 44 45 46 47 48 49)
 
 mkdir -p "$(dirname "$JOB_FILE")"
@@ -76,12 +74,13 @@ emit_eval_jobs() {
   local model="$2"
   local temp="$3"
   local top_p="$4"
-  shift 4
+  local num_samples="$5"
+  shift 5
   local -a extra_args=("$@")
 
   for seed in "${SEEDS[@]}"; do
-    local out="${RESULT_ROOT}/${DATASET}/${tag}/maj${NUM_SAMPLES}_seed${seed}.jsonl"
-    local log="${RESULT_ROOT}/${DATASET}/${tag}/maj${NUM_SAMPLES}_seed${seed}.log"
+    local out="${RESULT_ROOT}/${DATASET}/${tag}/maj${num_samples}_seed${seed}.jsonl"
+    local log="${RESULT_ROOT}/${DATASET}/${tag}/maj${num_samples}_seed${seed}.log"
 
     local -a cmd=(
       "$PYTHON_BIN"
@@ -91,7 +90,7 @@ emit_eval_jobs() {
       --temp "$temp"
       --top_p "$top_p"
       --mode "$MODE"
-      --num_samples "$NUM_SAMPLES"
+      --num_samples "$num_samples"
       --tp_size "$TP_SIZE"
       --max_tokens "$MAX_TOKENS"
       --seed "$seed"
@@ -113,15 +112,16 @@ emit_eval_jobs() {
 SEEDS=("${SEEDS_8[@]}")
 
 # 1) Base: all 8 seeds.
-emit_eval_jobs "$TAG_BASE" "$MODEL_BASE" 1.0 1.0
+emit_eval_jobs "$TAG_BASE" "$MODEL_BASE" 1.0 1.0 "$NUM_SAMPLES"
 
 # 2) AutoDeco: all 8 seeds.
-emit_eval_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 0.95
+emit_eval_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 0.95 "$NUM_SAMPLES"
 
 # 3) Meanshift: all 8 seeds with adjusted temp/top-p.
-emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P"
+emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" "$NUM_SAMPLES"
 
-# 4) Alternate Meanshift: all 8 seeds with adjusted temp/top-p.
-emit_eval_jobs "$TAG_MEANSHIFT_ALT" "$MODEL_BASE" "$MEANSHIFT_ALT_TEMP" "$MEANSHIFT_ALT_TOP_P"
+# 4) Greedy: one seed, one sample.
+SEEDS=(42)
+emit_eval_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 0.95 1
 
 echo "Wrote queue jobs to $JOB_FILE"
