@@ -218,7 +218,7 @@ def _plot_binned_figure(
     red = "#E15759"
     black = "#1F2937"
 
-    fig, ax = plt.subplots(1, 1, figsize=(5.5, 3.15), constrained_layout=False)
+    fig, ax = plt.subplots(1, 1, figsize=(4.5, 3.15), constrained_layout=False)
     fig.subplots_adjust(left=0.11, right=0.992, bottom=0.30, top=0.86)
 
     _style_axes(ax)
