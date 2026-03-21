@@ -204,7 +204,7 @@ def _plot_panel(
     y_background: np.ndarray,
     color: str,
     xlabel: str,
-    xlim: tuple[float, float],
+    xlim: tuple[float, float] | None,
     num_bins: int,
     min_bin_count: int,
 ) -> None:
@@ -254,7 +254,8 @@ def _plot_panel(
         zorder=4,
     )
 
-    ax.set_xlim(*xlim)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
     ax.set_xlabel(xlabel, labelpad=6)
 
 
@@ -272,7 +273,6 @@ def _plot_trends(
 ) -> None:
     try:
         import matplotlib.pyplot as plt
-        from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
         raise RuntimeError("matplotlib is required to generate this figure.") from exc
 
@@ -306,16 +306,12 @@ def _plot_trends(
     _style_axes(ax_left)
     _style_axes(ax_right)
 
-    entropy_upper = max(float(np.max(entropies)) * 1.03, 1.0)
     temp_color = "#D39A6A"
     confidence_color = "#4E79A7"
 
     for axis in (ax_left, ax_right):
         axis.grid(color="#E7ECF2", linewidth=0.55, alpha=0.9)
-        axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        axis.xaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.tick_params(axis="x", pad=1.0)
-        axis.set_ylim(0.0, 2.0)
 
     _plot_panel(
         ax_left,
@@ -325,7 +321,7 @@ def _plot_trends(
         y_background=background_temperatures,
         color=temp_color,
         xlabel=r"(a) Entropy $H$",
-        xlim=(0.0, entropy_upper),
+        xlim=None,
         num_bins=num_bins,
         min_bin_count=min_bin_count,
     )
@@ -341,8 +337,6 @@ def _plot_trends(
         num_bins=num_bins,
         min_bin_count=min_bin_count,
     )
-
-    ax_right.set_xticks(np.linspace(0.0, 1.0, 5))
 
     ax_left.set_ylabel(r"Predicted temperature")
 
