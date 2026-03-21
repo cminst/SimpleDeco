@@ -17,6 +17,11 @@ TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-32768}"
 REASONING_EFFORT="${REASONING_EFFORT:-}"
 
+MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-0.917}"
+MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.526}"
+MEANSHIFT_ALT_TEMP="${MEANSHIFT_ALT_TEMP:-0.898}"
+MEANSHIFT_ALT_TOP_P="${MEANSHIFT_ALT_TOP_P:-0.652}"
+
 case "$REASONING_EFFORT" in
   ""|low|medium|high) ;;
   *)
@@ -32,7 +37,8 @@ fi
 
 TAG_BASE="base-gptoss20b${REASONING_TAG_SUFFIX}"
 TAG_AUTODECO="autodeco-gptoss20b${REASONING_TAG_SUFFIX}"
-TAG_MEANSHIFT="meanshift-0.917-0.526-gptoss20b${REASONING_TAG_SUFFIX}"
+TAG_MEANSHIFT="meanshift-${MEANSHIFT_TEMP}-${MEANSHIFT_TOP_P}-gptoss20b${REASONING_TAG_SUFFIX}"
+TAG_MEANSHIFT_ALT="meanshift-${MEANSHIFT_ALT_TEMP}-${MEANSHIFT_ALT_TOP_P}-gptoss20b${REASONING_TAG_SUFFIX}"
 SEEDS_8=(42 43 44 45 46 47 48 49)
 
 mkdir -p "$(dirname "$JOB_FILE")"
@@ -113,6 +119,9 @@ emit_eval_jobs "$TAG_BASE" "$MODEL_BASE" 1.0 1.0
 emit_eval_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 0.95
 
 # 3) Meanshift: all 8 seeds with adjusted temp/top-p.
-emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" 0.917 0.526
+emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P"
+
+# 4) Alternate Meanshift: all 8 seeds with adjusted temp/top-p.
+emit_eval_jobs "$TAG_MEANSHIFT_ALT" "$MODEL_BASE" "$MEANSHIFT_ALT_TEMP" "$MEANSHIFT_ALT_TOP_P"
 
 echo "Wrote queue jobs to $JOB_FILE"
