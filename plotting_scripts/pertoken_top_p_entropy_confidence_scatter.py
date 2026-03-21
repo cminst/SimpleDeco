@@ -272,7 +272,6 @@ def _plot_trends(
 ) -> None:
     try:
         import matplotlib.pyplot as plt
-        from matplotlib.ticker import MaxNLocator
     except Exception as exc:  # pragma: no cover - optional dependency
         raise RuntimeError("matplotlib is required to generate this figure.") from exc
 
@@ -306,7 +305,6 @@ def _plot_trends(
     for axis in (ax_left, ax_right):
         _style_axes(axis)
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
-        axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.tick_params(axis="x", pad=1.0)
 
     plum = "#B07AA1"
@@ -331,7 +329,7 @@ def _plot_trends(
         y_background=background_top_ps,
         color=plum,
         xlabel=r"(b) Top-1 confidence $p_{\max}$",
-        xlim=(0.0, 1.0),
+        xlim=None,
         num_bins=num_bins,
         min_bin_count=min_bin_count,
     )
