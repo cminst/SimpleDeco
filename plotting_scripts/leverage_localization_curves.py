@@ -92,12 +92,6 @@ def _tail_label(left: float) -> str:
     return rf"$\geq {_format_edge(left)}$"
 
 
-def _format_tick_edge(value: float, *, force_one_decimal: bool = False) -> str:
-    if force_one_decimal and abs(float(value) - 1.0) < 1e-9:
-        return "1.0"
-    return _format_edge(value)
-
-
 def _prepare_plot_payload(
     rows: list[dict[str, Any]],
     merge_tail_from: float | None,
@@ -131,13 +125,13 @@ def _prepare_plot_payload(
     if np.any(left_arr[1:] < left_arr[:-1]) or np.any(right_arr[1:] < right_arr[:-1]):
         raise ValueError("Entropy bins must appear in nondecreasing order.")
 
-    merged_rows: list[dict[str, float]] = []
+    merged_rows: list[dict[str, float | str]] = []
     tail_rows: list[dict[str, float]] = []
     for row in parsed_rows:
         if merge_tail_from is not None and row["left"] >= merge_tail_from:
             tail_rows.append(row)
             continue
-        merged_rows.append(dict(row))
+        merged_rows.append({**row, "label": _interval_label(row["left"], row["right"])})
 
     if tail_rows:
         weights = np.asarray([row["count_covered"] for row in tail_rows], dtype=np.float64)
@@ -158,6 +152,7 @@ def _prepare_plot_payload(
                     np.asarray([row["support_change"] for row in tail_rows], dtype=np.float64),
                     weights,
                 ),
+                "label": _interval_label(float(tail_rows[0]["left"]), float(tail_rows[-1]["right"])),
             }
         )
 
@@ -182,17 +177,8 @@ def _prepare_plot_payload(
             "No finite support_change_rate_covered or support_change_rate values were found."
         )
 
-    edge_labels = [_format_tick_edge(float(merged_rows[0]["left"]))]
-    for row_idx, row in enumerate(merged_rows):
-        edge_labels.append(
-            _format_tick_edge(
-                float(row["right"]),
-                force_one_decimal=row_idx == len(merged_rows) - 1,
-            )
-        )
-
     return {
-        "edge_labels": edge_labels,
+        "labels": [str(row["label"]) for row in merged_rows],
         "alignment": alignment,
         "penalty": penalty,
         "support_change_pct": 100.0 * support_change,
@@ -235,7 +221,7 @@ def _plot_binned_figure(
         }
     )
 
-    edge_labels = list(plot_payload["edge_labels"])
+    labels = list(plot_payload["labels"])
     alignment = np.asarray(plot_payload["alignment"], dtype=np.float64)
     penalty = np.asarray(plot_payload["penalty"], dtype=np.float64)
     support_change_pct = np.asarray(plot_payload["support_change_pct"], dtype=np.float64)
@@ -253,7 +239,7 @@ def _plot_binned_figure(
         constrained_layout=False,
         gridspec_kw={"width_ratios": (0.95, 0.9)},
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.31, top=0.855, wspace=0.28)
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.34, top=0.855, wspace=0.28)
 
     _style_axes(ax_left)
     _style_axes(ax_right)
@@ -316,20 +302,19 @@ def _plot_binned_figure(
     right_bottom = -max(right_max * 0.05, 0.2)
     ax_right.set_ylim(right_bottom, right_max * 1.12 if right_max > 0.0 else 1.0)
 
-    edge_positions = np.arange(len(x) + 1, dtype=np.float64) - 0.5
+    rotation = 30 if len(labels) > 1 else 0
     for axis in (ax_left, ax_right):
-        axis.set_xlim(edge_positions[0], edge_positions[-1])
-        axis.set_xticks(edge_positions)
-        axis.set_xticklabels(edge_labels)
+        axis.set_xticks(x)
+        axis.set_xticklabels(
+            labels,
+            rotation=rotation,
+            ha="right" if rotation else "center",
+        )
         axis.tick_params(axis="x", pad=1.5)
-        tick_texts = axis.get_xticklabels()
-        if tick_texts:
-            tick_texts[0].set_ha("left")
-            tick_texts[-1].set_ha("right")
         for xpos, share in zip(x, share_pct):
             axis.text(
                 xpos,
-                -0.155,
+                -0.18,
                 rf"{share:.1f}\%",
                 transform=axis.get_xaxis_transform(),
                 ha="center",
