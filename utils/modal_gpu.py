@@ -194,5 +194,8 @@ def runwithgpu(model_name: str):
 
 @app.local_entrypoint()
 def main(model: str = "dsr17b"):
-    print(f"Running with model {model}")
+    print(f"Running with model {model}, are you sure?")
+    import time
+    time.sleep(3)
+    print("Alrighty!")
     runwithgpu.remote(model)
