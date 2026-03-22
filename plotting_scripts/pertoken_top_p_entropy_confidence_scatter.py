@@ -439,6 +439,7 @@ def main() -> None:
         num_bins=int(args.num_bins),
         min_bin_count=int(args.min_bin_count),
     )
+    print(f"Wrote {output_path}")
 
 
 if __name__ == "__main__":
