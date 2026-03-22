@@ -304,7 +304,6 @@ def _plot_trends(
 
     for axis in (ax_left, ax_right):
         _style_axes(axis)
-        axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.tick_params(axis="x", pad=1.0)
 
     plum = "#B07AA1"

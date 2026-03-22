@@ -309,7 +309,6 @@ def _plot_trends(
     trend_color = "#D39A6A"
 
     for axis in (ax_left, ax_right):
-        axis.grid(color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.tick_params(axis="x", pad=1.0)
 
     _plot_panel(
