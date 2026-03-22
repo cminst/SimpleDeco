@@ -35,6 +35,13 @@ EDT_N="${EDT_N:-0.8}"
 EDT_THETAS=(${EDT_THETAS:-0.1 0.2 0.3})
 TAG_PREFIX_EDT="${TAG_PREFIX_EDT:-edt-r1-distill-qwen7b-meanshift-t${EDT_T0}-p${EDT_TOP_P}}"
 
+# EntropyShift sweep anchored at the same MeanShift operating point.
+ENTROPY_SHIFT_T_BASE="${ENTROPY_SHIFT_T_BASE:-$EDT_T0}"
+ENTROPY_SHIFT_TOP_P="${ENTROPY_SHIFT_TOP_P:-$EDT_TOP_P}"
+ENTROPY_MEAN="${ENTROPY_MEAN:-0.07197317484105381}"
+ENTROPY_SHIFT_DELTAS=(${ENTROPY_SHIFT_DELTAS:-0.10 0.20 0.30})
+TAG_PREFIX_ENTROPYSHIFT="${TAG_PREFIX_ENTROPYSHIFT:-entropyshift-r1-distill-qwen7b-meanshift-t${ENTROPY_SHIFT_T_BASE}-p${ENTROPY_SHIFT_TOP_P}}"
+
 # ConfGate sweep (set thresholds to your target sample-rate quantiles).
 CONF_T_HIGH="${CONF_T_HIGH:-0.9}"
 CONF_THRESHOLDS=(${CONF_THRESHOLDS:-0.4 0.5 0.6})
@@ -84,19 +91,23 @@ emit_eval_jobs() {
   for seed in "${SEEDS[@]}"; do
     local out="ckpt/${DATASET}/${tag}/maj${num_samples}_seed${seed}.jsonl"
     local log="ckpt/${DATASET}/${tag}/maj${num_samples}_seed${seed}.log"
-    emit_job "$out" "$log" \
-      python utils/llm_eval.py \
-      --model_name_or_path "$model" \
-      --dataset "$DATASET" \
-      --temp "$temp" \
-      --top_p "$top_p" \
-      --mode "$mode" \
-      --num_samples "$num_samples" \
-      --tp_size "$TP_SIZE" \
-      --max_tokens "$MAX_TOKENS" \
-      --seed "$seed" \
-      --save_outputs "$out" \
-      "${extra_args[@]}"
+    local -a cmd=(
+      python utils/llm_eval.py
+      --model_name_or_path "$model"
+      --dataset "$DATASET"
+      --temp "$temp"
+      --top_p "$top_p"
+      --mode "$mode"
+      --num_samples "$num_samples"
+      --tp_size "$TP_SIZE"
+      --max_tokens "$MAX_TOKENS"
+      --seed "$seed"
+      --save_outputs "$out"
+    )
+    if ((${#extra_args[@]} > 0)); then
+      cmd+=("${extra_args[@]}")
+    fi
+    emit_job "$out" "$log" "${cmd[@]}"
   done
 }
 
@@ -138,6 +149,25 @@ for theta in "${EDT_THETAS[@]}"; do
   done
 done
 
+for delta in "${ENTROPY_SHIFT_DELTAS[@]}"; do
+  for mode in "${MODES[@]}"; do
+    tag="${TAG_PREFIX_ENTROPYSHIFT}-d${delta}-hmean${ENTROPY_MEAN}"
+    if [[ "${#MODES[@]}" -gt 1 ]]; then
+      tag="${tag}-$(mode_tag_for "$mode")"
+    fi
+    dyn_kwargs=$(printf '{"T_base": %s, "delta": %s, "H_mean": %s}' "$ENTROPY_SHIFT_T_BASE" "$delta" "$ENTROPY_MEAN")
+    emit_eval_jobs \
+      "$tag" \
+      "$MODEL_BASE" \
+      "$ENTROPY_SHIFT_T_BASE" \
+      "$ENTROPY_SHIFT_TOP_P" \
+      "$mode" \
+      "$NUM_SAMPLES" \
+      --dynamic_sampling_policy entropy_shift \
+      --dynamic_sampling_kwargs "$dyn_kwargs"
+  done
+done
+
 for threshold in "${CONF_THRESHOLDS[@]}"; do
   for mode in "${MODES[@]}"; do
     tag="${TAG_PREFIX_CONFGATE}-tau${threshold}-Thigh${CONF_T_HIGH}"
@@ -168,6 +198,26 @@ if [[ "${#EXTRA_SEEDS_4[@]}" -gt 0 ]]; then
       tag="${tag}-$(mode_tag_for "$mode")"
     fi
     emit_eval_jobs "$tag" "$MODEL_BASE" 0.7 0.90 "$mode" "$NUM_SAMPLES"
+  done
+
+  # EntropyShift: top up the lower/mid deltas anchored at MeanShift.
+  for delta in 0.10 0.20; do
+    for mode in "${MODES[@]}"; do
+      tag="${TAG_PREFIX_ENTROPYSHIFT}-d${delta}-hmean${ENTROPY_MEAN}"
+      if [[ "${#MODES[@]}" -gt 1 ]]; then
+        tag="${tag}-$(mode_tag_for "$mode")"
+      fi
+      dyn_kwargs=$(printf '{"T_base": %s, "delta": %s, "H_mean": %s}' "$ENTROPY_SHIFT_T_BASE" "$delta" "$ENTROPY_MEAN")
+      emit_eval_jobs \
+        "$tag" \
+        "$MODEL_BASE" \
+        "$ENTROPY_SHIFT_T_BASE" \
+        "$ENTROPY_SHIFT_TOP_P" \
+        "$mode" \
+        "$NUM_SAMPLES" \
+        --dynamic_sampling_policy entropy_shift \
+        --dynamic_sampling_kwargs "$dyn_kwargs"
+    done
   done
 
   # ConfGate: top up the two lower/mid thresholds with T_high=0.9.
