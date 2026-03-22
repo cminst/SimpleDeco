@@ -79,7 +79,7 @@ def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
                 "ckpt/AutoDeco-R1-Distill-Qwen-7B-merged",
             ),
             (
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "cminst/DSR17B-templatefixes",
                 "ckpt/DeepSeek-R1-Distill-Qwen-7B",
             ),
         ]
