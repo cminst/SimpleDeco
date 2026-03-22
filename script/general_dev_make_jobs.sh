@@ -37,7 +37,7 @@ TAG_PREFIX_EDT="${TAG_PREFIX_EDT:-edt-r1-distill-qwen7b-meanshift-t${EDT_T0}-p${
 
 # ConfGate sweep (set thresholds to your target sample-rate quantiles).
 CONF_T_HIGH="${CONF_T_HIGH:-0.9}"
-CONF_THRESHOLDS=(${CONF_THRESHOLDS:-0.248 0.354 0.441 0.518 0.591})
+CONF_THRESHOLDS=(${CONF_THRESHOLDS:-0.4 0.5 0.6})
 TAG_PREFIX_CONFGATE="${TAG_PREFIX_CONFGATE:-confgate-dev}"
 
 mkdir -p "$(dirname "$JOB_FILE")"
@@ -170,8 +170,8 @@ if [[ "${#EXTRA_SEEDS_4[@]}" -gt 0 ]]; then
     emit_eval_jobs "$tag" "$MODEL_BASE" 0.7 0.90 "$mode" "$NUM_SAMPLES"
   done
 
-  # ConfGate: tau 0.518 and 0.441 with T_high=0.9.
-  for threshold in 0.518 0.441; do
+  # ConfGate: top up the two lower/mid thresholds with T_high=0.9.
+  for threshold in 0.4 0.5; do
     for mode in "${MODES[@]}"; do
       tag="${TAG_PREFIX_CONFGATE}-tau${threshold}-Thigh${CONF_T_HIGH}"
       if [[ "${#MODES[@]}" -gt 1 ]]; then
