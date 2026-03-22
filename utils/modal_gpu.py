@@ -71,6 +71,12 @@ def _sync_repo_to_remote(repo: pathlib.Path):
     )
 
 
+def _has_safetensors_files(target_path: pathlib.Path) -> bool:
+    if not target_path.is_dir():
+        return False
+    return any(target_path.rglob("*.safetensors"))
+
+
 def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
     if model_name == "dsr17b":
         downloads = [
@@ -99,7 +105,7 @@ def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
 
     for hf_repo, local_dir in downloads:
         target_path = repo / local_dir
-        if target_path.is_dir() and any(target_path.iterdir()):
+        if _has_safetensors_files(target_path):
             continue
         target_path.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
