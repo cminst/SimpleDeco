@@ -28,6 +28,13 @@ STATIC_TEMPS=(0.7 0.8 0.9)
 STATIC_TOP_PS=(0.90 0.95)
 TAG_PREFIX_STATIC="${TAG_PREFIX_STATIC:-static-dev}"
 
+# EDT sweep anchored at the repo's MeanShift operating point.
+EDT_T0="${EDT_T0:-0.798}"
+EDT_TOP_P="${EDT_TOP_P:-0.907}"
+EDT_N="${EDT_N:-0.8}"
+EDT_THETAS=(${EDT_THETAS:-0.1 0.2 0.3})
+TAG_PREFIX_EDT="${TAG_PREFIX_EDT:-edt-r1-distill-qwen7b-meanshift-t${EDT_T0}-p${EDT_TOP_P}}"
+
 # ConfGate sweep (set thresholds to your target sample-rate quantiles).
 CONF_T_HIGH="${CONF_T_HIGH:-0.9}"
 CONF_THRESHOLDS=(${CONF_THRESHOLDS:-0.248 0.354 0.441 0.518 0.591})
@@ -109,6 +116,25 @@ for temp in "${STATIC_TEMPS[@]}"; do
       fi
       emit_eval_jobs "$tag" "$MODEL_BASE" "$temp" "$top_p" "$mode" "$NUM_SAMPLES"
     done
+  done
+done
+
+for theta in "${EDT_THETAS[@]}"; do
+  for mode in "${MODES[@]}"; do
+    tag="${TAG_PREFIX_EDT}-th${theta}-n${EDT_N}"
+    if [[ "${#MODES[@]}" -gt 1 ]]; then
+      tag="${tag}-$(mode_tag_for "$mode")"
+    fi
+    dyn_kwargs=$(printf '{"T0": %s, "theta": %s, "N": %s}' "$EDT_T0" "$theta" "$EDT_N")
+    emit_eval_jobs \
+      "$tag" \
+      "$MODEL_BASE" \
+      "$EDT_T0" \
+      "$EDT_TOP_P" \
+      "$mode" \
+      "$NUM_SAMPLES" \
+      --dynamic_sampling_policy edt \
+      --dynamic_sampling_kwargs "$dyn_kwargs"
   done
 done
 
