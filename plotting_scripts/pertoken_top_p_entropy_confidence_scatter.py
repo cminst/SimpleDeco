@@ -241,7 +241,7 @@ def _plot_panel(
         x_centers,
         y_medians,
         color=color,
-        linewidth=1.7,
+        linewidth=1.9,
         zorder=3,
     )
     ax.scatter(
