@@ -19,9 +19,9 @@ MAX_TOKENS="${MAX_TOKENS:-32768}"
 # Space-delimited list of modes, e.g. "pass@k" or "pass@k maj@k".
 MODES=(${MODES:-pass@k})
 
-SEEDS_2=(42 43)
-SEEDS=("${SEEDS_2[@]}")
-EXTRA_SEEDS_6=(${EXTRA_SEEDS_6:-44 45 46 47 48 49})
+SEEDS_4=(42 43 44 45)
+SEEDS=("${SEEDS_4[@]}")
+EXTRA_SEEDS_4=(${EXTRA_SEEDS_4:-46 47 48 49})
 
 # Static baseline sweep grid.
 STATIC_TEMPS=(0.7 0.8 0.9)
@@ -158,8 +158,8 @@ for threshold in "${CONF_THRESHOLDS[@]}"; do
 done
 
 # Extra seeds for specific configs to reach 8 total.
-if [[ "${#EXTRA_SEEDS_6[@]}" -gt 0 ]]; then
-  SEEDS=("${EXTRA_SEEDS_6[@]}")
+if [[ "${#EXTRA_SEEDS_4[@]}" -gt 0 ]]; then
+  SEEDS=("${EXTRA_SEEDS_4[@]}")
 
   # Static baseline: temp 0.7, top-p 0.90.
   for mode in "${MODES[@]}"; do
