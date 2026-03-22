@@ -10,8 +10,8 @@ JSONL_GLOB = "**/*.jsonl"
 
 
 def get_jsonl_file_set(path: str, focus_path: Path | None = None) -> set[str]:
-    root = Path(path)
-    search_path = focus_path or root
+    root = Path(path).resolve()
+    search_path = (focus_path or root).resolve()
 
     if not search_path.exists():
         return set()
