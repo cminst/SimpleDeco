@@ -296,7 +296,7 @@ def _plot_trends(
     fig, (ax_left, ax_right) = plt.subplots(
         1,
         2,
-        figsize=(5.5, 2.55),
+        figsize=(5.5, 2.25),
         constrained_layout=False,
         sharey=True,
         gridspec_kw={"width_ratios": (1.0, 1.0)},
