@@ -1469,15 +1469,14 @@ def main() -> None:
         _log(args.progress, f"Loading {label}: {len(paths)} file(s)")
         scores_list: List[Dict[str, List[float]]] = []
         for idx, path in enumerate(paths, 1):
-            _log(args.progress, f"  [{idx}/{len(paths)}] {path}")
-            scores_list.append(
-                _load_scores(
-                    path,
-                    recompute_score=args.recompute_score,
-                    update_jsonl=args.recompute_score,
-                    progress=args.progress,
-                )
+            scores = _load_scores(
+                path,
+                recompute_score=args.recompute_score,
+                update_jsonl=args.recompute_score,
+                progress=args.progress,
             )
+            scores_list.append(scores)
+            _log(args.progress, f"  [{idx}/{len(paths)}] {path} ({len(scores)})")
         pooled = _merge_scores(paths)
         if not pooled:
             raise RuntimeError(f"Failed to load scores for {label}.")
