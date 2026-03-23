@@ -1476,7 +1476,7 @@ def main() -> None:
                 progress=args.progress,
             )
             scores_list.append(scores)
-            _log(args.progress, f"  [{idx}/{len(paths)}] {path} ({len(scores)})")
+            _log(args.progress, f"  [{idx}/{len(paths)}] {path} ({len(scores)} problems)")
         pooled = _merge_scores(paths)
         if not pooled:
             raise RuntimeError(f"Failed to load scores for {label}.")
