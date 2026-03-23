@@ -25,7 +25,7 @@ DEFAULT_PATTERN_CANDIDATES = {
     ],
     "MeanShift": [
         "ckpt/aime24/meanshift/*.jsonl",
-        "ckpt/aime24/meanshift2-r1-distill-qwen7b/*.jsonl",
+        "ckpt/aime24/meanshift-r1-distill-qwen7b/*.jsonl",
     ],
     "AutoDeco": [
         "ckpt/aime24/autodeco/*.jsonl",
