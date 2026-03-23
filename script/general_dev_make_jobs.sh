@@ -187,58 +187,69 @@ for threshold in "${CONF_THRESHOLDS[@]}"; do
   done
 done
 
-# Extra seeds for specific configs to reach 8 total.
-# if [[ "${#EXTRA_SEEDS_4[@]}" -gt 0 ]]; then
-#   SEEDS=("${EXTRA_SEEDS_4[@]}")
+# Extra seeds for dynamic configs to reach 8 total.
+if [[ "${#EXTRA_SEEDS_4[@]}" -gt 0 ]]; then
+  SEEDS=("${EXTRA_SEEDS_4[@]}")
 
-#   # Static baseline: temp 0.7, top-p 0.90.
-#   for mode in "${MODES[@]}"; do
-#     tag="${TAG_PREFIX_STATIC}-t0.7-p0.9"
-#     if [[ "${#MODES[@]}" -gt 1 ]]; then
-#       tag="${tag}-$(mode_tag_for "$mode")"
-#     fi
-#     emit_eval_jobs "$tag" "$MODEL_BASE" 0.7 0.90 "$mode" "$NUM_SAMPLES"
-#   done
+  # EDT: top up all theta values anchored at MeanShift.
+  for theta in "${EDT_THETAS[@]}"; do
+    for mode in "${MODES[@]}"; do
+      tag="${TAG_PREFIX_EDT}-th${theta}-n${EDT_N}"
+      if [[ "${#MODES[@]}" -gt 1 ]]; then
+        tag="${tag}-$(mode_tag_for "$mode")"
+      fi
+      dyn_kwargs=$(printf '{"T0": %s, "theta": %s, "N": %s}' "$EDT_T0" "$theta" "$EDT_N")
+      emit_eval_jobs \
+        "$tag" \
+        "$MODEL_BASE" \
+        "$EDT_T0" \
+        "$EDT_TOP_P" \
+        "$mode" \
+        "$NUM_SAMPLES" \
+        --dynamic_sampling_policy edt \
+        --dynamic_sampling_kwargs "$dyn_kwargs"
+    done
+  done
 
-#   # EntropyShift: top up the lower/mid deltas anchored at MeanShift.
-#   for delta in 0.10 0.20; do
-#     for mode in "${MODES[@]}"; do
-#       tag="${TAG_PREFIX_ENTROPYSHIFT}-d${delta}-hmean${ENTROPY_MEAN}"
-#       if [[ "${#MODES[@]}" -gt 1 ]]; then
-#         tag="${tag}-$(mode_tag_for "$mode")"
-#       fi
-#       dyn_kwargs=$(printf '{"T_base": %s, "delta": %s, "H_mean": %s}' "$ENTROPY_SHIFT_T_BASE" "$delta" "$ENTROPY_MEAN")
-#       emit_eval_jobs \
-#         "$tag" \
-#         "$MODEL_BASE" \
-#         "$ENTROPY_SHIFT_T_BASE" \
-#         "$ENTROPY_SHIFT_TOP_P" \
-#         "$mode" \
-#         "$NUM_SAMPLES" \
-#         --dynamic_sampling_policy entropy_shift \
-#         --dynamic_sampling_kwargs "$dyn_kwargs"
-#     done
-#   done
+  # EntropyShift: top up all deltas anchored at MeanShift.
+  for delta in "${ENTROPY_SHIFT_DELTAS[@]}"; do
+    for mode in "${MODES[@]}"; do
+      tag="${TAG_PREFIX_ENTROPYSHIFT}-d${delta}-hmean${ENTROPY_MEAN}"
+      if [[ "${#MODES[@]}" -gt 1 ]]; then
+        tag="${tag}-$(mode_tag_for "$mode")"
+      fi
+      dyn_kwargs=$(printf '{"T_base": %s, "delta": %s, "H_mean": %s}' "$ENTROPY_SHIFT_T_BASE" "$delta" "$ENTROPY_MEAN")
+      emit_eval_jobs \
+        "$tag" \
+        "$MODEL_BASE" \
+        "$ENTROPY_SHIFT_T_BASE" \
+        "$ENTROPY_SHIFT_TOP_P" \
+        "$mode" \
+        "$NUM_SAMPLES" \
+        --dynamic_sampling_policy entropy_shift \
+        --dynamic_sampling_kwargs "$dyn_kwargs"
+    done
+  done
 
-#   # ConfGate: top up the two lower/mid thresholds with T_high=0.9.
-#   for threshold in 0.4 0.5; do
-#     for mode in "${MODES[@]}"; do
-#       tag="${TAG_PREFIX_CONFGATE}-tau${threshold}-Thigh${CONF_T_HIGH}"
-#       if [[ "${#MODES[@]}" -gt 1 ]]; then
-#         tag="${tag}-$(mode_tag_for "$mode")"
-#       fi
-#       dyn_kwargs=$(printf '{"maxprob_threshold": %s, "T_high": %s}' "$threshold" "$CONF_T_HIGH")
-#       emit_eval_jobs \
-#         "$tag" \
-#         "$MODEL_BASE" \
-#         1.0 \
-#         0.95 \
-#         "$mode" \
-#         "$NUM_SAMPLES" \
-#         --dynamic_sampling_policy confidence_gated \
-#         --dynamic_sampling_kwargs "$dyn_kwargs"
-#     done
-#   done
-# fi
+  # ConfGate: top up all thresholds with T_high=0.9.
+  for threshold in "${CONF_THRESHOLDS[@]}"; do
+    for mode in "${MODES[@]}"; do
+      tag="${TAG_PREFIX_CONFGATE}-tau${threshold}-Thigh${CONF_T_HIGH}"
+      if [[ "${#MODES[@]}" -gt 1 ]]; then
+        tag="${tag}-$(mode_tag_for "$mode")"
+      fi
+      dyn_kwargs=$(printf '{"maxprob_threshold": %s, "T_high": %s}' "$threshold" "$CONF_T_HIGH")
+      emit_eval_jobs \
+        "$tag" \
+        "$MODEL_BASE" \
+        1.0 \
+        0.95 \
+        "$mode" \
+        "$NUM_SAMPLES" \
+        --dynamic_sampling_policy confidence_gated \
+        --dynamic_sampling_kwargs "$dyn_kwargs"
+    done
+  done
+fi
 
 echo "Wrote queue jobs to $JOB_FILE"
