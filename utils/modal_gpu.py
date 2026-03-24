@@ -100,6 +100,17 @@ def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
                 "ckpt/gpt-oss-20b",
             ),
         ]
+    elif model_name == "llama-nemotron8b":
+        downloads = [
+            (
+                "cminst/AutoDeco-Llama-Nemotron-8B-Merged",
+                "ckpt/AutoDeco-Llama-Nemotron-8B-Merged",
+            ),
+            (
+                "cminst/Llama-Nemotron-8B-templatefixes",
+                "ckpt/Llama-Nemotron-8B",
+            ),
+        ]
     else:
         raise ValueError(f"Unknown model_name: {model_name}")
 
@@ -199,7 +210,7 @@ def runwithgpu(model_name: str):
 
 
 @app.local_entrypoint()
-def main(model: str = "dsr17b"):
+def main(model: str = "llama-nemotron8b"):
     print(f"Running with model {model}, are you sure?")
     import time
     time.sleep(3)
