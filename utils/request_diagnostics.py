@@ -208,10 +208,20 @@ def plot_request_output_temps(
 
     if temperatures is None:
         raise ValueError("RequestOutput.outputs[0].temperatures is None.")
+    if isinstance(temperatures, (int, float)):
+        raise ValueError(
+            "RequestOutput.outputs[0].temperatures is scalar. Token-level "
+            "temperature traces require an enabled AutoDeco temperature head."
+        )
     if len(temperatures) != len(output_token_ids):
         raise ValueError(
             "Mismatch between temperatures and output token ids: "
             f"{len(temperatures)} vs {len(output_token_ids)}."
+        )
+    if show_top_p and isinstance(top_ps, (int, float)):
+        raise ValueError(
+            "RequestOutput.outputs[0].top_ps is scalar. Token-level top-p "
+            "traces require an enabled AutoDeco top-p head."
         )
     if show_top_p and top_ps is not None and len(top_ps) != len(output_token_ids):
         raise ValueError(

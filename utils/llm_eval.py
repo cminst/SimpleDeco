@@ -1,4 +1,9 @@
 from vllm import LLM, SamplingParams
+from vllm.autodeco import (
+    AUTODECO_HEADS_ARG,
+    normalize_autodeco_heads_value,
+    validate_autodeco_runtime_extra_args,
+)
 import json
 from boxed_extract import *
 import argparse
@@ -132,6 +137,13 @@ if __name__ == "__main__":
     parser.add_argument('--dyn', action='append', type=parse_dynamic_sampling_kv, default=[],
                         metavar='KEY=VALUE',
                         help='Repeatable override for dynamic sampling kwargs, e.g. --dyn window=16 --dyn alpha=0.5')
+    parser.add_argument(
+        '--autodeco_heads',
+        type=str,
+        default=None,
+        help='Optional comma-separated AutoDeco heads to enable '
+             '(temperature, top_p, both, none). Omit to use all available heads.',
+    )
     parser.add_argument('--reasoning_effort', type=str, default=None,
                         choices=['low', 'medium', 'high'],
                         help='Optional GPT-OSS reasoning effort used when rendering the chat template.')
@@ -159,15 +171,27 @@ if __name__ == "__main__":
     if not dynamic_sampling_kwargs:
         dynamic_sampling_kwargs = None
 
+    autodeco_heads = None
+    if args.autodeco_heads is not None:
+        try:
+            autodeco_heads = normalize_autodeco_heads_value(args.autodeco_heads)
+        except ValueError as exc:
+            parser.error(f"--autodeco_heads is invalid: {exc}")
+
     extra_args = None
+    if args.dynamic_sampling_policy or autodeco_heads is not None:
+        extra_args = {}
     if args.dynamic_sampling_policy:
-        extra_args = {
-            "dynamic_sampling_policy": args.dynamic_sampling_policy,
-        }
+        extra_args["dynamic_sampling_policy"] = args.dynamic_sampling_policy
         if dynamic_sampling_kwargs is not None:
             extra_args["dynamic_sampling_kwargs"] = dynamic_sampling_kwargs
     elif dynamic_sampling_kwargs is not None:
         parser.error("--dynamic_sampling_kwargs or --dyn requires --dynamic_sampling_policy.")
+    if autodeco_heads is not None:
+        extra_args[AUTODECO_HEADS_ARG] = autodeco_heads
+
+    if not extra_args:
+        extra_args = None
 
     sampling_params = SamplingParams(
         temperature=temp,
@@ -181,10 +205,19 @@ if __name__ == "__main__":
     )
 
     llm = LLM(model=args.model_name_or_path, tensor_parallel_size=args.tp_size, max_model_len=args.max_tokens)
+    hf_config = llm.llm_engine.model_config.hf_config
+    try:
+        validate_autodeco_runtime_extra_args(
+            extra_args,
+            is_autodeco_model=getattr(hf_config, "model_type", None) == "autodeco",
+            enable_temperature_head=getattr(hf_config, "enable_temperature_head", True),
+            enable_top_p_head=getattr(hf_config, "enable_top_p_head", True),
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     tokenizer = llm.get_tokenizer()
 
-    from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     problems = [
         apply_eval_chat_template(
@@ -215,13 +248,17 @@ if __name__ == "__main__":
         return 1.0 if (sum(scores) / len(scores)) > 0.5 else 0.0
 
     dyn_tag = f"-dyn_{args.dynamic_sampling_policy}" if args.dynamic_sampling_policy else ""
+    autodeco_heads_tag = ""
+    if autodeco_heads is not None:
+        head_label = "none" if not autodeco_heads else "_".join(autodeco_heads)
+        autodeco_heads_tag = f"-autodeco_heads_{head_label}"
     reasoning_effort_tag = (
         f"-reasoning_effort_{args.reasoning_effort}" if args.reasoning_effort else ""
     )
     log_base = (
         f'generation_log/{args.dataset}/{ckpt_name}-temp{temp}-top_p{args.top_p}'
         f'-top_k{args.top_k}-rp{args.rp}-max_tokens{args.max_tokens}-seed{seed}'
-        f'{reasoning_effort_tag}{dyn_tag}'
+        f'{reasoning_effort_tag}{dyn_tag}{autodeco_heads_tag}'
     )
     all_acc = []
     for idx, output_group in enumerate(outputs):
@@ -255,6 +292,7 @@ if __name__ == "__main__":
                         'reasoning_effort': args.reasoning_effort,
                         'dynamic_sampling_policy': args.dynamic_sampling_policy,
                         'dynamic_sampling_kwargs': dynamic_sampling_kwargs,
+                        'autodeco_heads': autodeco_heads,
                     }
                 }, ensure_ascii=False) + '\n')
         problem_acc = round(aggregate_score(scores, args.mode) * 100, 2)
