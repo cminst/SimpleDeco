@@ -26,7 +26,7 @@ GREEDY_TOP_P="${GREEDY_TOP_P:-0.95}"
 
 TAG_BASE="${TAG_BASE:-base-llama-nemotron8b}"
 TAG_AUTODECO="${TAG_AUTODECO:-autodeco-llama-nemotron8b}"
-TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-${MEANSHIFT_TEMP}-${MEANSHIFT_TOP_P}-llama-nemotron8b}"
+TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-llama-nemotron8b}"
 TAG_GREEDY="${TAG_GREEDY:-greedy-llama-nemotron8b}"
 
 DATASETS=(aime24 hmmt25 gpqa_diamond mmlu_pro_lite)
