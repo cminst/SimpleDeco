@@ -115,7 +115,7 @@ def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
         downloads = [
             (
                 "cminst/AutoDeco-Qwen3-30B-Instruct-Merged",
-                "AutoDeco-Qwen3-30B-Instruct-Merged",
+                "ckpt/AutoDeco-Qwen3-30B-Instruct-Merged",
             )
         ]
     else:
@@ -217,7 +217,7 @@ def runwithgpu(model_name: str):
 
 
 @app.local_entrypoint()
-def main(model: str = "llama-nemotron8b"):
+def main(model: str = "qwen-instruct"):
     print(f"Running with model {model}, are you sure?")
     import time
     time.sleep(3)
