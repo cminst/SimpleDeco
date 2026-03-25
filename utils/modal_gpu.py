@@ -23,7 +23,7 @@ image = (
         'git config --global user.name "Qingyun Li (from Modal)"',
         'git config --global credential.helper store',
     )
-    .run_commands("echo 'VERSION 4'")
+    .run_commands("echo 'VERSION 5'")
     .run_commands(
         "uv pip install -U torchvision torchaudio torch==2.10.0 'numpy<=2.2' vllm==0.17.1 triton==3.6.0 --torch-backend=cu128 --no-build-isolation --system",
         "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptools_scm --torch-backend=cu128 --system",
@@ -110,6 +110,13 @@ def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
                 "cminst/Llama-Nemotron-8B-templatefixes",
                 "ckpt/Llama-Nemotron-8B",
             ),
+        ]
+    elif model_name == "qwen-instruct":
+        downloads = [
+            (
+                "cminst/AutoDeco-Qwen3-30B-Instruct-Merged",
+                "AutoDeco-Qwen3-30B-Instruct-Merged",
+            )
         ]
     else:
         raise ValueError(f"Unknown model_name: {model_name}")
