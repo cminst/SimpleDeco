@@ -88,8 +88,6 @@ def _summarize_terms(terms) -> Dict[str, Any]:
         "corr_grad_delta": _corr(terms.grad, terms.delta),
         "sign_agreement_grad_delta": _safe_sign_agreement(terms.grad, terms.delta),
         "alignment_efficiency": float(alignment_efficiency),
-        # Backward-compatible alias for downstream consumers that still read the old key.
-        "efficiency_ratio": float(alignment_efficiency),
         "oracle_gain_mean": oracle_gain_mean,
         "oracle_gain_valid_rate": float(np.mean(oracle_gain_valid)),
         "oracle_efficiency": float(safe_div(actual_gain_mean, oracle_gain_mean)),
