@@ -17,7 +17,7 @@ ENTROPY_MEAN="${ENTROPY_MEAN:-0.07197317484105381}"
 
 TAG_BASE="base-r1-distill-qwen7b"
 TAG_AUTODECO="autodeco-r1-distill-qwen7b"
-TAG_MEANSHIFT="meanshift-0.798-0.907-r1-distill-qwen7b"
+TAG_MEANSHIFT="meanshift-r1-distill-qwen7b"
 TAG_ENTROPYSHIFT="entropyshift-0.10-r1-distill-qwen7b"
 TAG_GREEDY="greedy-r1-distill-qwen7b"
 TAG_CONFGATE="confgate-0.6-0.9-r1-distill-qwen7b"

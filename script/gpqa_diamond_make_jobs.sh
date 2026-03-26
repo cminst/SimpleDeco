@@ -15,7 +15,7 @@ MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-R1-Distill-Qwen-7B-merged}"
 TAG_BASE="base-r1-distill-qwen7b"
 TAG_AUTODECO="autodeco-r1-distill-qwen7b"
 TAG_CONFGATE="confgate-0.6-0.9-r1-distill-qwen7b"
-TAG_MEANSHIFT="meanshift-0.72-0.79-r1-distill-qwen7b"
+TAG_MEANSHIFT="meanshift-r1-distill-qwen7b"
 TAG_GREEDY="greedy-r1-distill-qwen7b"
 
 SEEDS_8=(42 43 44 45 46 47 48 49)
@@ -100,7 +100,7 @@ emit_eval_jobs \
   --dynamic_sampling_kwargs '{"maxprob_threshold": 0.6, "T_high": 0.9}'
 
 # 4) Meanshift: all 8 seeds.
-emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" 0.72 0.79 "maj@k" 16
+emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" 0.798 0.907 "maj@k" 16
 
 # 5) Greedy: all 8 seeds, one sample.
 emit_eval_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 0.95 "maj@k" 1

@@ -15,7 +15,7 @@ MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-R1-Distill-Qwen-7B-merged}"
 TAG_BASE="base-r1-distill-qwen7b"
 TAG_AUTODECO="autodeco-r1-distill-qwen7b"
 TAG_CONFGATE="confgate-0.6-0.9-r1-distill-qwen7b"
-TAG_MEANSHIFT="meanshift-0.72-0.79-r1-distill-qwen7b"
+TAG_MEANSHIFT="meanshift-r1-distill-qwen7b"
 TAG_GREEDY="greedy-r1-distill-qwen7b"
 
 SEEDS_16=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57)
@@ -98,9 +98,9 @@ SEEDS=("${SEEDS_EXTRA_8[@]}")
 emit_eval_jobs "$TAG_BASE" "$MODEL_BASE" 0.6 0.95 "maj@k" 16
 emit_eval_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 "maj@k" 16
 
-# 3) Meanshift: 16 seeds with new temp/top-p.
+# 3) Meanshift: 16 seeds with current temp/top-p anchor.
 SEEDS=("${SEEDS_16[@]}")
-emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" 0.72 0.79 "maj@k" 16
+emit_eval_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" 0.798 0.907 "maj@k" 16
 
 # 4) Greedy: one seed, one sample.
 SEEDS=(42)

@@ -86,7 +86,7 @@
 #     --seed $seed \
 #     --tp_size 1 \
 #     --max_tokens 32768 \
-#     --save_outputs ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.jsonl 2>&1 | tee ckpt/aime24/meanshift2-r1-distill-qwen7b/maj16_seed$seed.log
+#     --save_outputs ckpt/aime24/meanshift-r1-distill-qwen7b/maj16_seed$seed.jsonl 2>&1 | tee ckpt/aime24/meanshift-r1-distill-qwen7b/maj16_seed$seed.log
 # done
 
 # CONFGATE

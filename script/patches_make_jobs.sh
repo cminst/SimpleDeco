@@ -10,7 +10,7 @@ FILTER_EXISTING="${FILTER_EXISTING:-1}"
 # Update if your model paths differ.
 MODEL_BASE="${MODEL_BASE:-ckpt/DeepSeek-R1-Distill-Qwen-7B}"
 
-TAG_MEANSHIFT2="meanshift2-r1-distill-qwen7b"
+TAG_MEANSHIFT="meanshift-r1-distill-qwen7b"
 
 # Remaining 12 seeds after 42-45.
 SEEDS_12=(46 47 48 49 50 51 52 53 54 55 56 57)
@@ -77,22 +77,22 @@ emit_eval_jobs() {
   done
 }
 
-# 1) HMMT25: Meanshift2 for remaining 12 seeds (46-57).
+# 1) HMMT25: MeanShift for remaining 12 seeds (46-57).
 SEEDS=("${SEEDS_12[@]}")
 emit_eval_jobs \
   "hmmt25" \
-  "$TAG_MEANSHIFT2" \
+  "$TAG_MEANSHIFT" \
   "$MODEL_BASE" \
   0.798 \
   0.907 \
   "maj@k" \
   16
 
-# 2) GPQA-Diamond: Meanshift2 for 8 seeds.
+# 2) GPQA-Diamond: MeanShift for 8 seeds.
 SEEDS=("${SEEDS_8[@]}")
 emit_eval_jobs \
   "gpqa_diamond" \
-  "$TAG_MEANSHIFT2" \
+  "$TAG_MEANSHIFT" \
   "$MODEL_BASE" \
   0.798 \
   0.907 \
