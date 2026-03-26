@@ -56,9 +56,21 @@ def _summarize_terms(terms) -> Dict[str, Any]:
     penalty_mean = float(np.mean(terms.penalty))
     predicted_net_mean = float(np.mean(terms.predicted_net))
     actual_gain_mean = float(np.mean(terms.actual_gain))
-    efficiency_ratio = safe_div(
+    alignment_efficiency = safe_div(
         float(np.mean(terms.alignment)),
         float(np.sqrt(np.mean(np.square(terms.grad)) * np.mean(np.square(terms.delta)))),
+    )
+    oracle_gain = np.divide(
+        np.square(terms.grad),
+        2.0 * terms.var,
+        out=np.full_like(terms.grad, np.nan),
+        where=terms.var > 1e-12,
+    )
+    oracle_gain_valid = np.isfinite(oracle_gain)
+    oracle_gain_mean = (
+        float(np.mean(oracle_gain[oracle_gain_valid]))
+        if np.any(oracle_gain_valid)
+        else float("nan")
     )
     summary = {
         "covered_token_count": int(len(terms.delta)),
@@ -75,7 +87,13 @@ def _summarize_terms(terms) -> Dict[str, Any]:
         "alignment_minus_penalty": float(alignment_mean - penalty_mean),
         "corr_grad_delta": _corr(terms.grad, terms.delta),
         "sign_agreement_grad_delta": _safe_sign_agreement(terms.grad, terms.delta),
-        "efficiency_ratio": float(efficiency_ratio),
+        "alignment_efficiency": float(alignment_efficiency),
+        # Backward-compatible alias for downstream consumers that still read the old key.
+        "efficiency_ratio": float(alignment_efficiency),
+        "oracle_gain_mean": oracle_gain_mean,
+        "oracle_gain_valid_rate": float(np.mean(oracle_gain_valid)),
+        "oracle_efficiency": float(safe_div(actual_gain_mean, oracle_gain_mean)),
+        "predicted_oracle_efficiency": float(safe_div(predicted_net_mean, oracle_gain_mean)),
         "corr_predicted_actual_gain": _corr(terms.predicted_net, terms.actual_gain),
         "corr_alignment_actual_gain": _corr(terms.alignment, terms.actual_gain),
         "actual_minus_predicted_mae": float(np.mean(np.abs(terms.actual_gain - terms.predicted_net))),
@@ -156,7 +174,7 @@ def main() -> None:
     summary = _summarize_terms(terms)
     logger.info(
         "ALIGNMENT | covered=%d | E[g*delta]=%.6f | 0.5E[v*delta^2]=%.6f | predicted_net=%.6f | actual_gain=%.6f | "
-        "corr(g,delta)=%.6f | sign_agree=%.6f | efficiency=%.6f",
+        "corr(g,delta)=%.6f | sign_agree=%.6f | align_eff=%.6f",
         summary["covered_token_count"],
         summary["alignment_gain_mean"],
         summary["variance_penalty_mean"],
@@ -164,7 +182,14 @@ def main() -> None:
         summary["actual_gain_mean"],
         summary["corr_grad_delta"],
         summary["sign_agreement_grad_delta"],
-        summary["efficiency_ratio"],
+        summary["alignment_efficiency"],
+    )
+    logger.info(
+        "ORACLE | oracle_gain=%.6f | oracle_valid_rate=%.6f | oracle_eff(actual)=%.6f | oracle_eff(pred)=%.6f",
+        summary["oracle_gain_mean"],
+        summary["oracle_gain_valid_rate"],
+        summary["oracle_efficiency"],
+        summary["predicted_oracle_efficiency"],
     )
     logger.info(
         "TAYLOR | corr(predicted,actual)=%.6f | corr(alignment,actual)=%.6f | mae(actual-predicted)=%.6f | "
@@ -183,7 +208,7 @@ def main() -> None:
         holds=(
             summary["alignment_gain_mean"] <= summary["variance_penalty_mean"]
             and summary["actual_gain_mean"] <= 0.0
-            and summary["efficiency_ratio"] <= args.h1_efficiency_threshold
+            and summary["alignment_efficiency"] <= args.h1_efficiency_threshold
         ),
         evidence={
             "alignment_gain_mean": summary["alignment_gain_mean"],
@@ -192,8 +217,11 @@ def main() -> None:
             "actual_gain_mean": summary["actual_gain_mean"],
             "corr_grad_delta": summary["corr_grad_delta"],
             "sign_agreement_grad_delta": summary["sign_agreement_grad_delta"],
-            "efficiency_ratio": summary["efficiency_ratio"],
-            "efficiency_threshold": args.h1_efficiency_threshold,
+            "alignment_efficiency": summary["alignment_efficiency"],
+            "alignment_efficiency_threshold": args.h1_efficiency_threshold,
+            "oracle_gain_mean": summary["oracle_gain_mean"],
+            "oracle_efficiency": summary["oracle_efficiency"],
+            "predicted_oracle_efficiency": summary["predicted_oracle_efficiency"],
         },
     )
 
