@@ -24,6 +24,10 @@ TAG_AUTODECO="${TAG_AUTODECO:-autodeco-r1-distill-qwen7b}"
 TAG_GREEDY="${TAG_GREEDY:-greedy-r1-distill-qwen7b}"
 TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-r1-distill-qwen7b}"
 
+# 8 seeds for stochastic methods (mean ± 95% CI reporting).
+# Greedy is deterministic so it only gets one seed.
+SEEDS=(42 43 44 45 46 47 48 49)
+
 DATASETS=("ifeval" "ifbench")
 
 mkdir -p "$(dirname "$JOB_FILE")"
@@ -56,45 +60,60 @@ emit_job() {
     "$out_q" "$out" "$out_dir_q" "$cmd_str" "$log_q" >> "$JOB_FILE"
 }
 
+# emit_if_jobs TAG MODEL TEMP TOP_P [SEEDS_ARRAY_NAME] [EXTRA_ARGS...]
+#   SEEDS_ARRAY_NAME  name of a bash array variable listing seeds to run.
+#                     Pass "SINGLE_SEED" to run only seed 42 (e.g. greedy).
 emit_if_jobs() {
   local tag="$1"
   local model="$2"
   local temp="$3"
   local top_p="$4"
-  shift 4
+  local seeds_var="$5"
+  shift 5
   local -a extra_args=("$@")
 
+  # Resolve the seeds array by name.
+  local -a seeds
+  if [[ "$seeds_var" == "SINGLE_SEED" ]]; then
+    seeds=(42)
+  else
+    eval "seeds=(\"\${${seeds_var}[@]}\")"
+  fi
+
   for dataset in "${DATASETS[@]}"; do
-    local out="ckpt/${dataset}/${tag}/if_eval.jsonl"
-    local log="ckpt/${dataset}/${tag}/if_eval.log"
-    local -a cmd=(
-      "$PYTHON_BIN" utils/if_eval.py
-      --model_name_or_path "$model"
-      --dataset "$dataset"
-      --temp "$temp"
-      --top_p "$top_p"
-      --tp_size "$TP_SIZE"
-      --max_tokens "$MAX_TOKENS"
-      --strip_think
-      --output-file "$out"
-    )
-    if ((${#extra_args[@]} > 0)); then
-      cmd+=("${extra_args[@]}")
-    fi
-    emit_job "$out" "$log" "${cmd[@]}"
+    for seed in "${seeds[@]}"; do
+      local out="ckpt/${dataset}/${tag}/if_eval_seed${seed}.jsonl"
+      local log="ckpt/${dataset}/${tag}/if_eval_seed${seed}.log"
+      local -a cmd=(
+        "$PYTHON_BIN" utils/if_eval.py
+        --model_name_or_path "$model"
+        --dataset "$dataset"
+        --temp "$temp"
+        --top_p "$top_p"
+        --tp_size "$TP_SIZE"
+        --max_tokens "$MAX_TOKENS"
+        --seed "$seed"
+        --strip_think
+        --output-file "$out"
+      )
+      if ((${#extra_args[@]} > 0)); then
+        cmd+=("${extra_args[@]}")
+      fi
+      emit_job "$out" "$log" "${cmd[@]}"
+    done
   done
 }
 
-# 1) Base operating point.
-emit_if_jobs "$TAG_BASE" "$MODEL_BASE" "$DEFAULT_TEMP" "$DEFAULT_TOP_P"
+# 1) Base operating point — 8 seeds for CI.
+emit_if_jobs "$TAG_BASE" "$MODEL_BASE" "$DEFAULT_TEMP" "$DEFAULT_TOP_P" SEEDS
 
-# 2) Greedy reference.
-emit_if_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 "$DEFAULT_TOP_P"
+# 2) Greedy reference — deterministic, single seed.
+emit_if_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 "$DEFAULT_TOP_P" SINGLE_SEED
 
-# 3) AutoDeco learned controller.
-emit_if_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0
+# 3) AutoDeco learned controller — 8 seeds for CI.
+emit_if_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 SEEDS
 
-# 4) MeanShift (fixed operating point at the train-split mean temperature).
-emit_if_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P"
+# 4) MeanShift (fixed operating point at the train-split mean temperature) — 8 seeds for CI.
+emit_if_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" SEEDS
 
 echo "Wrote $(grep -c 'fi$' "$JOB_FILE" || true) jobs to $JOB_FILE"
