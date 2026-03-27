@@ -1,12 +1,12 @@
 export WANDB_PROJECT="ESAD"
 TS=$(date +%Y%m%d%H%M%S)
 
-export WANDB_RUN_ID="SimpleDeco-V3-$TS"
+export WANDB_RUN_ID="SimpleDeco-V4-$TS"
 
 uv run accelerate launch trl_train.py \
-  --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
+  --model_name_or_path ckpt/untrained-autodecoBIG-qwen3-4b-thinking \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-  --output-dir ./ckpt/simpledeco-quadraticloss \
+  --output_dir ./ckpt/simpledeco-ql-nosmooth \
   --train_temp true \
   --train_top_p false \
   --temp_objective analytic_min_p_hinge \
@@ -14,8 +14,9 @@ uv run accelerate launch trl_train.py \
   --temp_hinge_weight 1.0 \
   --temp_reg_weight 1.0 \
   --goldilocks_temp_cap 1.0 \
-  --temp_target_smooth_window 2 \
+  --temp_target_smooth_window 0 \
   --goldilocks_uniform \
+  --goldilocks_uniform_bins 2 \
   --max_steps 1500 \
   --logging_steps 25 \
   --per_device_train_batch_size 16 \
@@ -39,7 +40,7 @@ uv run accelerate launch trl_train.py \
 # uv run accelerate launch trl_train.py \
 #   --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
 #   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-#   --output-dir ./ckpt/simpledeco-bimodal \
+#   --output_dir ./ckpt/simpledeco-bimodal \
 #   --train_temp true \
 #   --train_top_p false \
 #   --temp_objective analytic_min_p_hinge \
