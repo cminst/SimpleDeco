@@ -20,10 +20,10 @@ For multiple-choice datasets, the output keeps the same two keys only:
 - "gt": by default, the correct option letter (A/B/C/...) for MCQ datasets
 
 Examples:
-    python build_same_format_jsonl.py
-    python build_same_format_jsonl.py --output-dir data/TempTest
-    python build_same_format_jsonl.py --mmlu-gt text
-    python build_same_format_jsonl.py --gpqa-gt text
+    python download_benchmark_datasets.py
+    python download_benchmark_datasets.py --output-dir data/TempTest
+    python download_benchmark_datasets.py --mmlu-gt text
+    python download_benchmark_datasets.py --gpqa-gt text
 """
 
 from __future__ import annotations
@@ -426,7 +426,7 @@ def convert_ifbench() -> List[Mapping[str, object]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", dest="output_dir", type=Path, default=Path("same_format_jsonl"))
+    parser.add_argument("--output-dir", dest="output_dir", type=Path, default=Path("data/TempTest"))
     parser.add_argument("--gpqa-gt", choices=["letter", "text"], default="letter")
     parser.add_argument("--mmlu-gt", choices=["letter", "text"], default="letter")
     parser.add_argument("--general-dev-seed", type=int, default=1337)
