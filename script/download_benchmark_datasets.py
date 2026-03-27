@@ -385,6 +385,17 @@ def _write_raw_jsonl(records: Iterable[Mapping[str, object]], path: Path) -> int
     return count
 
 
+def _strip_none_kwargs(kwargs_list) -> list:
+    """Strip None-valued keys from each per-instruction kwargs dict.
+
+    HuggingFace stores the IFEval/IFBench kwargs as a list of dicts where every
+    possible kwarg field is present across all instructions (None for fields that
+    don't apply to a given instruction).  The instruction checkers only accept the
+    kwargs they expect, so passing the extra None-valued keys causes a TypeError.
+    """
+    return [{k: v for k, v in kw.items() if v is not None} for kw in kwargs_list]
+
+
 def convert_ifeval() -> List[Mapping[str, object]]:
     """Download google/IFEval and return raw records with prompt/instruction_id_list/kwargs/key."""
     ds = load_dataset("google/IFEval", split="train")
@@ -394,7 +405,7 @@ def convert_ifeval() -> List[Mapping[str, object]]:
             "key": row["key"],
             "prompt": row["prompt"],
             "instruction_id_list": row["instruction_id_list"],
-            "kwargs": row["kwargs"],
+            "kwargs": _strip_none_kwargs(row["kwargs"]),
         })
     return out
 
@@ -408,7 +419,7 @@ def convert_ifbench() -> List[Mapping[str, object]]:
             "key": row["key"],
             "prompt": row["prompt"],
             "instruction_id_list": row["instruction_id_list"],
-            "kwargs": row["kwargs"],
+            "kwargs": _strip_none_kwargs(row["kwargs"]),
         })
     return out
 
