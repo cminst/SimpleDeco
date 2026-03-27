@@ -3,3 +3,10 @@ trl
 deepspeed
 orjson
 transformers>=4.55.0
+# IFEval / IFBench evaluation dependencies
+absl-py
+nltk
+immutabledict
+langdetect
+emoji
+syllapy
