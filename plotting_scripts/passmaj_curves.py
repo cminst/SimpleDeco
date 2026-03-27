@@ -403,7 +403,7 @@ def _plot_passmaj_curves(
     pass_ticks = sorted(global_ks["pass"]) or [1]
 
     nrows = len(dataset_results)
-    fig_height = -0.6 + nrows * 2.0
+    fig_height = -1.2 + nrows * 2.0
     fig, axes = plt.subplots(nrows, 2, figsize=(5.7, fig_height), squeeze=False, constrained_layout=False)
     fig.subplots_adjust(left=0.1, right=0.992, bottom=0.075, top=0.86, wspace=0.22, hspace=0.68)
 
