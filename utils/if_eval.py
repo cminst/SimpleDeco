@@ -253,16 +253,51 @@ def main():
     # Build prompt -> response mapping
     # ------------------------------------------------------------------
     prompt_to_response: Dict[str, str] = {}
-    save_records: List[dict] = []
+    responses: List[str] = []
     for inp, output_group in zip(inputs, outputs):
         response_text = output_group.outputs[0].text
         if args.strip_think:
             response_text = strip_thinking(response_text)
         prompt_to_response[inp.prompt] = response_text
-        save_records.append({"prompt": inp.prompt, "response": response_text})
+        responses.append(response_text)
 
     # ------------------------------------------------------------------
-    # Save raw outputs
+    # Evaluate (strict + loose) — collect per-sample results first
+    # ------------------------------------------------------------------
+    scores: Dict[str, float] = {}
+    # per_sample_results[i] = {"strict_follow_all": bool, "strict_follow_instruction_list": [...], ...}
+    per_sample_results: List[Dict] = [{} for _ in inputs]
+
+    for func, label in [
+        (eval_lib.test_instruction_following_strict, "strict"),
+        (eval_lib.test_instruction_following_loose, "loose"),
+    ]:
+        eval_outputs = [func(inp, prompt_to_response) for inp in inputs]
+
+        for i, o in enumerate(eval_outputs):
+            per_sample_results[i][f"{label}_follow_all"] = bool(o.follow_all_instructions)
+            per_sample_results[i][f"{label}_follow_instruction_list"] = [
+                bool(b) for b in o.follow_instruction_list
+            ]
+
+        prompt_correct = sum(1 for o in eval_outputs if o.follow_all_instructions)
+        prompt_total = len(eval_outputs)
+        instr_correct = sum(sum(o.follow_instruction_list) for o in eval_outputs)
+        instr_total = sum(len(o.follow_instruction_list) for o in eval_outputs)
+
+        prompt_acc = prompt_correct / prompt_total
+        instr_acc = instr_correct / instr_total
+
+        scores[f"prompt_{label}"] = prompt_acc
+        scores[f"instruction_{label}"] = instr_acc
+
+        print(f"\n{'=' * 64}")
+        print(f"{label.upper()} results:")
+        print(f"  prompt-level:      {prompt_acc:.4f} ({prompt_correct}/{prompt_total})")
+        print(f"  instruction-level: {instr_acc:.4f} ({instr_correct}/{instr_total})")
+
+    # ------------------------------------------------------------------
+    # Build log path
     # ------------------------------------------------------------------
     ckpt_name = extract_model_name(args.model_name_or_path)
     dyn_tag = f"-dyn_{args.dynamic_sampling_policy}" if args.dynamic_sampling_policy else ""
@@ -281,46 +316,40 @@ def main():
         f"{reasoning_effort_tag}{dyn_tag}{autodeco_heads_tag}{strip_tag}"
     )
 
-    responses_path = args.save_outputs or f"{log_base}-responses.jsonl"
-    resp_dir = os.path.dirname(responses_path)
-    if resp_dir:
-        os.makedirs(resp_dir, exist_ok=True)
-    with open(responses_path, "w") as f:
-        for rec in save_records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    print(f"Saved {len(save_records)} responses -> {responses_path}")
-
     # ------------------------------------------------------------------
-    # Evaluate
+    # Save rich JSONL (response + per-instruction eval results)
     # ------------------------------------------------------------------
-    scores: Dict[str, float] = {}
-    for func, label in [
-        (eval_lib.test_instruction_following_strict, "strict"),
-        (eval_lib.test_instruction_following_loose, "loose"),
-    ]:
-        eval_outputs = []
-        for inp in inputs:
-            eval_outputs.append(func(inp, prompt_to_response))
-
-        prompt_correct = sum(1 for o in eval_outputs if o.follow_all_instructions)
-        prompt_total = len(eval_outputs)
-        instr_correct = sum(sum(o.follow_instruction_list) for o in eval_outputs)
-        instr_total = sum(len(o.follow_instruction_list) for o in eval_outputs)
-
-        prompt_acc = prompt_correct / prompt_total
-        instr_acc = instr_correct / instr_total
-
-        scores[f"prompt_{label}"] = prompt_acc
-        scores[f"instruction_{label}"] = instr_acc
-
-        print(f"\n{'=' * 64}")
-        print(f"{label.upper()} results:")
-        print(f"  prompt-level:      {prompt_acc:.4f} ({prompt_correct}/{prompt_total})")
-        print(f"  instruction-level: {instr_acc:.4f} ({instr_correct}/{instr_total})")
-
-        # Write detailed eval results
-        eval_out_path = f"{log_base}-eval_{label}.jsonl"
-        eval_lib.write_outputs(eval_out_path, eval_outputs)
+    if args.save_outputs:
+        save_dir = os.path.dirname(args.save_outputs)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+        with open(args.save_outputs, "w") as f:
+            for inp, response_text, res in zip(inputs, responses, per_sample_results):
+                record = {
+                    "prompt": inp.prompt,
+                    "response": response_text,
+                    "metadata": {
+                        "dataset": args.dataset,
+                        "key": getattr(inp, "key", None),
+                        "instruction_id_list": list(getattr(inp, "instruction_id_list", [])),
+                        "model_name_or_path": args.model_name_or_path,
+                        "ckpt_name": ckpt_name,
+                        "temp": args.temp,
+                        "top_p": args.top_p,
+                        "top_k": args.top_k,
+                        "rp": args.rp,
+                        "max_tokens": args.max_tokens,
+                        "seed": args.seed,
+                        "reasoning_effort": args.reasoning_effort,
+                        "dynamic_sampling_policy": args.dynamic_sampling_policy,
+                        "dynamic_sampling_kwargs": dynamic_sampling_kwargs,
+                        "autodeco_heads": autodeco_heads,
+                        "strip_think": args.strip_think,
+                        **res,
+                    },
+                }
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        print(f"\nSaved {len(inputs)} records -> {args.save_outputs}")
 
     # ------------------------------------------------------------------
     # Summary
