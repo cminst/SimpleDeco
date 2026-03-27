@@ -12,6 +12,8 @@ Benchmarks:
 - BRUMO25           -> MathArena/brumo_2025 (train)
 - HMMT25            -> MathArena/hmmt_feb_2025 (train)
 - BeyondAIME        -> ByteDance-Seed/BeyondAIME (test)
+- IFEval            -> google/IFEval (train)
+- IFBench           -> allenai/IFBench_test (train)
 
 For multiple-choice datasets, the output keeps the same two keys only:
 - "problem": question text, with answer choices appended if they are stored separately
@@ -373,6 +375,44 @@ def convert_beyondaime() -> List[MutableMapping[str, str]]:
     return out
 
 
+def _write_raw_jsonl(records: Iterable[Mapping[str, object]], path: Path) -> int:
+    """Write records as-is (no gt normalization). Used for instruction-following datasets."""
+    count = 0
+    with path.open("w", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(dict(rec), ensure_ascii=False) + "\n")
+            count += 1
+    return count
+
+
+def convert_ifeval() -> List[Mapping[str, object]]:
+    """Download google/IFEval and return raw records with prompt/instruction_id_list/kwargs/key."""
+    ds = load_dataset("google/IFEval", split="train")
+    out: List[Mapping[str, object]] = []
+    for row in ds:
+        out.append({
+            "key": row["key"],
+            "prompt": row["prompt"],
+            "instruction_id_list": row["instruction_id_list"],
+            "kwargs": row["kwargs"],
+        })
+    return out
+
+
+def convert_ifbench() -> List[Mapping[str, object]]:
+    """Download allenai/IFBench_test and return raw records."""
+    ds = load_dataset("allenai/IFBench_test", split="train")
+    out: List[Mapping[str, object]] = []
+    for row in ds:
+        out.append({
+            "key": row["key"],
+            "prompt": row["prompt"],
+            "instruction_id_list": row["instruction_id_list"],
+            "kwargs": row["kwargs"],
+        })
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", type=Path, default=Path("same_format_jsonl"))
@@ -395,11 +435,24 @@ def main() -> None:
         ("beyondaime.jsonl", convert_beyondaime),
     ]
 
+    # Instruction-following datasets use a different schema (no gt normalization).
+    if_jobs = [
+        ("ifeval.jsonl", convert_ifeval),
+        ("ifbench.jsonl", convert_ifbench),
+    ]
+
     summary = {}
     for filename, fn in jobs:
         records = fn()
         outpath = args.outdir / filename
         count = _write_jsonl(records, outpath)
+        summary[filename] = {"rows": count, "path": str(outpath)}
+        print(f"wrote {count:>6} rows -> {outpath}")
+
+    for filename, fn in if_jobs:
+        records = fn()
+        outpath = args.outdir / filename
+        count = _write_raw_jsonl(records, outpath)
         summary[filename] = {"rows": count, "path": str(outpath)}
         print(f"wrote {count:>6} rows -> {outpath}")
 
