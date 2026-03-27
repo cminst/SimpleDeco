@@ -1039,10 +1039,14 @@ if __name__ == "__main__":
     extra_parser.add_argument("--dataset-num-proc", dest="dataset_num_proc", type=int)
     extra_parser.add_argument("--num_proc", type=int)
     extra_parser.add_argument("--num-proc", dest="num_proc", type=int)
+    extra_parser.add_argument("--output-dir", dest="output_dir", type=str)
+    extra_parser.add_argument("--output_dir", dest="output_dir", type=str)
     extra_args, _ = extra_parser.parse_known_args(remaining)
     if getattr(training_args, "dataset_num_proc", None) is None:
         if extra_args.dataset_num_proc is not None:
             setattr(training_args, "dataset_num_proc", extra_args.dataset_num_proc)
         elif extra_args.num_proc is not None:
             setattr(training_args, "dataset_num_proc", extra_args.num_proc)
+    if extra_args.output_dir is not None:
+        training_args.output_dir = extra_args.output_dir
     main(script_args, training_args, model_args)
