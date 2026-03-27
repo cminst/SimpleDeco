@@ -77,7 +77,11 @@ def _parse_datasets(values: list[str] | None, default: list[str]) -> list[str]:
 
 
 def _display_dataset_name(dataset: str) -> str:
-    return dataset if any(ch.isupper() for ch in dataset) else dataset.upper()
+    dataset_display = {
+        "GPQA_DIAMOND": "GPQA-Diamond",
+        "MMLU_PRO_LITE": "MMLU-Pro-Lite",
+    }
+    return dataset_display.get(dataset, dataset if any(ch.isupper() for ch in dataset) else dataset.upper())
 
 
 def _render_dataset_patterns(patterns: list[str], dataset: str) -> list[str]:
@@ -396,7 +400,7 @@ def _plot_passmaj_curves(
     pass_ticks = sorted(global_ks["pass"]) or [1]
 
     nrows = len(dataset_results)
-    fig_height = 1.2 + nrows * 2.15
+    fig_height = 1.05 + nrows * 2.0
     fig, axes = plt.subplots(nrows, 2, figsize=(5.7, fig_height), squeeze=False, constrained_layout=False)
     fig.subplots_adjust(left=0.1, right=0.992, bottom=0.075, top=0.86, wspace=0.22, hspace=0.68)
 
