@@ -468,7 +468,7 @@ def _serializable(obj: Any) -> Any:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", type=str, required=True, help="Path to the saved per-token diagnostics DatasetDict.")
-    ap.add_argument("--out-dir", type=str, default="shuffle_test_runs/default")
+    ap.add_argument("--output-dir", dest="out_dir", type=str, default="shuffle_test_runs/default")
     ap.add_argument("--dist-k", type=int, default=200, help="How many stored top-k logits to use for the truncated distribution.")
     ap.add_argument("--val-mod", type=int, default=10, help="Validation split is seq_id %% val_mod == 0.")
     ap.add_argument("--seed", type=int, default=0)

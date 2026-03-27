@@ -27,7 +27,7 @@ def elide_middle(text: str, max_len: int) -> str:
 
 def extract_job_label(job: str) -> str:
     patterns = [
-        r"--save_outputs\s+(\S+)",
+        r"--output-file\s+(\S+)",
         r"\btee\s+(\S+)",
         r"-s\s+(\S+)",
     ]

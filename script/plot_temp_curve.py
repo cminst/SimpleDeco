@@ -251,7 +251,7 @@ def main() -> None:
     parser.add_argument("--strip_assistant", action="store_true")
     parser.add_argument("--user_suffix", default=None)
     parser.add_argument("--smooth_window", type=int, default=0)
-    parser.add_argument("--output_dir", default="figure")
+    parser.add_argument("--output-dir", default="figure")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)

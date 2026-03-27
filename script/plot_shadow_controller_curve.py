@@ -227,7 +227,7 @@ def main() -> None:
     parser.add_argument("--tokenizer_name_or_path", default=None, help="Override tokenizer for decoding tokens in the HTML output.")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--smooth_window", type=int, default=0)
-    parser.add_argument("--output_dir", default="figure/shadow_controller_trace")
+    parser.add_argument("--output-dir", default="figure/shadow_controller_trace")
     parser.add_argument("--trust_remote_code", action="store_true")
     parser.add_argument("--hide_targets", action="store_true", help="Do not overlay the AutoDeco target T_hat/p_hat curves.")
     args = parser.parse_args()

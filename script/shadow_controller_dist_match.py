@@ -867,7 +867,7 @@ def log_hypothesis(logger: logging.Logger, hid: str, statement: str, holds: bool
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", type=str, required=True, help="Path to HF dataset saved with load_from_disk.")
-    ap.add_argument("--out-dir", type=str, default="shadow_controller_runs/default")
+    ap.add_argument("--output-dir", dest="out_dir", type=str, default="shadow_controller_runs/default")
     ap.add_argument("--profile-k", type=int, default=64, help="How many shifted top-k logits to use as features.")
     ap.add_argument("--dist-k", type=int, default=200, help="How many top logits to use to approximate the controlled distribution.")
     ap.add_argument("--val-mod", type=int, default=10)

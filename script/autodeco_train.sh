@@ -6,7 +6,7 @@ export WANDB_RUN_ID="AutoDeco-Thinking-$TS"
 accelerate launch trl_train.py \
   --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-  --output_dir ./autodeco_2heads_dolci \
+  --output-dir ./autodeco_2heads_dolci \
   --train_temp true \
   --train_top_p false \
   --temp_objective legacy_ce \

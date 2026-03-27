@@ -130,15 +130,15 @@ def main() -> None:
     merge_parser = subparsers.add_parser("merge")
     merge_parser.add_argument("--ats-path", type=str, required=True)
     merge_parser.add_argument("--base-model-path", type=str, required=True)
-    merge_parser.add_argument("--output", type=str, required=True)
+    merge_parser.add_argument("--output-dir", dest="output_dir", type=str, required=True)
     split_parser = subparsers.add_parser("split")
     split_parser.add_argument("--full-checkpoint", type=str, required=True)
-    split_parser.add_argument("--output", type=str, required=True)
+    split_parser.add_argument("--output-dir", dest="output_dir", type=str, required=True)
     args = parser.parse_args()
     if args.mode == "merge":
-        merge_ats(args.ats_path, args.base_model_path, args.output)
+        merge_ats(args.ats_path, args.base_model_path, args.output_dir)
     else:
-        split_ats(args.full_checkpoint, args.output)
+        split_ats(args.full_checkpoint, args.output_dir)
 
 
 if __name__ == "__main__":

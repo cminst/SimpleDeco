@@ -30,7 +30,7 @@ run_job () {
         --dynamic_sampling_policy confidence_gated \
         --dynamic_sampling_kwargs "$kwargs" \
         --seed "$seed" \
-        --save_outputs "ckpt/${DATASET}/${tag}/maj16_seed${seed}.jsonl" \
+        --output-file "ckpt/${DATASET}/${tag}/maj16_seed${seed}.jsonl" \
         2>&1 | tee "ckpt/${DATASET}/${tag}/maj16_seed${seed}.log"
     done
   ) &
@@ -68,7 +68,7 @@ run_job_autodeco () {
         --tp_size 1 \
         --max_tokens 32768 \
         --seed "$seed" \
-        --save_outputs "ckpt/${DATASET}/${tag}/maj16_seed${seed}.jsonl" \
+        --output-file "ckpt/${DATASET}/${tag}/maj16_seed${seed}.jsonl" \
         2>&1 | tee "ckpt/${DATASET}/${tag}/maj16_seed${seed}.log"
     done
   ) &

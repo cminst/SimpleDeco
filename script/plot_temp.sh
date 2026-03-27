@@ -11,5 +11,5 @@ python3 script/plot_temp_curve.py \
   --do_sample \
   --temperature 0.7 \
   --top_p 0.95 \
-  --output_dir figure/autodeco_temp_trace_304 \
+  --output-dir figure/autodeco_temp_trace_304 \
   --smooth_window 50

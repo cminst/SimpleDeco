@@ -299,7 +299,7 @@ def main() -> None:
         help="Number of seeds/files to create (default: 8).",
     )
     parser.add_argument(
-        "--out-dir",
+        "--output-dir",
         default=None,
         help="Output directory (default: same directory as input).",
     )

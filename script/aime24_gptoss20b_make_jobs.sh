@@ -94,7 +94,7 @@ emit_eval_jobs() {
       --tp_size "$TP_SIZE"
       --max_tokens "$MAX_TOKENS"
       --seed "$seed"
-      --save_outputs "$out"
+      --output-file "$out"
     )
 
     if [[ -n "$REASONING_EFFORT" ]]; then

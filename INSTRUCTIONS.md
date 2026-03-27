@@ -5,7 +5,7 @@
 ```bash
 python script/construct_autodeco.py \
   --base_model_name_or_path meta-llama/Meta-Llama-3-8B-Instruct \
-  --output_dir ckpt/autodeco-llama3-8b-instruct
+  --output-dir ckpt/autodeco-llama3-8b-instruct
 ```
 
 Use the generated wrapper path (`ckpt/autodeco-llama3-8b-instruct`) as `--model_name_or_path` for training.
@@ -18,7 +18,7 @@ You might have to adjust the chat template to allow assistant masking (check `qw
 accelerate launch trl_train.py \
   --model_name_or_path ckpt/autodeco-llama3-8b-instruct \
   --dataset_name HuggingFaceH4/ultrachat_200k \
-  --output_dir ./debug_analytic_hinge \
+  --output-dir ./debug_analytic_hinge \
   --train_temp true \
   --train_top_p false \
   --temp_objective analytic_min_p_hinge \
@@ -66,7 +66,7 @@ Use these flags to periodically write debug JSON files with per-token temperatur
 - `--temp_diag_steps 100` (write every N global steps)
 - `--temp_diag_examples 3` (max examples per file)
 - `--temp_diag_topk 5` (top-k probabilities to include)
-- `--temp_diag_dir temp_diagnostics` (subdir under `--output_dir`)
+- `--temp_diag_dir temp_diagnostics` (subdir under `--output-dir`)
 
 Example:
 

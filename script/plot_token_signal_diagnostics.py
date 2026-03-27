@@ -469,7 +469,7 @@ def main() -> None:
         help="Maximum points to draw in the entropy vs T_pred scatter plot.",
     )
     parser.add_argument(
-        "--output_dir",
+        "--output-dir",
         default="figure/token_signal_diagnostics",
         help="Output directory for summaries and generated plots.",
     )

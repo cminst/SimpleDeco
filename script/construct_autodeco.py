@@ -36,7 +36,7 @@ def main(base_model_name_or_path, output_dir, enable_temperature_head, enable_to
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--base_model_name_or_path', type=str, required=True)
-    parser.add_argument('--output_dir', type=str, required=True)
+    parser.add_argument('--output-dir', type=str, required=True)
     parser.add_argument('--enable_temperature_head', type=parse_bool, default=True)
     parser.add_argument('--enable_top_p_head', type=parse_bool, default=True)
     args = parser.parse_args()

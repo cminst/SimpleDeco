@@ -126,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='aime24')
     parser.add_argument('--tp_size', type=int, default=4)
     parser.add_argument('--max_tokens', type=int, default=32768)
-    parser.add_argument('--save-outputs', '--save_outputs', dest='save_outputs', type=str, default=None,
+    parser.add_argument('--output-file', dest='output_file', type=str, default=None,
                         help='Optional jsonl output path for per-sample generations.')
     parser.add_argument('--dynamic_sampling_policy', type=str, default=None,
                         help='Optional dynamic sampling policy '
@@ -235,11 +235,11 @@ if __name__ == "__main__":
         os.makedirs(f'generation_log/{args.dataset}')
     outputs = llm.generate(problems, sampling_params)
     save_outputs_f = None
-    if args.save_outputs:
-        save_dir = os.path.dirname(args.save_outputs)
+    if args.output_file:
+        save_dir = os.path.dirname(args.output_file)
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
-        save_outputs_f = open(args.save_outputs, 'w')
+        save_outputs_f = open(args.output_file, 'w')
 
     def aggregate_score(scores, mode):
         if mode == 'pass@k':

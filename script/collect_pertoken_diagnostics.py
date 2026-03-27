@@ -543,7 +543,7 @@ def main() -> None:
         help="Optional baseline top-k recorded in metadata.",
     )
     parser.add_argument(
-        "--output_dir",
+        "--output-dir",
         required=True,
         help="Output directory for the saved dataset.",
     )

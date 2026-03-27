@@ -21,7 +21,7 @@ For multiple-choice datasets, the output keeps the same two keys only:
 
 Examples:
     python build_same_format_jsonl.py
-    python build_same_format_jsonl.py --outdir data/TempTest
+    python build_same_format_jsonl.py --output-dir data/TempTest
     python build_same_format_jsonl.py --mmlu-gt text
     python build_same_format_jsonl.py --gpqa-gt text
 """
@@ -415,13 +415,13 @@ def convert_ifbench() -> List[Mapping[str, object]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outdir", type=Path, default=Path("same_format_jsonl"))
+    parser.add_argument("--output-dir", dest="output_dir", type=Path, default=Path("same_format_jsonl"))
     parser.add_argument("--gpqa-gt", choices=["letter", "text"], default="letter")
     parser.add_argument("--mmlu-gt", choices=["letter", "text"], default="letter")
     parser.add_argument("--general-dev-seed", type=int, default=1337)
     args = parser.parse_args()
 
-    args.outdir.mkdir(parents=True, exist_ok=True)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = [
         ("aime24.jsonl", convert_aime24),
@@ -444,19 +444,19 @@ def main() -> None:
     summary = {}
     for filename, fn in jobs:
         records = fn()
-        outpath = args.outdir / filename
+        outpath = args.output_dir / filename
         count = _write_jsonl(records, outpath)
         summary[filename] = {"rows": count, "path": str(outpath)}
         print(f"wrote {count:>6} rows -> {outpath}")
 
     for filename, fn in if_jobs:
         records = fn()
-        outpath = args.outdir / filename
+        outpath = args.output_dir / filename
         count = _write_raw_jsonl(records, outpath)
         summary[filename] = {"rows": count, "path": str(outpath)}
         print(f"wrote {count:>6} rows -> {outpath}")
 
-    summary_path = args.outdir / "summary.json"
+    summary_path = args.output_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"wrote summary -> {summary_path}")
 

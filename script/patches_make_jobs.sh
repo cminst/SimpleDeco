@@ -72,7 +72,7 @@ emit_eval_jobs() {
       --tp_size 1 \
       --max_tokens 32768 \
       --seed "$seed" \
-      --save_outputs "$out" \
+      --output-file "$out" \
       "${extra_args[@]}"
   done
 }

@@ -84,7 +84,7 @@ pip install wandb
 ```python
 python script/construct_autodeco.py \
     --base_model_name_or_path path_to_your_base_LLM \
-    --output_dir path_to_your_AutoDeco_model
+    --output-dir path_to_your_AutoDeco_model
 ```
 
 <!-- ### 2. Inference
@@ -173,7 +173,7 @@ accelerate launch trl_train.py \
     --train_top_p false \
     --learning_rate 5e-6 \
     --num_train_epochs 1 \
-    --output_dir ckpt/llama3_temp_head
+    --output-dir ckpt/llama3_temp_head
 ```
 
 ## 📊 Inference

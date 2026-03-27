@@ -52,7 +52,7 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_model_name_or_path", type=str, required=True)
-    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--calibration_type", type=str, default="transformer")
     parser.add_argument("--feature_key", type=str, default="hidden_states")
     parser.add_argument("--normalize_logits", action="store_true")

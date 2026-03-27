@@ -5,7 +5,7 @@ export WANDB_RUN_ID="ATS-Dolci-$TS"
 accelerate launch trl_train.py \
   --model_name_or_path ckpt/DeepSeek-R1-Distill-Qwen-7B \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-  --output_dir ./ats_dolci \
+  --output-dir ./ats_dolci \
   --train_ats true \
   --ats_calibration_type transformer \
   --ats_feature_key hidden_states \

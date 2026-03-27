@@ -42,7 +42,7 @@ for LEARNING_RATE in 5e-6; do \
         --num_train_epochs $NUM_EPOCHS \
         --gradient_checkpointing \
         --logging_steps 1 \
-        --output_dir $OUTPUT_DIR \
+        --output-dir $OUTPUT_DIR \
         --save_strategy 'epoch' \
         --attn_implementation 'flash_attention_2' \
         --save_only_model \

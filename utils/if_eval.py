@@ -142,7 +142,7 @@ def main():
     parser.add_argument("--max_tokens", type=int, default=4096)
     parser.add_argument("--strip_think", action="store_true",
                         help="Strip <think>...</think> from responses before scoring.")
-    parser.add_argument("--save-outputs", "--save_outputs", dest="save_outputs", type=str, default=None)
+    parser.add_argument("--output-file", dest="output_file", type=str, default=None)
     parser.add_argument("--dynamic_sampling_policy", type=str, default=None)
     parser.add_argument("--dynamic_sampling_kwargs", type=str, default="{}")
     parser.add_argument("--dyn", action="append", type=parse_dynamic_sampling_kv, default=[], metavar="KEY=VALUE")
@@ -319,11 +319,11 @@ def main():
     # ------------------------------------------------------------------
     # Save rich JSONL (response + per-instruction eval results)
     # ------------------------------------------------------------------
-    if args.save_outputs:
-        save_dir = os.path.dirname(args.save_outputs)
+    if args.output_file:
+        save_dir = os.path.dirname(args.output_file)
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
-        with open(args.save_outputs, "w") as f:
+        with open(args.output_file, "w") as f:
             for inp, response_text, res in zip(inputs, responses, per_sample_results):
                 record = {
                     "prompt": inp.prompt,
@@ -349,7 +349,7 @@ def main():
                     },
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        print(f"\nSaved {len(inputs)} records -> {args.save_outputs}")
+        print(f"\nSaved {len(inputs)} records -> {args.output_file}")
 
     # ------------------------------------------------------------------
     # Summary

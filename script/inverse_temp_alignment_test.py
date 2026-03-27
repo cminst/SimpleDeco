@@ -105,7 +105,7 @@ def _summarize_terms(terms) -> Dict[str, Any]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", type=str, required=True, help="Path to the saved per-token diagnostics DatasetDict.")
-    ap.add_argument("--out-dir", type=str, default="inverse_temp_alignment_runs/default")
+    ap.add_argument("--output-dir", dest="out_dir", type=str, default="inverse_temp_alignment_runs/default")
     ap.add_argument("--dist-k", type=int, default=200)
     ap.add_argument("--val-mod", type=int, default=10)
     ap.add_argument("--seed", type=int, default=0)

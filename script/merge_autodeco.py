@@ -177,18 +177,18 @@ def main():
         description="AutoDeco checkpoint merge/split utility",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+    Examples:
 
 1. Merge (heads + base model → full checkpoint for vLLM):
     python merge_autodeco.py merge \
         --autodeco-path  \
         --base-model-path  \
-        --output 
+        --output-dir 
 
 2. Split (full checkpoint → heads-only checkpoint):
     python merge_autodeco.py split \
         --full-checkpoint  \
-        --output 
+        --output-dir 
         """
     )
     
@@ -211,7 +211,8 @@ Examples:
         help="Path to base model checkpoint"
     )
     merge_parser.add_argument(
-        "--output",
+        "--output-dir",
+        dest="output_dir",
         type=str,
         required=True,
         help="Output directory for merged checkpoint"
@@ -226,7 +227,8 @@ Examples:
         help="Path to full AutoDeco checkpoint"
     )
     split_parser.add_argument(
-        "--output",
+        "--output-dir",
+        dest="output_dir",
         type=str,
         required=True,
         help="Output directory for heads-only checkpoint"
@@ -239,12 +241,12 @@ Examples:
         merge_autodeco(
             args.autodeco_path,
             args.base_model_path,
-            args.output,
+            args.output_dir,
         )
     elif args.mode == 'split':
         split_autodeco(
             args.full_checkpoint,
-            args.output,
+            args.output_dir,
         )
 
 

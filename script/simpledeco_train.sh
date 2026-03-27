@@ -6,7 +6,7 @@ export WANDB_RUN_ID="SimpleDeco-V3-$TS"
 uv run accelerate launch trl_train.py \
   --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-  --output_dir ./ckpt/simpledeco-quadraticloss \
+  --output-dir ./ckpt/simpledeco-quadraticloss \
   --train_temp true \
   --train_top_p false \
   --temp_objective analytic_min_p_hinge \
@@ -39,7 +39,7 @@ uv run accelerate launch trl_train.py \
 # uv run accelerate launch trl_train.py \
 #   --model_name_or_path ckpt/untrained-autodeco-qwen3-4b-thinking \
 #   --dataset_name qingy2024/Dolci-Think-SFT-ctx8k \
-#   --output_dir ./ckpt/simpledeco-bimodal \
+#   --output-dir ./ckpt/simpledeco-bimodal \
 #   --train_temp true \
 #   --train_top_p false \
 #   --temp_objective analytic_min_p_hinge \

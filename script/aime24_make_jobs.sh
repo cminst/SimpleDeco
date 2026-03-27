@@ -89,7 +89,7 @@ emit_eval_jobs() {
       --tp_size "$TP_SIZE" \
       --max_tokens "$MAX_TOKENS" \
       --seed "$seed" \
-      --save_outputs "$out"
+      --output-file "$out"
     )
     if ((${#extra_args[@]} > 0)); then
       cmd+=("${extra_args[@]}")
