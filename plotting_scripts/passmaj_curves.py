@@ -77,11 +77,14 @@ def _parse_datasets(values: list[str] | None, default: list[str]) -> list[str]:
 
 
 def _display_dataset_name(dataset: str) -> str:
+    normalized = dataset.strip().strip("/").replace("-", "_").upper()
     dataset_display = {
         "GPQA_DIAMOND": "GPQA-Diamond",
         "MMLU_PRO_LITE": "MMLU-Pro-Lite",
     }
-    return dataset_display.get(dataset, dataset if any(ch.isupper() for ch in dataset) else dataset.upper())
+    if normalized in dataset_display:
+        return dataset_display[normalized]
+    return dataset if any(ch.isupper() for ch in dataset) else dataset.upper()
 
 
 def _render_dataset_patterns(patterns: list[str], dataset: str) -> list[str]:
