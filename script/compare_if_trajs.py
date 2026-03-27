@@ -2,8 +2,9 @@
 
 Each input JSONL is produced by ``utils/if_eval.py`` and contains one record
 per prompt with per-instruction strict/loose boolean results stored in
-``metadata``.  This script aggregates those into the four canonical metrics
-and prints a side-by-side comparison table when multiple files are given.
+``metadata``. This script aggregates those into the four canonical metrics and
+can compare either individual JSONLs or groups of JSONLs (for example, all
+seed files under one tag).
 
 Usage
 -----
@@ -13,21 +14,23 @@ python script/compare_if_trajs.py path/to/run.jsonl
 # Multiple files — side-by-side comparison
 python script/compare_if_trajs.py run_a.jsonl run_b.jsonl run_c.jsonl
 
-# Glob
-python script/compare_if_trajs.py "generation_log/ifeval/*.jsonl"
+# Group inputs with compare_trajs.py-style flags
+python script/compare_if_trajs.py --dataset ifeval --tags base-r1-distill-qwen7b,autodeco-r1-distill-qwen7b
 
-# Short labels
-python script/compare_if_trajs.py run_a.jsonl run_b.jsonl --labels baseline autodeco
+# Optional labels
+python script/compare_if_trajs.py --dataset ifeval --tags base-r1-distill-qwen7b,autodeco-r1-distill-qwen7b \
+  --labels baseline,autodeco
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
 import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +129,19 @@ METRIC_DISPLAY = {
 }
 
 
+def _parse_csv_args(values: List[str] | None) -> List[str]:
+    if not values:
+        return []
+    items: List[str] = []
+    for value in values:
+        for row in csv.reader([value], skipinitialspace=True):
+            for item in row:
+                item = item.strip()
+                if item:
+                    items.append(item)
+    return items
+
+
 def _short_label(path: Path) -> str:
     """Derive a compact label from the file path."""
     stem = path.stem
@@ -140,28 +156,120 @@ def _short_label(path: Path) -> str:
     return stem
 
 
-def _print_single(label: str, metrics: Dict[str, float], path: Path):
-    print(f"\nFile : {path}")
+def _resolve_inputs(value: str) -> List[Path]:
+    expanded = os.path.expanduser(value)
+    if glob.has_magic(expanded):
+        matches = sorted(glob.glob(expanded))
+        if not matches:
+            raise FileNotFoundError(f"No files matched pattern: {value}")
+        return [Path(match) for match in matches]
+    path = Path(expanded)
+    if not path.exists():
+        raise FileNotFoundError(f"Input not found: {value}")
+    return [path]
+
+
+def _dedupe_paths(paths: List[Path]) -> List[Path]:
+    seen = set()
+    unique: List[Path] = []
+    for path in paths:
+        key = str(path.resolve())
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def _default_group_label(spec: str, paths: List[Path]) -> str:
+    if len(paths) == 1:
+        return _short_label(paths[0])
+    parent_names = {path.parent.name for path in paths}
+    if len(parent_names) == 1:
+        return next(iter(parent_names))
+    return spec
+
+
+def _summarize_group(paths: List[Path]) -> Dict[str, object]:
+    file_metrics: List[Dict[str, float]] = []
+    combined_records: List[dict] = []
+    for path in paths:
+        records = _read_jsonl(path)
+        combined_records.extend(records)
+        file_metrics.append(compute_if_metrics(records))
+
+    pooled_metrics = compute_if_metrics(combined_records)
+    ci_metrics = {key: None for key in METRIC_KEYS}
+
+    return {
+        "metrics": {key: pooled_metrics[key] for key in METRIC_KEYS},
+        "metric_ci": ci_metrics,
+        "n_files": len(paths),
+        "prompt_counts": [int(metrics["_n_prompts"]) for metrics in file_metrics],
+        "instruction_counts": [int(metrics["_n_instructions"]) for metrics in file_metrics],
+    }
+
+
+def _format_count_summary(values: List[int]) -> str:
+    unique = sorted(set(values))
+    if not unique:
+        return "0"
+    if len(unique) == 1:
+        return str(unique[0])
+    return f"{unique[0]}-{unique[-1]}"
+
+
+def _format_metric(value: float, ci: Optional[float]) -> str:
+    if ci is None:
+        return f"{value:.4f}"
+    return f"{value:.4f}+/-{ci:.4f}"
+
+
+def _print_single(label: str, summary: Dict[str, object], paths: List[Path], spec: str):
+    kind = "File" if len(paths) == 1 else "Group"
+    print(f"\n{kind} : {paths[0] if len(paths) == 1 else spec}")
     print(f"Label: {label}")
-    print(f"  n_prompts     : {int(metrics['_n_prompts'])}")
-    print(f"  n_instructions: {int(metrics['_n_instructions'])}")
+    if len(paths) > 1:
+        print(f"Files: {len(paths)}")
+    print(f"  n_prompts     : {_format_count_summary(summary['prompt_counts'])}")
+    print(f"  n_instructions: {_format_count_summary(summary['instruction_counts'])}")
     print()
     row_label_w = max(len(METRIC_DISPLAY[k]) for k in METRIC_KEYS) + 2
+    metrics = summary["metrics"]
+    metric_ci = summary["metric_ci"]
     for k in METRIC_KEYS:
         sep = "─" * 40 if k == "average" else ""
         if sep:
             print(f"  {sep}")
-        print(f"  {METRIC_DISPLAY[k]:<{row_label_w}} {metrics[k]:.4f}  ({metrics[k]*100:.2f}%)")
+        value = metrics[k]
+        ci = metric_ci[k]
+        metric_text = _format_metric(value, ci)
+        if ci is None:
+            pct_text = f"({value * 100:.2f}%)"
+        else:
+            pct_text = f"({value * 100:.2f}+/-{ci * 100:.2f}%)"
+        print(f"  {METRIC_DISPLAY[k]:<{row_label_w}} {metric_text:<18} {pct_text}")
+
+    if len(paths) > 1:
+        print("\nMatched files:")
+        for idx, path in enumerate(paths):
+            print(f"  [{idx}] {path}")
 
 
 def _print_comparison(
-    labels: List[str],
-    all_metrics: List[Dict[str, float]],
-    paths: List[Path],
+    groups: List[Dict[str, object]],
     highlight_best: bool = True,
 ):
+    labels = [str(group["label"]) for group in groups]
     n = len(labels)
-    col_w = max(12, max(len(lb) for lb in labels) + 2)
+    col_w = max(
+        12,
+        max(len(label) for label in labels) + 2,
+        max(
+            len(_format_metric(group["metrics"][key], group["metric_ci"][key]))
+            for group in groups
+            for key in METRIC_KEYS
+        ) + 2,
+    )
     metric_w = max(len(METRIC_DISPLAY[k]) for k in METRIC_KEYS) + 2
 
     header = f"{'Metric':<{metric_w}}" + "".join(f"{lb:>{col_w}}" for lb in labels)
@@ -171,12 +279,14 @@ def _print_comparison(
     print(sep)
 
     for k in METRIC_KEYS:
-        values = [m[k] for m in all_metrics]
+        values = [group["metrics"][k] for group in groups]
         best_val = max(values)
         cells = []
-        for v in values:
-            cell = f"{v:.4f}"
-            if highlight_best and abs(v - best_val) < 1e-9 and n > 1:
+        for group in groups:
+            value = group["metrics"][k]
+            ci = group["metric_ci"][k]
+            cell = _format_metric(value, ci)
+            if highlight_best and abs(value - best_val) < 1e-9 and n > 1:
                 cell = f"[{cell}]"
             cells.append(cell)
         if k == "average":
@@ -185,9 +295,26 @@ def _print_comparison(
         print(row)
     print(sep)
 
-    print(f"\n{'File':<{metric_w}}" + "".join(f"{lb:>{col_w}}" for lb in labels))
-    for i, (lb, p) in enumerate(zip(labels, paths)):
-        print(f"  [{i}] {lb}: {p}")
+    metadata_rows = [
+        ("Files", [str(group["summary"]["n_files"]) for group in groups]),
+        ("Prompts", [_format_count_summary(group["summary"]["prompt_counts"]) for group in groups]),
+        (
+            "Instructions",
+            [_format_count_summary(group["summary"]["instruction_counts"]) for group in groups],
+        ),
+    ]
+    for title, cells in metadata_rows:
+        print(f"{title:<{metric_w}}" + "".join(f"{cell:>{col_w}}" for cell in cells))
+
+    print(f"\n{'Source':<{metric_w}}" + "".join(f"{lb:>{col_w}}" for lb in labels))
+    for i, group in enumerate(groups):
+        paths = group["paths"]
+        if len(paths) == 1:
+            print(f"  [{i}] {group['label']}: {paths[0]}")
+            continue
+        print(f"  [{i}] {group['label']}: {len(paths)} files from {group['spec']}")
+        for path in paths:
+            print(f"       {path}")
 
 
 # ---------------------------------------------------------------------------
@@ -196,19 +323,45 @@ def _print_comparison(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Post-hoc IFEval/IFBench metric report and comparison.",
+        description=(
+            "Post-hoc IFEval/IFBench metric report and comparison. Accepts either "
+            "explicit JSONL paths/globs or compare_trajs.py-style --dataset/--tags inputs."
+        ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
         "files",
+        nargs="*",
+        help="Optional JSONL files or glob patterns saved by utils/if_eval.py.",
+    )
+    parser.add_argument(
+        "--inputs",
+        action="extend",
         nargs="+",
-        help="One or more JSONL files (or glob patterns) saved by utils/if_eval.py.",
+        help="JSONL paths/globs. Accepts comma-separated values and can be passed multiple times.",
     )
     parser.add_argument(
         "--labels",
-        nargs="*",
         default=None,
-        help="Optional short labels for each file (same order as files).",
+        action="extend",
+        nargs="+",
+        help="Labels for input groups. Accepts comma-separated values and can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--ckpt-root",
+        default="ckpt",
+        help="Root directory for --dataset/--tags expansion (default: ckpt).",
+    )
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help="Dataset name to expand --tags into ckpt/{dataset}/{tag}/*.jsonl.",
+    )
+    parser.add_argument(
+        "--tags",
+        action="extend",
+        nargs="+",
+        help="Tag names to compare. Accepts comma-separated values and can be passed multiple times.",
     )
     parser.add_argument(
         "--no_highlight",
@@ -217,61 +370,65 @@ def main():
     )
     args = parser.parse_args()
 
-    # Expand globs
-    resolved: List[Path] = []
-    for pattern in args.files:
-        matches = sorted(glob.glob(pattern, recursive=True))
-        if matches:
-            resolved.extend(Path(m) for m in matches)
-        else:
-            p = Path(pattern)
-            if p.exists():
-                resolved.append(p)
-            else:
-                print(f"Warning: no files matched pattern: {pattern}", file=sys.stderr)
+    input_groups: List[Dict[str, str | None]] = [{"spec": spec, "label": None} for spec in args.files]
+    input_specs = _parse_csv_args(args.inputs)
+    input_groups.extend({"spec": spec, "label": None} for spec in input_specs)
 
-    if not resolved:
-        parser.error("No input files found.")
-
-    # Deduplicate while preserving order
-    seen = set()
-    paths: List[Path] = []
-    for p in resolved:
-        key = str(p.resolve())
-        if key not in seen:
-            seen.add(key)
-            paths.append(p)
-
-    # Build labels
-    if args.labels:
-        if len(args.labels) != len(paths):
-            parser.error(
-                f"--labels has {len(args.labels)} entries but {len(paths)} files were resolved."
+    tag_specs = _parse_csv_args(args.tags)
+    if tag_specs:
+        if not args.dataset:
+            parser.error("--dataset is required when using --tags.")
+        for tag in tag_specs:
+            input_groups.append(
+                {
+                    "spec": os.path.join(args.ckpt_root, args.dataset, tag, "*.jsonl"),
+                    "label": tag,
+                }
             )
-        labels = args.labels
-    else:
-        labels = [_short_label(p) for p in paths]
 
-    # Load + compute
-    all_metrics: List[Dict[str, float]] = []
-    for p, lb in zip(paths, labels):
+    if not input_groups:
+        parser.error("No inputs provided. Use positional files, --inputs, or --dataset/--tags.")
+
+    label_specs = _parse_csv_args(args.labels)
+    if label_specs and len(label_specs) != len(input_groups):
+        parser.error(
+            f"--labels has {len(label_specs)} entries but there are {len(input_groups)} input groups."
+        )
+    if label_specs:
+        for group, label in zip(input_groups, label_specs):
+            group["label"] = label
+
+    groups: List[Dict[str, object]] = []
+    for group in input_groups:
+        spec = str(group["spec"])
         try:
-            records = _read_jsonl(p)
+            paths = _dedupe_paths(_resolve_inputs(spec))
         except Exception as exc:
-            print(f"Error reading {p}: {exc}", file=sys.stderr)
+            print(f"Error resolving {spec}: {exc}", file=sys.stderr)
             sys.exit(1)
         try:
-            metrics = compute_if_metrics(records)
-        except ValueError as exc:
-            print(f"Error computing metrics for {p}: {exc}", file=sys.stderr)
+            summary = _summarize_group(paths)
+        except Exception as exc:
+            print(f"Error reading {spec}: {exc}", file=sys.stderr)
             sys.exit(1)
-        all_metrics.append(metrics)
+        label = str(group["label"] or _default_group_label(spec, paths))
+        groups.append(
+            {
+                "spec": spec,
+                "label": label,
+                "paths": paths,
+                "summary": summary,
+                "metrics": summary["metrics"],
+                "metric_ci": summary["metric_ci"],
+            }
+        )
 
     # Report
-    if len(paths) == 1:
-        _print_single(labels[0], all_metrics[0], paths[0])
+    if len(groups) == 1:
+        group = groups[0]
+        _print_single(str(group["label"]), group["summary"], group["paths"], str(group["spec"]))
     else:
-        _print_comparison(labels, all_metrics, paths, highlight_best=not args.no_highlight)
+        _print_comparison(groups, highlight_best=not args.no_highlight)
 
     print()
 
