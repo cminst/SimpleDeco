@@ -221,12 +221,19 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             self.llm.config.attn_implementation = kwargs.get("attn_implementation")
 
 
-        # Initialize AutoDeco heads
-        self.temp_head = TempHead(config.temperature_hidden_size)
-        self.top_p_head = TopPHead(
-            config.top_p_hidden_size,
-            use_enhanced_features=config.use_enhanced_features
+        # Initialize only the heads enabled by config so temp-only and top-p-only
+        # checkpoints stay lightweight and serialize cleanly.
+        self.temp_head = (
+            TempHead(config.temperature_hidden_size)
+            if config.enable_temperature_head
+            else None
         )
+        self.top_p_head = None
+        if config.enable_top_p_head:
+            self.top_p_head = TopPHead(
+                config.top_p_hidden_size,
+                use_enhanced_features=config.use_enhanced_features,
+            )
 
         # Training flags
         self.train_temp = config.enable_temperature_head
@@ -695,7 +702,10 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             method: 'soft' for soft top-p with exponential decay
         """
         unscaled_shift = unscaled_logits[:, :-1, :]
-        temp_shift = temp_logits[:, :-1, :]
+        if temp_logits is None:
+            temp_shift = torch.ones_like(top_p_logits[:, :-1, :])
+        else:
+            temp_shift = temp_logits[:, :-1, :]
         top_p_shift = top_p_logits[:, :-1, :]
         shift_labels = labels[:, 1:]
 
@@ -824,12 +834,17 @@ class AutoDecoModelForCausalLM(PreTrainedModel, GenerationMixin):
             else:
                 unscaled_logits = self.llm.lm_head(hidden_states[:, slice_indices, :])
 
-        temp_logits = self.temp_head(hidden_states[:, slice_indices, :])
+        temp_logits = None
+        if self.temp_head is not None:
+            temp_logits = self.temp_head(hidden_states[:, slice_indices, :])
         top_p_logits = None
-        if self.train_top_p:
+        if self.train_top_p and self.top_p_head is not None:
+            temp_for_top_p = temp_logits
+            if temp_for_top_p is None:
+                temp_for_top_p = torch.ones_like(hidden_states[:, slice_indices, :1])
             top_p_logits = self.top_p_head(
                 hidden_states[:, slice_indices, :],
-                temp_logits.detach(),
+                temp_for_top_p.detach(),
                 unscaled_logits=unscaled_logits,
             )
 

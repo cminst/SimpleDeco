@@ -25,7 +25,7 @@ TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-r1-distill-qwen7b}"
 TAG_TEMP_HEAD_ONLY="${TAG_TEMP_HEAD_ONLY:-temphead-meanshift-topp-r1-distill-qwen7b}"
 TAG_TOP_P_HEAD_ONLY="${TAG_TOP_P_HEAD_ONLY:-topphead-meanshift-temp-r1-distill-qwen7b}"
 
-SEEDS_8=(42 43 44 45 46 47 48 49)
+SEEDS_12=(42 43 44 45 46 47 48 49 50 51 52 53)
 
 mkdir -p "$(dirname "$JOB_FILE")"
 
@@ -92,7 +92,7 @@ emit_eval_jobs() {
   done
 }
 
-SEEDS=("${SEEDS_8[@]}")
+SEEDS=("${SEEDS_12[@]}")
 
 # 1) AutoDeco full controller.
 emit_eval_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 "$NUM_SAMPLES"

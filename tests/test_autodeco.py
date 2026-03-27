@@ -119,3 +119,32 @@ def test_autodeco_mean_head_prediction_uses_supervised_tokens_only() -> None:
     mean_value = AutoDecoLLMTrainer._mean_head_prediction(head_logits, labels)
     assert mean_value is not None
     assert abs(mean_value - 0.5) < 1e-6
+
+
+def test_autodeco_temp_only_checkpoint_round_trip(tmp_path: Path) -> None:
+    base_dir = tmp_path / "base"
+    _write_tiny_base_model(base_dir)
+
+    model = AutoDecoModelForCausalLM.from_pretrained(
+        str(base_dir),
+        enable_temperature_head=True,
+        enable_top_p_head=False,
+    )
+    assert model.temp_head is not None
+    assert model.top_p_head is None
+    assert model.config.enable_temperature_head is True
+    assert model.config.enable_top_p_head is False
+
+    input_ids = torch.tensor([[1, 4, 5, 2]], dtype=torch.long)
+    outputs = model(input_ids=input_ids)
+    assert outputs.temp_logits is not None
+    assert outputs.top_p_logits is None
+
+    save_dir = tmp_path / "autodeco-temp-only"
+    model.save_pretrained(save_dir)
+
+    reloaded = AutoDecoModelForCausalLM.from_pretrained(str(save_dir))
+    assert reloaded.temp_head is not None
+    assert reloaded.top_p_head is None
+    assert reloaded.config.enable_temperature_head is True
+    assert reloaded.config.enable_top_p_head is False
