@@ -277,6 +277,10 @@ def _format_metric(value: float, ci: Optional[float]) -> str:
     return f"{value * 100:.2f}±{ci * 100:.2f}%"
 
 
+def _bold_text(value: str) -> str:
+    return f"\033[1m{value}\033[0m"
+
+
 def _print_single(
     label: str,
     summary: Dict[str, object],
@@ -336,7 +340,10 @@ def _print_comparison(
     if all(dataset_values) and len(set(dataset_values)) == 1:
         common_dataset = str(dataset_values[0])
     metric_label = "Metric" if common_dataset is None else f"Metric ({common_dataset})"
-    metric_w = max(metric_w, len(metric_label) + 2)
+    metric_label = (
+        "Metric" if common_dataset is None else f"Metric ({_bold_text(common_dataset)})"
+    )
+    metric_w = max(metric_w, len(f"Metric ({common_dataset})" if common_dataset else metric_label) + 2)
 
     header = f"{metric_label:<{metric_w}}" + "".join(f"{lb:>{col_w}}" for lb in labels)
     sep = "─" * len(header)
