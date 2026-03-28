@@ -209,6 +209,31 @@ def _default_group_label(spec: str, paths: List[Path]) -> str:
     return spec
 
 
+def _infer_dataset_name(spec: str, paths: List[Path]) -> str | None:
+    parts = Path(spec).parts
+    if "ckpt" in parts:
+        ckpt_idx = parts.index("ckpt")
+        if ckpt_idx + 1 < len(parts):
+            return parts[ckpt_idx + 1]
+    for path in paths:
+        if "ckpt" in path.parts:
+            parts = path.parts
+            ckpt_idx = parts.index("ckpt")
+            if ckpt_idx + 1 < len(parts):
+                return parts[ckpt_idx + 1]
+    return None
+
+
+def _truncate_paths(paths: List[Path], max_items: int = 5) -> List[Path | str]:
+    if len(paths) <= max_items:
+        return paths
+    if max_items < 5:
+        return paths[:max_items]
+    head_count = 2
+    tail_count = max_items - head_count - 1
+    return paths[:head_count] + ["..."] + paths[-tail_count:]
+
+
 def _summarize_group(paths: List[Path]) -> Dict[str, object]:
     file_metrics: List[Dict[str, float]] = []
     for path in paths:
@@ -252,10 +277,18 @@ def _format_metric(value: float, ci: Optional[float]) -> str:
     return f"{value * 100:.2f}±{ci * 100:.2f}%"
 
 
-def _print_single(label: str, summary: Dict[str, object], paths: List[Path], spec: str):
+def _print_single(
+    label: str,
+    summary: Dict[str, object],
+    paths: List[Path],
+    spec: str,
+    dataset: str | None,
+):
     kind = "File" if len(paths) == 1 else "Group"
     print(f"\n{kind} : {paths[0] if len(paths) == 1 else spec}")
     print(f"Label: {label}")
+    if dataset:
+        print(f"Dataset: {dataset}")
     if len(paths) > 1:
         print(f"Files: {len(paths)}")
     print(f"  n_prompts     : {_format_count_summary(summary['prompt_counts'])}")
@@ -273,8 +306,13 @@ def _print_single(label: str, summary: Dict[str, object], paths: List[Path], spe
 
     if len(paths) > 1:
         print("\nMatched files:")
-        for idx, path in enumerate(paths):
-            print(f"  [{idx}] {path}")
+        shown = _truncate_paths(paths)
+        for item in shown:
+            if item == "...":
+                print("       ...")
+                continue
+            idx = paths.index(item)
+            print(f"  [{idx}] {item}")
 
 
 def _print_comparison(
@@ -293,8 +331,14 @@ def _print_comparison(
         ) + 2,
     )
     metric_w = max(len(METRIC_DISPLAY[k]) for k in METRIC_KEYS) + 2
+    dataset_values = [group.get("dataset") for group in groups]
+    common_dataset = None
+    if all(dataset_values) and len(set(dataset_values)) == 1:
+        common_dataset = str(dataset_values[0])
+    metric_label = "Metric" if common_dataset is None else f"Metric ({common_dataset})"
+    metric_w = max(metric_w, len(metric_label) + 2)
 
-    header = f"{'Metric':<{metric_w}}" + "".join(f"{lb:>{col_w}}" for lb in labels)
+    header = f"{metric_label:<{metric_w}}" + "".join(f"{lb:>{col_w}}" for lb in labels)
     sep = "─" * len(header)
     print("\n" + sep)
     print(header)
@@ -335,8 +379,13 @@ def _print_comparison(
             print(f"  [{i}] {group['label']}: {paths[0]}")
             continue
         print(f"  [{i}] {group['label']}: {len(paths)} files from {group['spec']}")
-        for path in paths:
-            print(f"       {path}")
+        shown = _truncate_paths(paths)
+        for item in shown:
+            if item == "...":
+                print("       ...")
+                continue
+            idx = paths.index(item)
+            print(f"       [{idx}] {item}")
 
 
 # ---------------------------------------------------------------------------
@@ -434,11 +483,13 @@ def main():
             print(f"Error reading {spec}: {exc}", file=sys.stderr)
             sys.exit(1)
         label = str(group["label"] or _default_group_label(spec, paths))
+        dataset = _infer_dataset_name(spec, paths)
         groups.append(
             {
                 "spec": spec,
                 "label": label,
                 "paths": paths,
+                "dataset": dataset,
                 "summary": summary,
                 "metrics": summary["metrics"],
                 "metric_ci": summary["metric_ci"],
@@ -448,7 +499,13 @@ def main():
     # Report
     if len(groups) == 1:
         group = groups[0]
-        _print_single(str(group["label"]), group["summary"], group["paths"], str(group["spec"]))
+        _print_single(
+            str(group["label"]),
+            group["summary"],
+            group["paths"],
+            str(group["spec"]),
+            group.get("dataset"),
+        )
     else:
         _print_comparison(groups, highlight_best=not args.no_highlight)
 
