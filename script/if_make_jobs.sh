@@ -111,7 +111,7 @@ emit_if_jobs "$TAG_BASE" "$MODEL_BASE" "$DEFAULT_TEMP" "$DEFAULT_TOP_P" SEEDS
 emit_if_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 "$DEFAULT_TOP_P" SINGLE_SEED
 
 # 3) AutoDeco learned controller — 8 seeds for CI.
-emit_if_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 SEEDS --autodeco_heads temperature top_p
+emit_if_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 SEEDS --autodeco_heads temperature,top_p
 
 # 4) MeanShift (fixed operating point at the train-split mean temperature) — 8 seeds for CI.
 emit_if_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" SEEDS

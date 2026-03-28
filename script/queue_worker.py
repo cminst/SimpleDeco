@@ -354,7 +354,7 @@ class QueueWorker:
                 record = self._claim_job()
                 if not record:
                     if self.exit_on_empty:
-                        print("Queue empty. Exiting.")
+                        print("Queue empty. Exiting.", flush=True)
                         break
                     time.sleep(self.sleep_sec)
                     continue
@@ -362,7 +362,7 @@ class QueueWorker:
                 job_line = str(record["job"])
                 job_id = str(record["job_id"])
                 lease_id = str(record["lease_id"])
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Running: {job_line}")
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Running: {job_line}", flush=True)
                 returncode, interrupted = self._run_job(record)
 
                 with self._lock:
@@ -370,7 +370,7 @@ class QueueWorker:
                     self._current_job = None
 
                 if interrupted:
-                    print(f"Interrupted. Releasing job back to the front: {job_line}", file=sys.stderr)
+                    print(f"Interrupted. Releasing job back to the front: {job_line}", file=sys.stderr, flush=True)
                     self._release_job(job_id, lease_id, prepend=True)
                     break
 
@@ -378,6 +378,7 @@ class QueueWorker:
                     print(
                         f"Lease was lost while running; leaving queue state untouched for {job_line}",
                         file=sys.stderr,
+                        flush=True,
                     )
                     break
 
@@ -386,11 +387,11 @@ class QueueWorker:
                     action = str(result.get("action", "missing"))
                     if action == "retried":
                         retries = result.get("record", {}).get("retries") if isinstance(result.get("record"), dict) else None
-                        print(f"Job failed and was requeued (retries={retries}): {job_line}", file=sys.stderr)
+                        print(f"Job failed and was requeued (retries={retries}): {job_line}", file=sys.stderr, flush=True)
                     elif action == "failed":
-                        print(f"Job failed permanently: {job_line}", file=sys.stderr)
+                        print(f"Job failed permanently: {job_line}", file=sys.stderr, flush=True)
                     else:
-                        print(f"Job failed but queue lease was already gone: {job_line}", file=sys.stderr)
+                        print(f"Job failed but queue lease was already gone: {job_line}", file=sys.stderr, flush=True)
                     if self.stop_on_fail:
                         break
                     continue
@@ -399,12 +400,13 @@ class QueueWorker:
                     print(
                         f"Completed job could not be acknowledged because the lease no longer exists: {job_line}",
                         file=sys.stderr,
+                        flush=True,
                     )
                     break
 
                 self._run_count += 1
                 if self.max_jobs_to_run > 0 and self._run_count >= self.max_jobs_to_run:
-                    print(f"Reached MAX_JOBS_TO_RUN={self.max_jobs_to_run}. Exiting.")
+                    print(f"Reached MAX_JOBS_TO_RUN={self.max_jobs_to_run}. Exiting.", flush=True)
                     break
         finally:
             self._stop_event.set()
