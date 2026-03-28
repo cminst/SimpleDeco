@@ -13,15 +13,29 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-16384}"
+REASONING_EFFORT="${REASONING_EFFORT:-medium}"
+
+case "$REASONING_EFFORT" in
+  ""|low|medium|high) ;;
+  *)
+    echo "Invalid REASONING_EFFORT: '$REASONING_EFFORT'. Expected one of: low, medium, high." >&2
+    exit 1
+    ;;
+esac
+
+REASONING_TAG_SUFFIX=""
+if [[ -n "$REASONING_EFFORT" ]]; then
+  REASONING_TAG_SUFFIX="-effort-${REASONING_EFFORT}"
+fi
 
 DEFAULT_TEMP="${DEFAULT_TEMP:-1.0}"
 DEFAULT_TOP_P="${DEFAULT_TOP_P:-1.0}"
 MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-1.032}"
 MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.940}"
-TAG_BASE="${TAG_BASE:-base-gptoss20b}"
-TAG_AUTODECO="${TAG_AUTODECO:-autodeco-gptoss20b}"
-TAG_GREEDY="${TAG_GREEDY:-greedy-gptoss20b}"
-TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-gptoss20b}"
+TAG_BASE="${TAG_BASE:-base-gptoss20b${REASONING_TAG_SUFFIX}}"
+TAG_AUTODECO="${TAG_AUTODECO:-autodeco-gptoss20b${REASONING_TAG_SUFFIX}}"
+TAG_GREEDY="${TAG_GREEDY:-greedy-gptoss20b${REASONING_TAG_SUFFIX}}"
+TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-gptoss20b${REASONING_TAG_SUFFIX}}"
 
 # 16 seeds for stochastic methods (mean ± 95% CI reporting).
 # Greedy is deterministic so it only gets one seed.
@@ -93,6 +107,9 @@ emit_if_jobs() {
         --strip_think
         --output-file "$out"
       )
+      if [[ -n "$REASONING_EFFORT" ]]; then
+        cmd+=(--reasoning_effort "$REASONING_EFFORT")
+      fi
       if ((${#extra_args[@]} > 0)); then
         cmd+=("${extra_args[@]}")
       fi
