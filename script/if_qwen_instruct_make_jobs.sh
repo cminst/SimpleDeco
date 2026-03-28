@@ -7,8 +7,9 @@ JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/if_qwen3_30b_instruct_jobs.txt}"
 APPEND="${APPEND:-0}"
 FILTER_EXISTING="${FILTER_EXISTING:-1}"
 
+RESULT_ROOT="${RESULT_ROOT:-ckpt_qwen_instruct}"
 # Base/meanshift/greedy all use the same merged checkpoint with heads disabled.
-MODEL="${MODEL:-ckpt/AutoDeco-Qwen3-30B-Instruct-Merged}"
+MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-Qwen3-30B-Instruct-Merged}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 TP_SIZE="${TP_SIZE:-1}"
@@ -78,11 +79,11 @@ emit_if_jobs() {
 
   for dataset in "${DATASETS[@]}"; do
     for seed in "${seeds[@]}"; do
-      local out="ckpt/${dataset}/${tag}/if_eval_seed${seed}.jsonl"
-      local log="ckpt/${dataset}/${tag}/if_eval_seed${seed}.log"
+      local out="${RESULT_ROOT}/${dataset}/${tag}/if_eval_seed${seed}.jsonl"
+      local log="${RESULT_ROOT}/${dataset}/${tag}/if_eval_seed${seed}.log"
       local -a cmd=(
         "$PYTHON_BIN" utils/if_eval.py
-        --model_name_or_path "$MODEL"
+        --model_name_or_path "$MODEL_AUTODECO"
         --dataset "$dataset"
         --temp "$temp"
         --top_p "$top_p"

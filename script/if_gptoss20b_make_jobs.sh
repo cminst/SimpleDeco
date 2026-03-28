@@ -7,6 +7,7 @@ JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/if_gptoss20b_jobs.txt}"
 APPEND="${APPEND:-0}"
 FILTER_EXISTING="${FILTER_EXISTING:-1}"
 
+RESULT_ROOT="${RESULT_ROOT:-ckpt_gptoss20b}"
 MODEL_BASE="${MODEL_BASE:-ckpt/gpt-oss-20b}"
 MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-GPT-OSS-20B-Merged}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -93,8 +94,8 @@ emit_if_jobs() {
 
   for dataset in "${DATASETS[@]}"; do
     for seed in "${seeds[@]}"; do
-      local out="ckpt/${dataset}/${tag}/if_eval_seed${seed}.jsonl"
-      local log="ckpt/${dataset}/${tag}/if_eval_seed${seed}.log"
+      local out="${RESULT_ROOT}/${dataset}/${tag}/if_eval_seed${seed}.jsonl"
+      local log="${RESULT_ROOT}/${dataset}/${tag}/if_eval_seed${seed}.log"
       local -a cmd=(
         "$PYTHON_BIN" utils/if_eval.py
         --model_name_or_path "$model"
