@@ -3,27 +3,27 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/if_jobs.txt}"
+JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/if_gptoss20b_jobs.txt}"
 APPEND="${APPEND:-0}"
 FILTER_EXISTING="${FILTER_EXISTING:-1}"
 
-MODEL_BASE="${MODEL_BASE:-ckpt/DeepSeek-R1-Distill-Qwen-7B}"
-MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-R1-Distill-Qwen-7B-merged}"
+MODEL_BASE="${MODEL_BASE:-ckpt/gpt-oss-20b}"
+MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-GPT-OSS-20B-Merged}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-16384}"
 
-DEFAULT_TEMP="${DEFAULT_TEMP:-0.6}"
-DEFAULT_TOP_P="${DEFAULT_TOP_P:-0.95}"
-MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-0.798}"
-MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.907}"
-TAG_BASE="${TAG_BASE:-base-r1-distill-qwen7b}"
-TAG_AUTODECO="${TAG_AUTODECO:-autodeco-r1-distill-qwen7b}"
-TAG_GREEDY="${TAG_GREEDY:-greedy-r1-distill-qwen7b}"
-TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-r1-distill-qwen7b}"
+DEFAULT_TEMP="${DEFAULT_TEMP:-1.0}"
+DEFAULT_TOP_P="${DEFAULT_TOP_P:-1.0}"
+MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-1.032}"
+MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.940}"
+TAG_BASE="${TAG_BASE:-base-gptoss20b}"
+TAG_AUTODECO="${TAG_AUTODECO:-autodeco-gptoss20b}"
+TAG_GREEDY="${TAG_GREEDY:-greedy-gptoss20b}"
+TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-gptoss20b}"
 
-# 8 seeds for stochastic methods (mean ± 95% CI reporting).
+# 16 seeds for stochastic methods (mean ± 95% CI reporting).
 # Greedy is deterministic so it only gets one seed.
 SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57)
 
@@ -33,7 +33,7 @@ mkdir -p "$(dirname "$JOB_FILE")"
 
 if [[ "$APPEND" != "1" ]]; then
   cat > "$JOB_FILE" <<EOF
-# if_eval queue jobs (IFEval + IFBench)
+# if_eval queue jobs — GPT-OSS-20B (IFEval + IFBench)
 EOF
 fi
 
@@ -59,9 +59,8 @@ emit_job() {
     "$out_q" "$out" "$out_dir_q" "$cmd_str" "$log_q" >> "$JOB_FILE"
 }
 
-# emit_if_jobs TAG MODEL TEMP TOP_P [SEEDS_ARRAY_NAME] [EXTRA_ARGS...]
-#   SEEDS_ARRAY_NAME  name of a bash array variable listing seeds to run.
-#                     Pass "SINGLE_SEED" to run only seed 42 (e.g. greedy).
+# emit_if_jobs TAG MODEL TEMP TOP_P SEEDS_ARRAY_NAME [EXTRA_ARGS...]
+#   Pass "SINGLE_SEED" as SEEDS_ARRAY_NAME to run only seed 42 (e.g. greedy).
 emit_if_jobs() {
   local tag="$1"
   local model="$2"
@@ -71,7 +70,6 @@ emit_if_jobs() {
   shift 5
   local -a extra_args=("$@")
 
-  # Resolve the seeds array by name.
   local -a seeds
   if [[ "$seeds_var" == "SINGLE_SEED" ]]; then
     seeds=(42)
@@ -103,16 +101,16 @@ emit_if_jobs() {
   done
 }
 
-# 1) Base operating point — 8 seeds for CI.
+# 1) Base operating point — 16 seeds for CI.
 emit_if_jobs "$TAG_BASE" "$MODEL_BASE" "$DEFAULT_TEMP" "$DEFAULT_TOP_P" SEEDS
 
 # 2) Greedy reference — deterministic, single seed.
 emit_if_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 "$DEFAULT_TOP_P" SINGLE_SEED
 
-# 3) AutoDeco learned controller — 8 seeds for CI.
+# 3) AutoDeco learned controller — 16 seeds for CI.
 emit_if_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 SEEDS --autodeco_heads temperature,top_p
 
-# 4) MeanShift (fixed operating point at the train-split mean temperature) — 8 seeds for CI.
+# 4) MeanShift (fixed operating point at the train-split mean temperature) — 16 seeds for CI.
 emit_if_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" SEEDS
 
 echo "Wrote $(grep -c 'fi$' "$JOB_FILE" || true) jobs to $JOB_FILE"

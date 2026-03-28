@@ -154,8 +154,21 @@ def _validate_override_patterns(args: argparse.Namespace, datasets: list[str]) -
 def _subsample_paths(
     specs_with_paths: list[tuple[MethodSpec, list[Path]]],
     seed: int | None,
+    debug: bool,
     progress: bool,
 ) -> list[tuple[MethodSpec, list[Path]]]:
+    if debug:
+        ct._log(progress, "Debug mode: selecting one seed file per method.")
+        trimmed: list[tuple[MethodSpec, list[Path]]] = []
+        for spec, paths in specs_with_paths:
+            if len(paths) <= 1:
+                trimmed.append((spec, paths))
+                continue
+            sampled = ct._sample_paths(paths, 1, seed) if seed is not None else paths[:1]
+            ct._log(progress, f"  {spec.label}: {len(paths)} -> {len(sampled)} files")
+            trimmed.append((spec, sampled))
+        return trimmed
+
     non_greedy_counts = [len(paths) for spec, paths in specs_with_paths if not spec.greedy]
     if not non_greedy_counts:
         return specs_with_paths
@@ -179,6 +192,7 @@ def _load_groups(
     dataset: str,
     specs: list[MethodSpec],
     seed: int | None,
+    debug: bool,
     greedy_samples: int,
     progress: bool,
 ) -> tuple[
@@ -196,7 +210,7 @@ def _load_groups(
     if not specs_with_paths:
         raise FileNotFoundError(f"No JSONL inputs found for dataset '{dataset}'.")
 
-    specs_with_paths = _subsample_paths(specs_with_paths, seed, progress)
+    specs_with_paths = _subsample_paths(specs_with_paths, seed, debug, progress)
 
     counts = [len(paths) for _, paths in specs_with_paths]
     target_seeds = min(counts) if counts else 0
@@ -292,6 +306,7 @@ def _prepare_dataset_results(
             dataset,
             specs,
             seed=args.seed,
+            debug=args.debug,
             greedy_samples=args.greedy_samples,
             progress=args.progress,
         )
@@ -565,6 +580,11 @@ def build_arg_parser(
         "--progress",
         action="store_true",
         help="Print resolved inputs and loading progress.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Load at most one seed file per method for faster debugging runs.",
     )
     parser.set_defaults(_default_datasets=default_datasets or DEFAULT_DATASETS)
     return parser

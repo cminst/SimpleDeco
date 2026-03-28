@@ -3,27 +3,27 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/if_jobs.txt}"
+JOB_FILE="${JOB_FILE:-$ROOT_DIR/jobs/if_qwen3_30b_instruct_jobs.txt}"
 APPEND="${APPEND:-0}"
 FILTER_EXISTING="${FILTER_EXISTING:-1}"
 
-MODEL_BASE="${MODEL_BASE:-ckpt/DeepSeek-R1-Distill-Qwen-7B}"
-MODEL_AUTODECO="${MODEL_AUTODECO:-ckpt/AutoDeco-R1-Distill-Qwen-7B-merged}"
+# Base/meanshift/greedy all use the same merged checkpoint with heads disabled.
+MODEL="${MODEL:-ckpt/AutoDeco-Qwen3-30B-Instruct-Merged}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-16384}"
 
-DEFAULT_TEMP="${DEFAULT_TEMP:-0.6}"
-DEFAULT_TOP_P="${DEFAULT_TOP_P:-0.95}"
-MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-0.798}"
-MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.907}"
-TAG_BASE="${TAG_BASE:-base-r1-distill-qwen7b}"
-TAG_AUTODECO="${TAG_AUTODECO:-autodeco-r1-distill-qwen7b}"
-TAG_GREEDY="${TAG_GREEDY:-greedy-r1-distill-qwen7b}"
-TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-r1-distill-qwen7b}"
+BASE_TEMP="${BASE_TEMP:-0.7}"
+BASE_TOP_P="${BASE_TOP_P:-0.8}"
+MEANSHIFT_TEMP="${MEANSHIFT_TEMP:-0.861}"
+MEANSHIFT_TOP_P="${MEANSHIFT_TOP_P:-0.843}"
+TAG_BASE="${TAG_BASE:-base-qwen3-30b-instruct}"
+TAG_AUTODECO="${TAG_AUTODECO:-autodeco-qwen3-30b-instruct}"
+TAG_GREEDY="${TAG_GREEDY:-greedy-qwen3-30b-instruct}"
+TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-qwen3-30b-instruct}"
 
-# 8 seeds for stochastic methods (mean ± 95% CI reporting).
+# 16 seeds for stochastic methods (mean ± 95% CI reporting).
 # Greedy is deterministic so it only gets one seed.
 SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57)
 
@@ -33,7 +33,7 @@ mkdir -p "$(dirname "$JOB_FILE")"
 
 if [[ "$APPEND" != "1" ]]; then
   cat > "$JOB_FILE" <<EOF
-# if_eval queue jobs (IFEval + IFBench)
+# if_eval queue jobs — Qwen3-30B-Instruct (IFEval + IFBench)
 EOF
 fi
 
@@ -59,19 +59,16 @@ emit_job() {
     "$out_q" "$out" "$out_dir_q" "$cmd_str" "$log_q" >> "$JOB_FILE"
 }
 
-# emit_if_jobs TAG MODEL TEMP TOP_P [SEEDS_ARRAY_NAME] [EXTRA_ARGS...]
-#   SEEDS_ARRAY_NAME  name of a bash array variable listing seeds to run.
-#                     Pass "SINGLE_SEED" to run only seed 42 (e.g. greedy).
+# emit_if_jobs TAG TEMP TOP_P SEEDS_ARRAY_NAME [EXTRA_ARGS...]
+#   Pass "SINGLE_SEED" as SEEDS_ARRAY_NAME to run only seed 42 (e.g. greedy).
 emit_if_jobs() {
   local tag="$1"
-  local model="$2"
-  local temp="$3"
-  local top_p="$4"
-  local seeds_var="$5"
-  shift 5
+  local temp="$2"
+  local top_p="$3"
+  local seeds_var="$4"
+  shift 4
   local -a extra_args=("$@")
 
-  # Resolve the seeds array by name.
   local -a seeds
   if [[ "$seeds_var" == "SINGLE_SEED" ]]; then
     seeds=(42)
@@ -85,7 +82,7 @@ emit_if_jobs() {
       local log="ckpt/${dataset}/${tag}/if_eval_seed${seed}.log"
       local -a cmd=(
         "$PYTHON_BIN" utils/if_eval.py
-        --model_name_or_path "$model"
+        --model_name_or_path "$MODEL"
         --dataset "$dataset"
         --temp "$temp"
         --top_p "$top_p"
@@ -103,16 +100,16 @@ emit_if_jobs() {
   done
 }
 
-# 1) Base operating point — 8 seeds for CI.
-emit_if_jobs "$TAG_BASE" "$MODEL_BASE" "$DEFAULT_TEMP" "$DEFAULT_TOP_P" SEEDS
+# 1) Base operating point — 16 seeds for CI.
+emit_if_jobs "$TAG_BASE" "$BASE_TEMP" "$BASE_TOP_P" SEEDS --autodeco_heads none
 
 # 2) Greedy reference — deterministic, single seed.
-emit_if_jobs "$TAG_GREEDY" "$MODEL_BASE" 0.0 "$DEFAULT_TOP_P" SINGLE_SEED
+emit_if_jobs "$TAG_GREEDY" 0.0 "$BASE_TOP_P" SINGLE_SEED --autodeco_heads none
 
-# 3) AutoDeco learned controller — 8 seeds for CI.
-emit_if_jobs "$TAG_AUTODECO" "$MODEL_AUTODECO" 1.0 1.0 SEEDS --autodeco_heads temperature,top_p
+# 3) AutoDeco learned controller — 16 seeds for CI.
+emit_if_jobs "$TAG_AUTODECO" 1.0 1.0 SEEDS --autodeco_heads temperature,top_p
 
-# 4) MeanShift (fixed operating point at the train-split mean temperature) — 8 seeds for CI.
-emit_if_jobs "$TAG_MEANSHIFT" "$MODEL_BASE" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" SEEDS
+# 4) MeanShift (fixed operating point at the train-split mean temperature) — 16 seeds for CI.
+emit_if_jobs "$TAG_MEANSHIFT" "$MEANSHIFT_TEMP" "$MEANSHIFT_TOP_P" SEEDS --autodeco_heads none
 
 echo "Wrote $(grep -c 'fi$' "$JOB_FILE" || true) jobs to $JOB_FILE"
