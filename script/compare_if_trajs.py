@@ -448,9 +448,9 @@ def main():
     )
     args = parser.parse_args()
 
-    input_groups: List[Dict[str, str | None]] = [{"spec": spec, "label": None} for spec in args.files]
+    input_groups: List[Dict[str, str | None]] = [{"spec": spec, "label": None, "dataset": None} for spec in args.files]
     input_specs = _parse_csv_args(args.inputs)
-    input_groups.extend({"spec": spec, "label": None} for spec in input_specs)
+    input_groups.extend({"spec": spec, "label": None, "dataset": None} for spec in input_specs)
 
     tag_specs = _parse_csv_args(args.tags)
     if tag_specs:
@@ -461,6 +461,7 @@ def main():
                 {
                     "spec": os.path.join(args.ckpt_root, args.dataset, tag, "*.jsonl"),
                     "label": tag,
+                    "dataset": args.dataset,
                 }
             )
 
@@ -490,7 +491,7 @@ def main():
             print(f"Error reading {spec}: {exc}", file=sys.stderr)
             sys.exit(1)
         label = str(group["label"] or _default_group_label(spec, paths))
-        dataset = _infer_dataset_name(spec, paths)
+        dataset = group.get("dataset") or _infer_dataset_name(spec, paths)
         groups.append(
             {
                 "spec": spec,
