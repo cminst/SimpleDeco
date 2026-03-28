@@ -129,7 +129,8 @@ for dataset in "${DATASETS[@]}"; do
     "$TAG_AUTODECO" \
     "$AUTODECO_TEMP" \
     "$AUTODECO_TOP_P" \
-    "$NUM_SAMPLES"
+    "$NUM_SAMPLES" \
+    --autodeco_heads temperature top_p
 
   emit_eval_jobs \
     "$dataset" \

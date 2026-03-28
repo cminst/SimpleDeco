@@ -27,10 +27,30 @@ import argparse
 import csv
 import glob
 import json
+import math
 import os
+import statistics
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+
+
+# ---------------------------------------------------------------------------
+# Stats helpers
+# ---------------------------------------------------------------------------
+
+def _t_critical_975(df: int) -> float:
+    if df <= 0:
+        return 0.0
+    table = {
+        1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+        6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+        11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
+        16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+        21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
+        26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
+    }
+    return table.get(df, 1.96)
 
 
 # ---------------------------------------------------------------------------
@@ -191,21 +211,29 @@ def _default_group_label(spec: str, paths: List[Path]) -> str:
 
 def _summarize_group(paths: List[Path]) -> Dict[str, object]:
     file_metrics: List[Dict[str, float]] = []
-    combined_records: List[dict] = []
     for path in paths:
         records = _read_jsonl(path)
-        combined_records.extend(records)
         file_metrics.append(compute_if_metrics(records))
 
-    pooled_metrics = compute_if_metrics(combined_records)
-    ci_metrics = {key: None for key in METRIC_KEYS}
+    # Mean of per-seed means; 95% CI via t-distribution when >1 seed.
+    mean_metrics: Dict[str, float] = {}
+    ci_metrics: Dict[str, Optional[float]] = {}
+    for key in METRIC_KEYS:
+        vals = [m[key] for m in file_metrics]
+        mean_metrics[key] = sum(vals) / len(vals)
+        if len(vals) > 1:
+            stdev = statistics.stdev(vals)
+            t_crit = _t_critical_975(len(vals) - 1)
+            ci_metrics[key] = t_crit * stdev / math.sqrt(len(vals))
+        else:
+            ci_metrics[key] = None
 
     return {
-        "metrics": {key: pooled_metrics[key] for key in METRIC_KEYS},
+        "metrics": mean_metrics,
         "metric_ci": ci_metrics,
         "n_files": len(paths),
-        "prompt_counts": [int(metrics["_n_prompts"]) for metrics in file_metrics],
-        "instruction_counts": [int(metrics["_n_instructions"]) for metrics in file_metrics],
+        "prompt_counts": [int(m["_n_prompts"]) for m in file_metrics],
+        "instruction_counts": [int(m["_n_instructions"]) for m in file_metrics],
     }
 
 
@@ -220,8 +248,8 @@ def _format_count_summary(values: List[int]) -> str:
 
 def _format_metric(value: float, ci: Optional[float]) -> str:
     if ci is None:
-        return f"{value:.4f}"
-    return f"{value:.4f}+/-{ci:.4f}"
+        return f"{value * 100:.2f}%"
+    return f"{value * 100:.2f}±{ci * 100:.2f}%"
 
 
 def _print_single(label: str, summary: Dict[str, object], paths: List[Path], spec: str):
@@ -237,17 +265,11 @@ def _print_single(label: str, summary: Dict[str, object], paths: List[Path], spe
     metrics = summary["metrics"]
     metric_ci = summary["metric_ci"]
     for k in METRIC_KEYS:
-        sep = "─" * 40 if k == "average" else ""
-        if sep:
-            print(f"  {sep}")
+        if k == "average":
+            print(f"  {'─' * 40}")
         value = metrics[k]
         ci = metric_ci[k]
-        metric_text = _format_metric(value, ci)
-        if ci is None:
-            pct_text = f"({value * 100:.2f}%)"
-        else:
-            pct_text = f"({value * 100:.2f}+/-{ci * 100:.2f}%)"
-        print(f"  {METRIC_DISPLAY[k]:<{row_label_w}} {metric_text:<18} {pct_text}")
+        print(f"  {METRIC_DISPLAY[k]:<{row_label_w}} {_format_metric(value, ci)}")
 
     if len(paths) > 1:
         print("\nMatched files:")

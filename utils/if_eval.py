@@ -259,12 +259,17 @@ def main():
     # ------------------------------------------------------------------
     prompt_to_response: Dict[str, str] = {}
     responses: List[str] = []
+    sampled_temps: List = []
+    sampled_top_ps: List = []
     for inp, output_group in zip(inputs, outputs):
-        response_text = output_group.outputs[0].text
+        out0 = output_group.outputs[0]
+        response_text = out0.text
         if args.strip_think:
             response_text = strip_thinking(response_text)
         prompt_to_response[inp.prompt] = response_text
         responses.append(response_text)
+        sampled_temps.append(getattr(out0, "temperatures", None))
+        sampled_top_ps.append(getattr(out0, "top_ps", None))
 
     # ------------------------------------------------------------------
     # Evaluate (strict + loose) — collect per-sample results first
@@ -329,7 +334,9 @@ def main():
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
         with open(args.output_file, "w") as f:
-            for inp, response_text, res in zip(inputs, responses, per_sample_results):
+            for inp, response_text, res, s_temp, s_top_p in zip(
+                inputs, responses, per_sample_results, sampled_temps, sampled_top_ps
+            ):
                 record = {
                     "prompt": inp.prompt,
                     "response": response_text,
@@ -339,8 +346,8 @@ def main():
                         "instruction_id_list": list(getattr(inp, "instruction_id_list", [])),
                         "model_name_or_path": args.model_name_or_path,
                         "ckpt_name": ckpt_name,
-                        "temp": args.temp,
-                        "top_p": args.top_p,
+                        "temp": s_temp if s_temp is not None else args.temp,
+                        "top_p": s_top_p if s_top_p is not None else args.top_p,
                         "top_k": args.top_k,
                         "rp": args.rp,
                         "max_tokens": args.max_tokens,

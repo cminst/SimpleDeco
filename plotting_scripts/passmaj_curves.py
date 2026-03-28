@@ -405,7 +405,7 @@ def _plot_passmaj_curves(
     nrows = len(dataset_results)
     fig_height = 1.0 + nrows * 2.0
     fig, axes = plt.subplots(nrows, 2, figsize=(5.7, fig_height), squeeze=False, constrained_layout=False)
-    fig.subplots_adjust(left=0.1, right=0.992, bottom=0.075, top=0.86, wspace=0.22, hspace=0.68)
+    fig.subplots_adjust(left=0.1, right=0.992, bottom=0.075, top=0.9, wspace=0.22, hspace=0.68)
 
     legend_handles: dict[str, Any] = {}
     mode_meta = [("maj", r"maj@k (\%)"), ("pass", r"pass@k (\%)")]
@@ -469,7 +469,7 @@ def _plot_passmaj_curves(
         [label for label in legend_labels if label in legend_handles],
         loc="upper center",
         ncol=min(4, len(legend_handles)),
-        bbox_to_anchor=(0.5, 0.985),
+        bbox_to_anchor=(0.5, 0.965),
         frameon=True,
         fancybox=False,
         framealpha=1.0,
