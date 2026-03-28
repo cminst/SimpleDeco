@@ -34,5 +34,13 @@
   "beyondaime.jsonl": {
     "rows": 100,
     "path": "data/TempTest/beyondaime.jsonl"
+  },
+  "ifeval.jsonl": {
+    "rows": 541,
+    "path": "data/TempTest/ifeval.jsonl"
+  },
+  "ifbench.jsonl": {
+    "rows": 300,
+    "path": "data/TempTest/ifbench.jsonl"
   }
 }
