@@ -26,7 +26,7 @@ image = (
     .run_commands("echo 'VERSION 7'")
     .run_commands(
         "uv pip install -U torchvision torchaudio torch==2.10.0 'numpy<=2.2' vllm==0.17.1 triton==3.6.0 --torch-backend=cu128 --no-build-isolation --system",
-        "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptools_scm --torch-backend=cu128 --system",
+        "uv pip install accelerate trl==0.22.0 deepspeed orjson hf_transfer setuptools setuptools_scm --torch-backend=cu128 --system",
         "git clone https://github.com/cminst/SimpleDeco.git --recurse-submodules /tmp/SimpleDeco",
         "cd /tmp/SimpleDeco && bash utils/install_simpledeco_vllm_modal.sh && uv pip install -r requirements.txt --system",
     )
