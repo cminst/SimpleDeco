@@ -484,7 +484,7 @@ def _plot_passmaj_curves(
         [label for label in legend_labels if label in legend_handles],
         loc="upper center",
         ncol=min(4, len(legend_handles)),
-        bbox_to_anchor=(0.5, 0.965),
+        bbox_to_anchor=(0.5, 0.985),
         frameon=True,
         fancybox=False,
         framealpha=1.0,
