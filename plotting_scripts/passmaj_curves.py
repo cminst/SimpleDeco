@@ -332,8 +332,6 @@ def _prepare_dataset_results(
 
 
 def _add_row_titles(fig: Any, axes: Any, results: list[DatasetResult]) -> None:
-    from matplotlib.lines import Line2D
-
     for row_idx, result in enumerate(results):
         left_pos = axes[row_idx, 0].get_position()
         right_pos = axes[row_idx, 1].get_position()
@@ -349,20 +347,6 @@ def _add_row_titles(fig: Any, axes: Any, results: list[DatasetResult]) -> None:
             fontweight="bold",
             color="#344054",
         )
-        if row_idx > 0:
-            prev_bottom = axes[row_idx - 1, 0].get_position().y0
-            current_top = left_pos.y1
-            separator_y = current_top + (prev_bottom - current_top) * 0.48
-            fig.add_artist(
-                Line2D(
-                    [left_pos.x0, right_pos.x1],
-                    [separator_y, separator_y],
-                    transform=fig.transFigure,
-                    color="#E7ECF2",
-                    linewidth=0.8,
-                    zorder=0.1,
-                )
-            )
 
 
 def _plot_passmaj_curves(
