@@ -26,7 +26,7 @@ TAG_MEANSHIFT="${TAG_MEANSHIFT:-meanshift-r1-distill-qwen7b}"
 
 # 8 seeds for stochastic methods (mean ± 95% CI reporting).
 # Greedy is deterministic so it only gets one seed.
-SEEDS=(42 43 44 45 46 47 48 49)
+SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57)
 
 DATASETS=("ifeval" "ifbench")
 
