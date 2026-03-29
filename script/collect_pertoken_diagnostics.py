@@ -718,6 +718,9 @@ def main() -> None:
         entropy = -(probs * log_probs).sum(-1)
         max_logit = logits_f.max(dim=-1).values
         p_max = torch.exp(max_logit - log_denom)
+        mean_z = (probs * logits_f).sum(-1)
+        mean_z2 = (probs * logits_f.square()).sum(-1)
+        logit_variance = torch.clamp_min(mean_z2 - mean_z.square(), 0.0)
         expH = torch.exp(entropy)
 
         vocab = logits_f.size(-1)
@@ -755,7 +758,12 @@ def main() -> None:
         positions = torch.arange(1, shift_labels.size(1) + 1, device=shift_labels.device)
         positions_flat = positions.unsqueeze(0).expand(shift_labels.size(0), -1)[valid_mask]
 
-        finite_mask = torch.isfinite(entropy) & torch.isfinite(p_max) & torch.isfinite(gap12)
+        finite_mask = (
+            torch.isfinite(entropy)
+            & torch.isfinite(p_max)
+            & torch.isfinite(gap12)
+            & torch.isfinite(logit_variance)
+        )
         if temp_valid is not None:
             finite_mask &= torch.isfinite(temp_valid)
         if top_p_valid is not None:
@@ -766,6 +774,7 @@ def main() -> None:
         entropy_list = entropy[finite_mask].detach().cpu().tolist()
         h_norm_list = h_norm[finite_mask].detach().cpu().tolist()
         p_max_list = p_max[finite_mask].detach().cpu().tolist()
+        logit_variance_list = logit_variance[finite_mask].detach().cpu().tolist()
         gap12_list = gap12[finite_mask].detach().cpu().tolist()
         expH_list = expH[finite_mask].detach().cpu().tolist()
         token_id_list = labels_valid[finite_mask].detach().cpu().tolist()
@@ -858,6 +867,7 @@ def main() -> None:
                         "H": entropy_list[token_offset + idx],
                         "H_norm": h_norm_list[token_offset + idx],
                         "p_max": p_max_list[token_offset + idx],
+                        "logit_variance": logit_variance_list[token_offset + idx],
                         "gap12": gap12_list[token_offset + idx],
                         **mass_fields,
                         "expH": expH_list[token_offset + idx],
@@ -887,6 +897,7 @@ def main() -> None:
             "H": Value("float32"),
             "H_norm": Value("float32"),
             "p_max": Value("float32"),
+            "logit_variance": Value("float32"),
             "gap12": Value("float32"),
             **{f"mass{k}": Value("float32") for k in mass_k_list},
             "expH": Value("float32"),
