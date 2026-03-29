@@ -510,7 +510,7 @@ def main() -> None:
     parser.add_argument(
         "--shuffle",
         action="store_true",
-        help="Shuffle dataset indices before applying max_examples.",
+        help="Shuffle dataset indices before applying max_examples (deterministic with --seed, default 42).",
     )
     parser.add_argument(
         "--device",
@@ -762,8 +762,8 @@ def main() -> None:
     total_examples = len(dataset_split)
     indices = list(range(total_examples))
     if args.shuffle:
-        random.seed(args.seed)
-        random.shuffle(indices)
+        rng = random.Random(args.seed)
+        rng.shuffle(indices)
     if args.max_examples is not None:
         indices = indices[: args.max_examples]
 
