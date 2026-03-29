@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates all 8 seeds (42-49) for all static-dev configs on general_dev.
+# Generates all 12 seeds (42-53) for all static-dev configs on general_dev.
 # Already-completed seeds are skipped by FILTER_EXISTING, so running this
 # on eagle3 will only execute whichever seeds are missing.
 set -euo pipefail
@@ -19,7 +19,7 @@ MAX_TOKENS="${MAX_TOKENS:-32768}"
 
 MODES=(${MODES:-pass@k})
 
-SEEDS=(42 43 44 45 46 47 48 49)
+SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53)
 
 STATIC_TEMPS=(0.7 0.8 0.9)
 STATIC_TOP_PS=(0.90 0.95)
@@ -29,7 +29,7 @@ mkdir -p "$(dirname "$JOB_FILE")"
 
 if [[ "$APPEND" != "1" ]]; then
   cat > "$JOB_FILE" <<EOF2
-# general_dev static seeds (42-49) queue jobs
+# general_dev static seeds (42-53) queue jobs
 EOF2
 fi
 
