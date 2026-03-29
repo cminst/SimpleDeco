@@ -1,6 +1,8 @@
 import argparse
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from pathlib import PurePosixPath
 
 from huggingface_hub import HfApi, snapshot_download
 
@@ -9,53 +11,116 @@ DATASET_REPO_TYPE = "dataset"
 JSONL_GLOB = "**/*.jsonl"
 
 
-def get_jsonl_file_set(path: str, focus_path: Path | None = None) -> set[str]:
-    root = Path(path).resolve()
-    search_path = (focus_path or root).resolve()
+@dataclass(frozen=True)
+class FocusFilters:
+    focus_dirs: tuple[str, ...] = ()
+    datasets: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
 
-    if not search_path.exists():
-        return set()
+    def has_filters(self) -> bool:
+        return bool(self.focus_dirs or self.datasets or self.tags)
 
-    return {
-        p.relative_to(root).as_posix()
-        for p in search_path.rglob("*.jsonl")
-        if p.is_file()
-    }
+    def matches_relative_path(self, relative_path: str) -> bool:
+        path = PurePosixPath(relative_path)
+        if path.suffix != ".jsonl":
+            return False
+
+        parts = path.parts
+        dataset = parts[0] if len(parts) >= 2 else None
+        tag = parts[1] if len(parts) >= 3 else None
+
+        if self.focus_dirs and not any(_is_under_focus(relative_path, focus_dir) for focus_dir in self.focus_dirs):
+            return False
+        if self.datasets and dataset not in self.datasets:
+            return False
+        if self.tags and tag not in self.tags:
+            return False
+        return True
+
+    def describe(self) -> str:
+        pieces = []
+        if self.focus_dirs:
+            pieces.append(f"focus={', '.join(self.focus_dirs)}")
+        if self.datasets:
+            pieces.append(f"datasets={', '.join(self.datasets)}")
+        if self.tags:
+            pieces.append(f"tags={', '.join(self.tags)}")
+        return "; ".join(pieces) if pieces else "all files"
 
 
-def _focus_pattern(focus_relative: str | None) -> list[str] | None:
-    if not focus_relative or focus_relative == ".":
-        return None
+def _is_under_focus(relative_path: str, focus_dir: str) -> bool:
+    if focus_dir in ("", "."):
+        return True
+    return relative_path == focus_dir or relative_path.startswith(f"{focus_dir}/")
 
-    return [f"{focus_relative}/{JSONL_GLOB}"]
+
+def _parse_multi_values(values: list[str] | None) -> tuple[str, ...]:
+    parsed: list[str] = []
+    seen: set[str] = set()
+
+    for value in values or []:
+        for item in value.split(","):
+            cleaned = item.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            parsed.append(cleaned)
+            seen.add(cleaned)
+
+    return tuple(parsed)
 
 
-def _resolve_focus_dir(directory_to_watch: Path, focus: str | None) -> tuple[Path, str | None]:
-    if not focus:
-        return directory_to_watch, None
-
+def _normalize_focus_dir(directory_to_watch: Path, focus: str) -> str:
     focused = Path(focus)
     if not focused.is_absolute():
         focused = directory_to_watch / focused
 
-    focused = focused.resolve()
-
-    if not focused.exists():
-        raise ValueError(f"Focus directory '{focus}' does not exist.")
-    if not focused.is_dir():
-        raise ValueError(f"Focus path '{focus}' is not a directory.")
+    focused = focused.resolve(strict=False)
 
     try:
         focus_relative = focused.relative_to(directory_to_watch).as_posix()
     except ValueError as exc:
         raise ValueError(f"Focus directory '{focus}' must be inside --dir '{directory_to_watch}'.") from exc
 
-    return focused, focus_relative
+    return focus_relative
 
 
-def run_upload(directory_to_watch: str, repo_id: str, includes: list[str] | None = None):
-    api = HfApi()
-    allow_patterns = includes if includes else JSONL_GLOB
+def _build_filters(directory_to_watch: Path, focus_args: list[str] | None, dataset_args: list[str] | None,
+                   tag_args: list[str] | None) -> FocusFilters:
+    focus_dirs = tuple(
+        focus_relative
+        for focus in _parse_multi_values(focus_args)
+        if (focus_relative := _normalize_focus_dir(directory_to_watch, focus)) not in ("", ".")
+    )
+    datasets = _parse_multi_values(dataset_args)
+    tags = _parse_multi_values(tag_args)
+    return FocusFilters(focus_dirs=focus_dirs, datasets=datasets, tags=tags)
+
+
+def get_jsonl_file_set(path: str, filters: FocusFilters | None = None) -> set[str]:
+    root = Path(path).resolve()
+    if not root.exists():
+        return set()
+
+    return {
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*.jsonl")
+        if p.is_file() and (filters is None or filters.matches_relative_path(p.relative_to(root).as_posix()))
+    }
+
+
+def list_remote_jsonl_files(api: HfApi, repo_id: str, filters: FocusFilters | None = None) -> list[str]:
+    return sorted(
+        path
+        for path in api.list_repo_files(repo_id=repo_id, repo_type=DATASET_REPO_TYPE)
+        if path.endswith(".jsonl") and (filters is None or filters.matches_relative_path(path))
+    )
+
+
+def run_upload(api: HfApi, directory_to_watch: str, repo_id: str, includes: list[str] | None = None):
+    if includes == []:
+        return True, "No matching local files to upload."
+
+    allow_patterns = includes if includes is not None else JSONL_GLOB
 
     try:
         commit_info = api.upload_folder(
@@ -71,7 +136,10 @@ def run_upload(directory_to_watch: str, repo_id: str, includes: list[str] | None
 
 def run_download(repo_id: str, dest_dir: str, includes: list[str] | None = None):
     print(f"Running snapshot_download for {repo_id} -> {Path(dest_dir).resolve()}")
-    allow_patterns = includes if includes else JSONL_GLOB
+    if includes == []:
+        return True, "No matching remote files to download."
+
+    allow_patterns = includes if includes is not None else JSONL_GLOB
 
     try:
         local_path = snapshot_download(
@@ -100,8 +168,25 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--focus",
+        action="append",
         default=None,
-        help="Optional directory inside --dir to focus upload and polling",
+        help="Optional subdirectory inside --dir to focus on. Repeat or use commas for multiple values.",
+    )
+    parser.add_argument(
+        "--dataset",
+        "--datasets",
+        dest="datasets",
+        action="append",
+        default=None,
+        help="Dataset name(s) to match under --dir. Repeat or use commas for multiple values.",
+    )
+    parser.add_argument(
+        "--tag",
+        "--tags",
+        dest="tags",
+        action="append",
+        default=None,
+        help="Tag name(s) to match under each dataset directory. Repeat or use commas for multiple values.",
     )
     parser.add_argument(
         "--repo",
@@ -134,9 +219,6 @@ def main() -> None:
     sync_interval_str = str(int(args.sync_interval)) if args.sync_interval.is_integer() else str(args.sync_interval)
     path = Path(args.dir).resolve()
 
-    focus_path = path
-    focus_relative = None
-
     if not path.exists():
         print(f"Error: {args.dir} does not exist.")
         return
@@ -145,23 +227,25 @@ def main() -> None:
         print("Error: --sync-interval must be > 0.")
         return
 
+    api = HfApi()
+
     try:
-        focus_path, focus_relative = _resolve_focus_dir(path, args.focus)
+        filters = _build_filters(path, args.focus, args.datasets, args.tags)
     except ValueError as e:
         print(f"Error: {e}")
         return
 
-    include_patterns = _focus_pattern(focus_relative)
+    initial_upload_files = sorted(get_jsonl_file_set(args.dir, filters)) if filters.has_filters() else None
 
     log("Initial upload...")
-    success, out = run_upload(args.dir, args.repo, include_patterns)
+    success, out = run_upload(api, args.dir, args.repo, initial_upload_files)
     if success:
         log(f"Done. {out}")
     else:
         log(f"Failed: {out}")
 
-    known_files = get_jsonl_file_set(args.dir, focus_path)
-    scope = f" in focus directory '{focus_relative}'" if focus_relative and focus_relative != "." else ""
+    known_files = get_jsonl_file_set(args.dir, filters)
+    scope = f" with filters [{filters.describe()}]" if filters.has_filters() else ""
     log(
         f"Tracking {len(known_files)} existing file(s){scope}. Polling every {interval_str}s"
         + (f" Syncing every {sync_interval_str}s." if args.sync else ".")
@@ -172,7 +256,7 @@ def main() -> None:
 
     while True:
         time.sleep(args.check_interval)
-        current_files = get_jsonl_file_set(args.dir, focus_path)
+        current_files = get_jsonl_file_set(args.dir, filters)
         new_files = sorted(current_files - known_files)
 
         now = time.time()
@@ -183,12 +267,13 @@ def main() -> None:
 
         if should_sync:
             log("Syncing from HF...")
-            success, out = run_download(args.repo, args.dir, include_patterns)
+            remote_files = list_remote_jsonl_files(api, args.repo, filters) if filters.has_filters() else None
+            success, out = run_download(args.repo, args.dir, remote_files)
             if success:
                 log(f"Sync done. {out}")
             else:
                 log(f"Sync failed: {out}")
-            known_files = get_jsonl_file_set(args.dir, focus_path)
+            known_files = get_jsonl_file_set(args.dir, filters)
             last_sync_time = time.time()
 
         if not new_files:
@@ -199,7 +284,7 @@ def main() -> None:
             + (f" ... and {len(new_files)-5} more" if len(new_files) > 5 else "")
         )
 
-        success, out = run_upload(args.dir, args.repo, new_files)
+        success, out = run_upload(api, args.dir, args.repo, new_files)
         if success:
             known_files = current_files
             log(f"Uploaded. {out}")
