@@ -68,12 +68,12 @@ def apply_eval_chat_template(tokenizer, messages, *, reasoning_effort=None):
 
 DEFAULT_FINAL_ANSWER_SUFFIX = "Make sure you output the final answer within \\boxed{}."
 MCQ_FINAL_ANSWER_SUFFIX = (
-    # "Make sure you output the final answer within \\boxed{}."
+    "Make sure you output the final answer within \\boxed{}."
     # ===================================================================================================
     #   We found that this prompt below actually works better, but to keep evaluation fair and to avoid
     #   giving the model any hints, we do the version on line 66 for our main results.
     # ===================================================================================================
-    "Put your final letter answer within \\boxed{}, for example \\boxed{A}. Exactly one answer choice is correct."
+    # "Put your final letter answer within \\boxed{}, for example \\boxed{A}. Exactly one answer choice is correct."
 )
 
 
