@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Tuple
 
 import torch
 from datasets import Dataset, DatasetDict, Features, Sequence, Value, concatenate_datasets, load_dataset
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer
 
 try:
     from rich import print as rich_print
@@ -39,10 +39,25 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from model.templlm_auto import AutoDecoModelForCausalLM
+from model.templlm_auto import AutoDecoModelForCausalLM, AutoDecoModelForCausalLMConfig
 
 _PUNCT = set(string.punctuation)
 _BOUNDARY_CHARS = {".", "?", "!", "\n"}
+_AUTODECO_TEMPERATURE_HEAD = "temperature"
+_AUTODECO_TOP_P_HEAD = "top_p"
+_AUTODECO_HEAD_ORDER = (
+    _AUTODECO_TEMPERATURE_HEAD,
+    _AUTODECO_TOP_P_HEAD,
+)
+_AUTODECO_HEAD_ALIASES = {
+    "temp": _AUTODECO_TEMPERATURE_HEAD,
+    "temperature": _AUTODECO_TEMPERATURE_HEAD,
+    "top_p": _AUTODECO_TOP_P_HEAD,
+    "top-p": _AUTODECO_TOP_P_HEAD,
+    "topp": _AUTODECO_TOP_P_HEAD,
+}
+_AUTODECO_ALL_HEAD_ALIASES = {"all", "both"}
+_AUTODECO_NO_HEAD_ALIASES = {"none", "base"}
 
 
 def _resolve_local_dataset_file(dataset_name: str) -> str | None:
@@ -319,6 +334,51 @@ def _parse_int_list(value: str | None, default: List[int]) -> List[int]:
     return [int(p) for p in parts]
 
 
+def _normalize_autodeco_heads_value(value: Any) -> List[str]:
+    if isinstance(value, str):
+        raw_tokens = value.split(",")
+    else:
+        raise ValueError(
+            "`autodeco_heads` must be a comma-separated string, got "
+            f"{type(value).__name__}."
+        )
+
+    tokens: List[str] = []
+    for token in raw_tokens:
+        normalized = token.strip().lower()
+        if normalized:
+            tokens.append(normalized)
+
+    requested = set[str]()
+    for token in tokens:
+        if token in _AUTODECO_ALL_HEAD_ALIASES:
+            if len(tokens) > 1:
+                raise ValueError(
+                    "`autodeco_heads` cannot mix `all`/`both` with specific heads."
+                )
+            requested.update(_AUTODECO_HEAD_ORDER)
+            continue
+        if token in _AUTODECO_NO_HEAD_ALIASES:
+            if len(tokens) > 1:
+                raise ValueError(
+                    "`autodeco_heads` cannot mix `none`/`base` with other heads."
+                )
+            requested.clear()
+            break
+        if token not in _AUTODECO_HEAD_ALIASES:
+            allowed = sorted(
+                set(_AUTODECO_HEAD_ALIASES)
+                | _AUTODECO_ALL_HEAD_ALIASES
+                | _AUTODECO_NO_HEAD_ALIASES
+            )
+            raise ValueError(
+                f"Unsupported autodeco head {token!r}. Supported values: {allowed}"
+            )
+        requested.add(_AUTODECO_HEAD_ALIASES[token])
+
+    return [head for head in _AUTODECO_HEAD_ORDER if head in requested]
+
+
 def _stable_json_dumps(payload: Dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
@@ -473,6 +533,12 @@ def main() -> None:
         help="Allow custom modeling code from remote repositories.",
     )
     parser.add_argument(
+        "--autodeco_heads",
+        type=str,
+        default=None,
+        help="Optional comma-separated AutoDeco heads to enable (temperature, top_p, both, none). Omit to use all available heads for AutoDeco checkpoints and none for base checkpoints.",
+    )
+    parser.add_argument(
         "--add_generation_prompt",
         action="store_true",
         help="Add generation prompt when applying the chat template.",
@@ -579,11 +645,62 @@ def main() -> None:
         tokenizer.pad_token_id = tokenizer.eos_token_id or 0
 
     dtype = getattr(torch, args.torch_dtype, torch.bfloat16)
+    raw_config = AutoConfig.from_pretrained(
+        args.model_name_or_path,
+        trust_remote_code=args.trust_remote_code,
+    )
+    raw_model_type = getattr(raw_config, "model_type", None)
+    is_autodeco_checkpoint = raw_model_type == AutoDecoModelForCausalLMConfig.model_type
+    autodeco_heads = None
+    if args.autodeco_heads is not None:
+        try:
+            autodeco_heads = _normalize_autodeco_heads_value(args.autodeco_heads)
+        except ValueError as exc:
+            parser.error(f"--autodeco_heads is invalid: {exc}")
+
+    config_temp_enabled = bool(getattr(raw_config, "enable_temperature_head", True))
+    config_top_p_enabled = bool(getattr(raw_config, "enable_top_p_head", True))
+
+    if is_autodeco_checkpoint:
+        if autodeco_heads is None:
+            enable_temperature_head = None
+            enable_top_p_head = None
+        else:
+            requested_temp = _AUTODECO_TEMPERATURE_HEAD in autodeco_heads
+            requested_top_p = _AUTODECO_TOP_P_HEAD in autodeco_heads
+            missing = []
+            if requested_temp and not config_temp_enabled:
+                missing.append(_AUTODECO_TEMPERATURE_HEAD)
+            if requested_top_p and not config_top_p_enabled:
+                missing.append(_AUTODECO_TOP_P_HEAD)
+            if missing:
+                parser.error(
+                    "AutoDeco request asked for checkpoint heads that are unavailable. "
+                    f"Requested {autodeco_heads}, but the checkpoint only enables "
+                    f"{[name for name, ok in ((_AUTODECO_TEMPERATURE_HEAD, config_temp_enabled), (_AUTODECO_TOP_P_HEAD, config_top_p_enabled)) if ok]}. "
+                    f"Missing requested heads: {missing}."
+                )
+            enable_temperature_head = requested_temp
+            enable_top_p_head = requested_top_p
+    else:
+        if autodeco_heads is not None and autodeco_heads:
+            parser.error(
+                "This checkpoint is not an AutoDeco checkpoint, so it has no trained AutoDeco heads. "
+                "Use `--autodeco_heads none` or omit the flag."
+            )
+        enable_temperature_head = False
+        enable_top_p_head = False
+        print(
+            "[collect_pertoken] Non-AutoDeco checkpoint detected; defaulting to autodeco_heads=none."
+        )
+
     model = AutoDecoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         torch_dtype=dtype,
         device_map=args.device_map,
         trust_remote_code=args.trust_remote_code,
+        enable_temperature_head=enable_temperature_head,
+        enable_top_p_head=enable_top_p_head,
     )
     model.eval()
 
@@ -615,6 +732,11 @@ def main() -> None:
     if not heads:
         heads = ["none"]
     print(f"[collect_pertoken] Collecting heads: {', '.join(heads)}")
+    if args.compute_nucleus_size and not (collect_temp and collect_top_p):
+        print(
+            "[collect_pertoken] compute_nucleus_size requested, but one or both heads are unavailable; "
+            "nucleus_size_hat will remain null."
+        )
 
     vocab_size = getattr(getattr(model, "llm", None), "config", None)
     vocab_size = getattr(vocab_size, "vocab_size", None) or getattr(model.config, "vocab_size", None)
@@ -632,6 +754,7 @@ def main() -> None:
         "base_top_k": args.base_top_k,
         "enable_temperature_head": bool(getattr(model.config, "enable_temperature_head", True)),
         "enable_top_p_head": bool(getattr(model.config, "enable_top_p_head", False)),
+        "autodeco_heads": autodeco_heads,
     }
     method_id = _hash_payload(method_payload)[:12]
     config_hash = _hash_payload(getattr(model.config, "to_dict", lambda: {})())
@@ -1063,6 +1186,7 @@ def main() -> None:
         "nucleus_max_k": int(args.nucleus_max_k),
         "method_id": method_id,
         "config_hash": config_hash,
+        "autodeco_heads": autodeco_heads,
         "base_temperature": args.base_temperature,
         "base_top_p": args.base_top_p,
         "base_top_k": args.base_top_k,
