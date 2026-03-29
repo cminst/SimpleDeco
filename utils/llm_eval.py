@@ -69,22 +69,27 @@ def apply_eval_chat_template(tokenizer, messages, *, reasoning_effort=None):
 DEFAULT_FINAL_ANSWER_SUFFIX = "Make sure you output the final answer within \\boxed{}."
 MCQ_FINAL_ANSWER_SUFFIX = (
     "Make sure you output the final answer within \\boxed{}."
-    # ===================================================================================================
-    #   We found that this prompt below actually works better, but to keep evaluation fair and to avoid
-    #   giving the model any hints, we do the version on line 66 for our main results.
-    # ===================================================================================================
-    # "Put your final letter answer within \\boxed{}, for example \\boxed{A}. Exactly one answer choice is correct."
+)
+MCQ_DETAILED_FINAL_ANSWER_SUFFIX = (
+    "Put your final letter answer within \\boxed{}, for example \\boxed{A}. "
+    "Exactly one answer choice is correct."
 )
 
 
-def get_final_answer_suffix(ground_truth) -> str:
+def model_uses_short_mcq_suffix(model_name_or_path: str) -> bool:
+    return "deepseek" in model_name_or_path.lower()
+
+
+def get_final_answer_suffix(ground_truth, model_name_or_path: str) -> str:
     if normalize_multiple_choice_answer(str(ground_truth)) is not None:
-        return MCQ_FINAL_ANSWER_SUFFIX
+        if model_uses_short_mcq_suffix(model_name_or_path):
+            return MCQ_FINAL_ANSWER_SUFFIX
+        return MCQ_DETAILED_FINAL_ANSWER_SUFFIX
     return DEFAULT_FINAL_ANSWER_SUFFIX
 
 
-def build_problem_prompt(problem: str, ground_truth) -> str:
-    return f"{problem.rstrip()}\n{get_final_answer_suffix(ground_truth)}"
+def build_problem_prompt(problem: str, ground_truth, model_name_or_path: str) -> str:
+    return f"{problem.rstrip()}\n{get_final_answer_suffix(ground_truth, model_name_or_path)}"
 
 
 if __name__ == "__main__":
@@ -222,7 +227,14 @@ if __name__ == "__main__":
     problems = [
         apply_eval_chat_template(
             tokenizer,
-            [{"role": "user", "content": build_problem_prompt(item['problem'], item['gt'])}],
+            [{
+                "role": "user",
+                "content": build_problem_prompt(
+                    item['problem'],
+                    item['gt'],
+                    args.model_name_or_path,
+                ),
+            }],
             reasoning_effort=args.reasoning_effort,
         ) for item in data
     ]
