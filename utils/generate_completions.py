@@ -143,6 +143,17 @@ def main():
     prompts = _load_prompts(args.dataset, args.dataset_config, args.dataset_split, args.n)
     print(f"Loaded {len(prompts)} prompts.")
 
+    # Print a few sampled prompts as a sanity check
+    import random as _random
+    sample_indices = sorted(_random.sample(range(len(prompts)), min(3, len(prompts))))
+    print("\n--- Sampled prompts ---")
+    for i in sample_indices:
+        text = prompts[i][0]["content"]
+        if len(text) > 300:
+            text = text[:150] + f"\n  ... [{len(text) - 300} chars omitted] ...\n" + text[-150:]
+        print(f"[{i}] {text!r}")
+    print("---\n")
+
     print(f"Running completions against {args.base_url} (model={args.model}, concurrency={args.concurrency})...")
     completions = asyncio.run(_run_batch(
         base_url=args.base_url,

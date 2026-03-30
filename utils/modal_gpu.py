@@ -139,7 +139,7 @@ def _ensure_model_downloaded(repo: pathlib.Path, model_name: str):
         )
 
 @app.function(
-    gpu="H200:1", # RTX-PRO-6000:1
+    gpu="H200:4", # RTX-PRO-6000:1
     timeout=86400,
     volumes={"/root/SimpleDeco": autodeco_volume},
     secrets=[modal.Secret.from_name("tailscale-auth", required_keys=["TAILSCALE_AUTHKEY"])],
