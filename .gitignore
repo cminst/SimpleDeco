@@ -3,7 +3,9 @@
 __pycache__/
 .idea/
 .vscode/
-.ckpt/*
+ckpt/*
+ckpt_gptoss20b/*
+ckpt_qwen_instruct/*
 .data/*
 generation_log/
 .swanlog/
@@ -14,3 +16,11 @@ arXiv*
 colm*.tex
 adalpo.tex
 .DS_Store
+ifbench/.nltk_data/*
+wandb/*
+data/rollout_messages/*
+jobs/*
+ckpt_old/*
+inverse_temp_alignment_runs/*
+inverse_temp_localization_runs/*
+shadow_runs/*
