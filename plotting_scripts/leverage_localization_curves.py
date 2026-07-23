@@ -279,7 +279,7 @@ def _plot_binned_figure(
     )
 
     for axis in (ax_left, ax_right):
-        axis.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=1)
+        axis.axhline(0.0, color="#6B7280", linewidth=1.15, zorder=4)
         axis.grid(axis="y", color="#E7ECF2", linewidth=0.55, alpha=0.9)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.set_xlabel("normalized entropy bin", labelpad=12)
