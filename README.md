@@ -1,5 +1,5 @@
 $$\Large\textbf{Token-Level Control or Just a Better Mean?}$$
-$$\textbf{Isolating the Gains of Adaptive Decoding}$$
+$$\large\textbf{Isolating the Gains of Adaptive Decoding}$$
 
 $$\textbf{COLM 2026}$$
 
